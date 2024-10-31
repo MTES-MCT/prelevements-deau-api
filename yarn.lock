@@ -3135,9 +3135,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"prelevement-eau-data@workspace:.":
+"prelevement-deau-data@workspace:.":
   version: 0.0.0-use.local
-  resolution: "prelevement-eau-data@workspace:."
+  resolution: "prelevement-deau-data@workspace:."
   dependencies:
     dotenv: "npm:^16.4.5"
     got: "npm:^14.4.3"
