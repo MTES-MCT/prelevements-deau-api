@@ -1,4 +1,71 @@
 {
-  "name": "prelevement-eau-data",
-  "packageManager": "yarn@4.1.1"
+  "name": "prelevement-deau-data",
+  "packageManager": "yarn@4.1.1",
+  "type": "module",
+  "scripts": {
+    "get-dossiers": "node scripts/get-dossiers.js",
+    "get-files": "node scripts/get-files.js",
+    "extract-preleveurs": "node scripts/extract-preleveurs.js",
+    "extract-points-prelevement": "node scripts/extract-points-prelevement.js",
+    "extract-xlsx-data": "node scripts/extract-xlsx-data.js",
+    "lint": "xo"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "got": "^14.4.3",
+    "lodash-es": "^4.17.21",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "xo": "^0.59.3"
+  },
+  "xo": {
+    "envs": [
+      "node",
+      "es2021"
+    ],
+    "parserOptions": {
+      "sourceType": "module",
+      "ecmaFeatures": {
+        "jsx": true
+      }
+    },
+    "semicolon": false,
+    "space": 2,
+    "rules": {
+      "unicorn/prevent-abbreviations": "off",
+      "unicorn/prefer-export-from": "off",
+      "unicorn/prefer-ternary": "off",
+      "unicorn/prefer-module": "off",
+      "unicorn/prefer-node-protocol": "off",
+      "n/prefer-global/process": "off",
+      "n/prefer-global/buffer": "off",
+      "import/no-unassigned-import": "off",
+      "comma-dangle": [
+        "error",
+        "never"
+      ],
+      "import/order": [
+        "error",
+        {
+          "groups": [
+            "builtin",
+            "external",
+            "internal",
+            "parent",
+            "sibling",
+            "index"
+          ],
+          "newlines-between": "always",
+          "alphabetize": {
+            "order": "asc",
+            "caseInsensitive": true
+          }
+        }
+      ]
+    }
+  },
+  "engines": {
+    "node": ">= 20.9 < 21"
+  }
 }
