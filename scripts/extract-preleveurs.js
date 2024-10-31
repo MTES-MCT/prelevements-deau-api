@@ -14,6 +14,38 @@ const formatPhoneNumber = phone =>
 const formatLastName = name => upperCase(normalizeString(name))
 const formatFirstName = firstName => startCase(normalizeString(firstName))
 
+const extractOATNumber = (champs, dossierId) => {
+  const str = champs['Numéro de votre arrêté d\'AOT'] || champs['Numéro de votre arrêté d\'AOT (ATTENTION : modification du format à partir de septembre 2024)']
+  if (str) {
+    // The regex extracts the AOT number by matching a four-digit year, a code number, and optional administration and service sections, ensuring the format YYYY-XXX/<administration>/<service>.
+    const regex = /\b(?:[n°º]\s*)?(?:aot\s*(?:[n°º]\s*)?)?\s*(\d{4})[ -](\d+)(?:[ /-](\w+))?(?:[ /-]([\w ]+))?/i
+    const match = str.match(regex)
+    if (match) {
+      const year = match[1]
+      const code = match[2]
+      const administration = match[3] || ''
+      const service = match[4] || ''
+
+      let aotNumber = `${year}-${code}`
+      if (administration) {
+        aotNumber += `/${administration}`
+      }
+
+      if (service) {
+        aotNumber += `/${service}`
+      }
+
+      return aotNumber.trim()
+    }
+
+    return str
+  }
+
+  console.log('No AOT number found in dossier:', dossierId)
+
+  return ''
+}
+
 // Function to extract and process data
 const extractDossierData = filePath => {
   const rawData = JSON.parse(fs.readFileSync(filePath, 'utf8'))
@@ -46,7 +78,7 @@ const extractDossierData = filePath => {
         'Numéro de téléphone': formatPhoneNumber(champs['Numéro de téléphone'] || ''),
         'Raison sociale de votre structure': champs['Raison sociale de votre structure'] || '',
         'Type de préleveur': champs['Vous formulez cette déclaration en tant que :'] || '',
-        'AOT' : champs["Numéro de votre arrêté d'AOT"] || champs["Numéro de votre arrêté d'AOT (ATTENTION : modification du format à partir de septembre 2024)"] || ''
+        AOT: extractOATNumber(champs, dossier.id)
       }
 
       processedData.push(entry)
@@ -69,7 +101,7 @@ const saveToCsv = (data, outputPath) => {
     'email',
     'Numéro de téléphone',
     'Raison sociale de votre structure',
-    'Type de préleveur',
+    'Type de préleveur'
   ]
   const csvRows = data.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
   const csvContent = [headers.join(','), ...csvRows].join('\n')
