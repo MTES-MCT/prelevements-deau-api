@@ -3,6 +3,7 @@
   "packageManager": "yarn@4.1.1",
   "type": "module",
   "scripts": {
+    "api:start": "node api.js",
     "init-db": "node scripts/init-db.js",
     "get-dossiers": "node scripts/get-dossiers.js",
     "get-files": "node scripts/get-files.js",
