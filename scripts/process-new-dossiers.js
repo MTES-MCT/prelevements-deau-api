@@ -12,7 +12,7 @@ async function main() {
   return getAllDossiers({
     demarcheNumber,
     first: 100,
-    state: 'en_instruction',
+    state: 'en_instruction', // TODO: Ajouter le double statut En construction + Corrigé
     includeDossiers: true,
     includeChamps: true
   })

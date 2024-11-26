@@ -9,6 +9,11 @@ const demarcheNumber = Number.parseInt(process.env.DS_DEMARCHE_NUMBER, 10)
 await mongo.connect()
 
 async function main() {
+  // Remove all dossiers from the database before re-importing them
+  console.log('Removing all dossiers from the database...')
+  await mongo.db.collection('dossiers').deleteMany({})
+
+  // Fetch all dossiers from the API and insert them into the database
   return getAllDossiers({
     demarcheNumber,
     first: 100,
