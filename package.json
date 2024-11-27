@@ -5,11 +5,7 @@
   "scripts": {
     "start": "node api.js",
     "init-db": "node scripts/init-db.js",
-    "get-dossiers": "node scripts/get-dossiers.js",
-    "get-files": "node scripts/get-files.js",
-    "extract-preleveurs": "node scripts/extract-preleveurs.js",
-    "extract-points-prelevement": "node scripts/extract-points-prelevement.js",
-    "extract-xlsx-data": "node scripts/extract-xlsx-data.js",
+    "files-validation": "node scripts/files-validation.js",
     "lint": "xo",
     "test": "ava"
   },
