@@ -31,7 +31,7 @@ export async function validDossier(dossier) {
 
       // Étape 2 : Valider le fichier
       console.log(`Validation du fichier ${file.filename}...`)
-      const errors = await validateFile(file, buffer, dossier.champs)
+      const errors = await validateFile(file.fileType, buffer, dossier.champs)
 
       // Libérer le buffer
       buffer = undefined
