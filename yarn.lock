@@ -5774,6 +5774,7 @@ __metadata:
     mongodb-memory-server: "npm:^10.1.2"
     morgan: "npm:^1.10.0"
     p-limit: "npm:^6.1.0"
+    p-map: "npm:^7.0.2"
     xlsx: "npm:^0.18.5"
     xo: "npm:^0.58.0"
   languageName: unknown
