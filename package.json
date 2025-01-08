@@ -24,6 +24,7 @@
     "morgan": "^1.10.0",
     "p-limit": "^6.1.0",
     "p-map": "^7.0.2",
+    "pg": "^8.13.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
