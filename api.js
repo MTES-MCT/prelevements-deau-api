@@ -7,11 +7,15 @@ import express from 'express'
 import morgan from 'morgan'
 
 import mongo from './lib/util/mongo.js'
+import {client} from './lib/util/postgresql.js'
 
 import webRoutes from './lib/api/routes/web.js'
+import prelevementRoutes from './lib/api/routes/prelevements.js'
 
 // Connect to MongoDB
 await mongo.connect()
+// Connect to PostgreSQL
+await client.connect()
 
 const PORT = process.env.PORT || 5000
 const DEV = process.env.NODE_ENV !== 'production'
@@ -24,6 +28,7 @@ if (DEV) {
 }
 
 app.use('/', webRoutes)
+app.use('/api', prelevementRoutes)
 
 // Start listening
 app.listen(PORT, () => {
