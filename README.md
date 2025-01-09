@@ -89,7 +89,8 @@ yarn lint
 
 - Node.js version ≥ 20.9
 - MongoDB
-- PostgreSQL
+- PostgreSQL 17.2
+- Postgis 3.5.1
 
 ## License
 
