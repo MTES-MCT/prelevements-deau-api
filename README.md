@@ -14,6 +14,23 @@ Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Nod
 
 2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez la valeur `API_TOKEN`.
 
+## Importer la base de données
+
+>_Vous devez avoir postgreSQL installé sur votre machine_
+
+- Remplir les champs dans votre fichier `.env` :
+
+```.env
+POSTGRES_USER=
+POSTGRES_HOST=
+POSTGRES_DB=
+```
+
+- Lancer le script `scripts/import-pgsql-dump.sh` en précisant le chemin vers le fichier `.sql` :
+```bash
+scripts/import-pgsql-dump.sh chemin/vers/mon/fichier/sql
+```
+
 ## Scripts
 
 **get-dossiers** :
@@ -71,6 +88,8 @@ yarn lint
 ## Prérequis
 
 - Node.js version ≥ 20.9
+- MongoDB
+- PostgreSQL
 
 ## License
 
