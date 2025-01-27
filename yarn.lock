@@ -1567,6 +1567,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/node@npm:*":
+  version: 22.10.7
+  resolution: "@types/node@npm:22.10.7"
+  dependencies:
+    undici-types: "npm:~6.20.0"
+  checksum: 10c0/c941b4689dfc4044b64a5f601306cbcb0c7210be853ba378a5dd44137898c45accedd796ee002ad9407024cac7ecaf5049304951cb1d80ce3d7cebbbae56f20e
+  languageName: node
+  linkType: hard
+
 "@types/normalize-package-data@npm:^2.4.0":
   version: 2.4.4
   resolution: "@types/normalize-package-data@npm:2.4.4"
@@ -4981,6 +4990,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"mgrs@npm:1.0.0":
+  version: 1.0.0
+  resolution: "mgrs@npm:1.0.0"
+  checksum: 10c0/a360853be5a3b4f4734dbf0a193851c08039ccb6077362ab0f890cccd170ef88b59585129757da9fea4d7a313d7dc3ee88f37f594fc1ae3e4e8efc5353144d77
+  languageName: node
+  linkType: hard
+
 "micro-spelling-correcter@npm:^1.1.1":
   version: 1.1.1
   resolution: "micro-spelling-correcter@npm:1.1.1"
@@ -5580,6 +5596,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"papaparse@npm:^5.5.1":
+  version: 5.5.1
+  resolution: "papaparse@npm:5.5.1"
+  checksum: 10c0/32f7b39ef175f9adc8dc5fecddc4b2801a82626149c65463d19cbdcb2e53ce3eb74867c59c50d7169b26082059fad46cef9fbd36178cb7c5c6a714d8c577217d
+  languageName: node
+  linkType: hard
+
 "parent-module@npm:^1.0.0":
   version: 1.0.1
   resolution: "parent-module@npm:1.0.1"
@@ -5886,7 +5909,10 @@ __metadata:
     morgan: "npm:^1.10.0"
     p-limit: "npm:^6.1.0"
     p-map: "npm:^7.0.2"
+    papaparse: "npm:^5.5.1"
     pg: "npm:^8.13.1"
+    proj4: "npm:^2.15.0"
+    wkx: "npm:^0.5.0"
     xlsx: "npm:^0.18.5"
     xo: "npm:^0.58.0"
   languageName: unknown
@@ -5923,6 +5949,16 @@ __metadata:
   dependencies:
     parse-ms: "npm:^4.0.0"
   checksum: 10c0/fd111aad8800a04dfd654e6016da69bdaa6fc6a4c280f8e727cffd8b5960558e94942f1a94d4aa6e4d179561a0fbb0366a9ebe0ccefbbb0f8ff853b129cdefb9
+  languageName: node
+  linkType: hard
+
+"proj4@npm:^2.15.0":
+  version: 2.15.0
+  resolution: "proj4@npm:2.15.0"
+  dependencies:
+    mgrs: "npm:1.0.0"
+    wkt-parser: "npm:^1.4.0"
+  checksum: 10c0/01c0ef831247e08f4e0fce3193033913ca07be0301522bdefddabe1bb783b947bf731425f0aa6b14a01ee546f90cd6301a3eefed859afad3345884d1d01ec8f4
   languageName: node
   linkType: hard
 
@@ -7007,6 +7043,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"undici-types@npm:~6.20.0":
+  version: 6.20.0
+  resolution: "undici-types@npm:6.20.0"
+  checksum: 10c0/68e659a98898d6a836a9a59e6adf14a5d799707f5ea629433e025ac90d239f75e408e2e5ff086afc3cace26f8b26ee52155293564593fbb4a2f666af57fc59bf
+  languageName: node
+  linkType: hard
+
 "unicorn-magic@npm:^0.1.0":
   version: 0.1.0
   resolution: "unicorn-magic@npm:0.1.0"
@@ -7175,6 +7218,22 @@ __metadata:
   dependencies:
     string-width: "npm:^1.0.2 || 2 || 3 || 4"
   checksum: 10c0/1d9c2a3e36dfb09832f38e2e699c367ef190f96b82c71f809bc0822c306f5379df87bab47bed27ea99106d86447e50eb972d3c516c2f95782807a9d082fbea95
+  languageName: node
+  linkType: hard
+
+"wkt-parser@npm:^1.4.0":
+  version: 1.4.0
+  resolution: "wkt-parser@npm:1.4.0"
+  checksum: 10c0/4046fd355ddc626e6ea71f5a05e670bd3d6dc65dc0f8b10f2e9381ea6bd61cb90379389b0fb52337de9330788405dd0590b57e01b2c85f6f471acc794713243b
+  languageName: node
+  linkType: hard
+
+"wkx@npm:^0.5.0":
+  version: 0.5.0
+  resolution: "wkx@npm:0.5.0"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/9f787ffd2bc83708000f10165a72f0ca121b2e79b279eb44f2f5274eaa6ef819d9e9a00058a3b59dd211fe140d4b47cb6d49683b3a57a2a42ab3a7ccd52247dd
   languageName: node
   linkType: hard
 
