@@ -8,8 +8,7 @@ import morgan from 'morgan'
 
 import mongo from './lib/util/mongo.js'
 
-import webRoutes from './lib/api/routes/web.js'
-import prelevementRoutes from './lib/api/routes/prelevements.js'
+import routes from './lib/api/routes/web.js'
 
 // Connect to MongoDB
 await mongo.connect()
@@ -24,8 +23,8 @@ if (DEV) {
   app.use(morgan('dev'))
 }
 
-app.use('/', webRoutes)
-app.use('/api', prelevementRoutes)
+app.use('/', routes)
+app.use('/api', routes) // Deprecated
 
 // Start listening
 app.listen(PORT, () => {
