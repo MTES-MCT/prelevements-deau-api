@@ -4,7 +4,7 @@ Ce projet vise à collecter, organiser et analyser les données de prélèvement
 
 ## Installation
 
-Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 20.9) installé avant de commencer.
+Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 22.11) installé avant de commencer.
 
 1. Installez les dépendances :
 
@@ -78,7 +78,7 @@ yarn lint
 
 ## Prérequis
 
-- Node.js version ≥ 20.9
+- Node.js version 22 LTS (22.11+)
 
 ## License
 
