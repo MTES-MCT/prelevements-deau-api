@@ -9,6 +9,7 @@ import morgan from 'morgan'
 import mongo from './lib/util/mongo.js'
 
 import webRoutes from './lib/api/routes/web.js'
+import prelevementRoutes from './lib/api/routes/prelevements.js'
 
 // Connect to MongoDB
 await mongo.connect()
@@ -24,6 +25,7 @@ if (DEV) {
 }
 
 app.use('/', webRoutes)
+app.use('/api', prelevementRoutes)
 
 // Start listening
 app.listen(PORT, () => {

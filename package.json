@@ -1,6 +1,6 @@
 {
   "name": "prelevement-deau-data",
-  "packageManager": "yarn@4.1.1",
+  "packageManager": "yarn@4.6.0",
   "type": "module",
   "scripts": {
     "start": "node api.js",
@@ -24,6 +24,9 @@
     "morgan": "^1.10.0",
     "p-limit": "^6.1.0",
     "p-map": "^7.0.2",
+    "papaparse": "^5.5.1",
+    "proj4": "^2.15.0",
+    "wkx": "^0.5.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
