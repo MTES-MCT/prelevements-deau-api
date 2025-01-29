@@ -1,5 +1,5 @@
 // XlsxWorker.js
-import {parentPort, workerData} from 'worker_threads'
+import {parentPort, workerData} from 'node:worker_threads'
 
 import xlsx from 'xlsx'
 

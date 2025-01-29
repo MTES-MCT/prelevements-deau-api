@@ -1,7 +1,7 @@
-import fs from 'fs'
-import path from 'path'
-import {fileURLToPath} from 'url'
-import {Worker} from 'worker_threads'
+import fs from 'node:fs'
+import path from 'node:path'
+import {fileURLToPath} from 'node:url'
+import {Worker} from 'node:worker_threads'
 
 const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '..')

@@ -1,6 +1,6 @@
-import fs from 'fs'
-import path from 'path'
-import {fileURLToPath} from 'url'
+import fs from 'node:fs'
+import path from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 import got from 'got'
 
@@ -41,11 +41,7 @@ const findAllFiles = obj => {
     }
   } else if (typeof obj === 'object' && obj !== null) {
     for (const key in obj) {
-      if (key === 'files' && Array.isArray(obj[key])) {
-        files = [...files, ...obj[key]]
-      } else {
-        files = [...files, ...findAllFiles(obj[key])]
-      }
+      files = key === 'files' && Array.isArray(obj[key]) ? [...files, ...obj[key]] : [...files, ...findAllFiles(obj[key])]
     }
   }
 

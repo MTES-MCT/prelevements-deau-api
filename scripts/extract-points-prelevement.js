@@ -1,7 +1,7 @@
-import {execFile} from 'child_process'
-import fs from 'fs'
-import path from 'path'
-import {fileURLToPath} from 'url'
+import {execFile} from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
+import {fileURLToPath} from 'node:url'
 
 import {startCase, toLower, uniqBy} from 'lodash-es'
 

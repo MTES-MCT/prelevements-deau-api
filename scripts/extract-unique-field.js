@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'node:fs'
 
 // Load the dossier data
 const dossiers = JSON.parse(fs.readFileSync('data/all_dossiers.json', 'utf8'))
