@@ -7,6 +7,7 @@
     "init-db": "node scripts/init-db.js",
     "files-validation": "node scripts/files-validation.js",
     "update-db": "node scripts/update-db.js",
+    "download-csv": "node scripts/download-csv.js",
     "lint": "xo",
     "test": "ava"
   },

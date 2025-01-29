@@ -60,6 +60,14 @@ Ce script produit également un rapport d'erreurs pour les fichiers qui n'ont pa
 
 > Stocké dans : /data/files/output/reports.json
 
+## Récupérer les fichiers CSV :
+
+- Remplir les informations dans le fichier `.env`
+- Lancer le script de téléchargement :
+```bash
+node download-csv
+```
+
 ## Linter
 
 Le projet utilise **xo** comme linter pour assurer la qualité du code. Exécutez la commande suivante pour lancer le linter :
