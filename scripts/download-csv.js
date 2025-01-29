@@ -1,9 +1,10 @@
 import 'dotenv/config'
-import {createWriteStream, existsSync, mkdirSync} from 'node:fs'
+import {createWriteStream} from 'node:fs'
+import {mkdir} from 'node:fs/promises'
 import process from 'node:process'
 import {join, dirname} from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {finished} from 'node:stream/promises'
+import {pipeline} from 'node:stream/promises'
 
 import got from 'got'
 
@@ -26,28 +27,21 @@ const filenames = [
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+await mkdir(join(__dirname, '../data'), {recursive: true})
+
 const downloadFile = async (url, filename) => {
   const dataDir = join(__dirname, '../data')
-
-  if (!existsSync(dataDir)) {
-    mkdirSync(dataDir)
-  }
-
   const filePath = join(dataDir, filename)
 
-  try {
-    const fileStream = createWriteStream(filePath)
-    await got.stream(url).pipe(fileStream)
+  const fileStream = createWriteStream(filePath)
+  await pipeline(
+    got.stream(url),
+    fileStream
+  )
 
-    await finished(fileStream)
+  console.log(`Téléchargement terminé : ${filePath}`)
 
-    console.log(`Téléchargement terminé : ${filePath}`)
-
-    return filePath
-  } catch (error) {
-    console.error(`Échec du téléchargement de ${filename} :`, error.message)
-    throw error
-  }
+  return filePath
 }
 
 try {
