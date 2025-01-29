@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import process from 'node:process'
-import {getAllDossiers} from '../lib/util/demarches-simplifies/index.js'
+import {getAllDossiers} from '../lib/demarches-simplifiees/index.js'
 import mongo from '../lib/util/mongo.js'
 
 const demarcheNumber = Number.parseInt(process.env.DS_DEMARCHE_NUMBER, 10)

@@ -4,8 +4,8 @@ import pMap from 'p-map'
 
 import {downloadFile, objectExists} from '../lib/util/s3.js'
 import {updateDossier} from '../lib/models/dossier.js'
-import {validateFile} from '../lib/util/demarches-simplifies/validation.js'
-import {getFileS3Key} from '../lib/util/demarches-simplifies/index.js'
+import {validateFile} from '../lib/demarches-simplifiees/validation.js'
+import {getFileS3Key} from '../lib/demarches-simplifiees/index.js'
 
 // Connect to MongoDB
 await mongo.connect()
