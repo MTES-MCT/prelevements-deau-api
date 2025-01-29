@@ -1,4 +1,7 @@
+#!/usr/bin/env node
+
 import 'dotenv/config'
+
 import {createWriteStream} from 'node:fs'
 import {mkdir} from 'node:fs/promises'
 import process from 'node:process'
@@ -8,7 +11,7 @@ import {pipeline} from 'node:stream/promises'
 
 import got from 'got'
 
-const {CSV_SOURCE} = process.env
+const {CSV_SOURCE_URL} = process.env
 
 const filenames = [
   'beneficiaire.csv',
@@ -26,26 +29,27 @@ const filenames = [
 ]
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const dataDir = join(__dirname, '..', 'data')
 
-await mkdir(join(__dirname, '../data'), {recursive: true})
+await mkdir(dataDir, {recursive: true})
 
-const downloadFile = async (url, filename) => {
-  const dataDir = join(__dirname, '../data')
+async function downloadFile(url, filename) {
   const filePath = join(dataDir, filename)
-
   const fileStream = createWriteStream(filePath)
+
   await pipeline(
     got.stream(url),
     fileStream
   )
 
   console.log(`Téléchargement terminé : ${filePath}`)
-
-  return filePath
 }
 
 try {
-  Promise.all(filenames.map(filename => downloadFile(`${CSV_SOURCE}/${filename}`, filename)))
+  Promise.all(
+    filenames.map(filename => downloadFile(`${CSV_SOURCE_URL}/${filename}`, filename))
+  )
 } catch (error) {
   console.error('Échec du téléchargement :', error.message)
+  process.exit(1)
 }
