@@ -8,6 +8,7 @@
     "files-validation": "node scripts/files-validation.js",
     "update-db": "node scripts/update-db.js",
     "download-csv": "node scripts/download-csv.js",
+    "scalingo-postbuild": "yarn download-csv",
     "lint": "xo",
     "test": "ava"
   },
