@@ -1,9 +1,10 @@
+/* eslint-disable no-await-in-loop */
 import {execFile} from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
-import {startCase, toLower, uniqBy} from 'lodash-es'
+import {startCase, toLower} from 'lodash-es'
 
 const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '..')
@@ -208,7 +209,7 @@ function parsePoint(rawPoint) {
       // Nettoyage des données avec lodash
       data.nom = data.nom ? startCase(toLower(data.nom.trim())) : ''
       data.commune = data.commune ? startCase(toLower(data.commune.trim())) : ''
-      data.numero = data.numero || ''
+      data.numero ||= ''
       return data
     }
   }
@@ -252,15 +253,13 @@ function saveToCSV(points) {
 }
 
 // Exécution et affichage des résultats
-(async () => {
-  console.log('Démarrage de l\'extraction des points de prélèvement...')
-  const jsonPoints = extractFromJSON()
-  const excelPoints = await extractFromExcel()
-  const allPointsRaw = jsonPoints.concat(excelPoints)
+console.log('Démarrage de l\'extraction des points de prélèvement...')
+const jsonPoints = extractFromJSON()
+const excelPoints = await extractFromExcel()
+const allPointsRaw = [...jsonPoints, ...excelPoints]
 
-  // Unifier les points
-  const allPoints = unifyPoints(allPointsRaw)
+// Unifier les points
+const allPoints = unifyPoints(allPointsRaw)
 
-  // Sauvegarde des points de prélèvement dans le fichier CSV
-  saveToCSV(allPoints)
-})()
+// Sauvegarde des points de prélèvement dans le fichier CSV
+saveToCSV(allPoints)

@@ -40,6 +40,7 @@
     "semicolon": false,
     "space": 2,
     "rules": {
+      "camelcase": "off",
       "object-curly-newline": "off",
       "comma-dangle": [
         "error",

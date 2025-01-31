@@ -54,10 +54,11 @@ const extractDossierData = filePath => {
 
   for (const dossier of rawData) {
     const demandeur = dossier.demandeur || {}
-    const champs = dossier.champs.reduce((acc, champ) => {
-      acc[champ.label] = champ.stringValue?.trim() || ''
-      return acc
-    }, {})
+    const champs = {}
+
+    for (const champ of dossier.champs) {
+      champs[champ.label] = champ.stringValue?.trim() || ''
+    }
 
     const lastName = formatLastName(demandeur.nom || '')
     const firstName = formatFirstName(demandeur.prenom || '')
@@ -107,7 +108,7 @@ const saveToCsv = (data, outputPath) => {
   const csvContent = [headers.join(','), ...csvRows].join('\n')
 
   fs.mkdirSync(path.dirname(outputPath), {recursive: true})
-  fs.writeFileSync(outputPath, csvContent, 'utf-8')
+  fs.writeFileSync(outputPath, csvContent, 'utf8')
   console.log(`Data saved to ${outputPath}`)
 }
 
