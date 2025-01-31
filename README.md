@@ -14,23 +14,28 @@ Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Nod
 
 2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez la valeur `API_TOKEN`.
 
+## Initialisation
+
+**Initialiser la base de donneés** :
+
+Ce script efface le contenu de la base de données MongoDB (si présente) et lancera la récupération des dossiers déposés sur Démarches Simplifiées. Ces dossiers seront traités : 
+1. Validation des données
+2. Stockage en ligne des fichiers en pièce jointe
+3. Enregistrement en base de donnée des dossiers
+
+```bash
+yarn init-db
+```
+
 ## Scripts
 
-**get-dossiers** :
+**files-validation** :
 
-Récupère tous les dossiers déposés sur Démarche Simplifiée (toutes les informations disponibles) en utilisant l'API de Démarche Simplifiée. Voir la documentation : [API Démarche Simplifiée](https://doc.demarches-simplifiees.fr/~gitbook/pdf).
+Lance une validation de tous les fichiers de données issue de Démarches Simplifiées.
 
-> **Stocké dans** : `/data/dossiers.json`
+**update-db** :
 
-**get-files** :
-
-**Prérequis** : `get-dossiers`
-
-Récupère toutes les pièces jointes déposées par les préleveurs.
-
-> **Stocké dans** : répertoire `/data/files`
-
-> ⚠️ Attention : les liens vers les fichiers obtenus par `get-dossiers` ne sont valables que pendant 1h. Assurez-vous d'exécuter `get-files` avant l'expiration de ce délai.
+Récupère tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore étaient collectés puis les traites.
 
 **extract-preleveurs** :
 
@@ -45,20 +50,6 @@ Extrait la liste des préleveurs à partir des informations contenues dans les d
 Extrait les points de prélèvement à partir des dossiers et des fichiers Excel.
 
 > **Stocké dans** : `/data/points-prelevement.csv`
-
-**extract-xlsx-data** :
-
-**Prérequis** : `get-files`
-
-Extrait les données de prélèvement à partir des fichiers Excel, puis génère 4 fichiers CSV, chacun correspondant à une échelle de temps (15 minutes, 1 jour, trimestre, autre). Ces fichiers permettent de visualiser les données de manière structurée et adaptée à chaque échelle de temps.
-
-> **Stocké dans** : `/data/files/output/<nom_fichier>_<échelle>.csv`
-
-> ⚠️ Note : Ce script ne gère pas encore les fichiers de prélèvements par camion citerne.
-
-Ce script produit également un rapport d'erreurs pour les fichiers qui n'ont pas pu être lus.
-
-> Stocké dans : /data/files/output/reports.json
 
 ## Récupérer les fichiers CSV :
 
