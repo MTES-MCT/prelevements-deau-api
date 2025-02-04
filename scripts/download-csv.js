@@ -2,10 +2,10 @@
 
 import 'dotenv/config'
 
+import path from 'node:path'
 import {createWriteStream} from 'node:fs'
 import {mkdir} from 'node:fs/promises'
 import process from 'node:process'
-import {join, dirname} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {pipeline} from 'node:stream/promises'
 
@@ -28,13 +28,13 @@ const filenames = [
   'resultat-suivi.csv'
 ]
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const dataDir = join(__dirname, '..', 'data')
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const dataDir = path.join(__dirname, '..', 'data')
 
 await mkdir(dataDir, {recursive: true})
 
 async function downloadFile(url, filename) {
-  const filePath = join(dataDir, filename)
+  const filePath = path.join(dataDir, filename)
   const fileStream = createWriteStream(filePath)
 
   await pipeline(
