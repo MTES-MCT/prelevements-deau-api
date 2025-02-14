@@ -25,7 +25,11 @@ const filenames = [
   'exploitation-modalite-suivi.csv',
   'exploitation-serie.csv',
   'serie-donnees.csv',
-  'resultat-suivi.csv'
+  'resultat-suivi.csv',
+  'bnpe.csv',
+  'bss.csv',
+  'commune.csv',
+  'exploitation-document.csv'
 ]
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
