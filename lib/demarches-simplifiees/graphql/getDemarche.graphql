@@ -316,6 +316,7 @@ fragment RootChampFragment on Champ {
 
 fragment ChampFragment on Champ {
   id
+  champDescriptorId
   __typename
   label
   stringValue
