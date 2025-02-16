@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import process from 'node:process'
 import mongo from '../lib/util/mongo.js'
-import {getAllDossiers} from '../lib/demarches-simplifiees/index.js'
+import {processAllDossiers} from '../lib/demarches-simplifiees/index.js'
 
 const demarcheNumber = Number.parseInt(process.env.DS_DEMARCHE_NUMBER, 10)
 
@@ -9,7 +9,7 @@ const demarcheNumber = Number.parseInt(process.env.DS_DEMARCHE_NUMBER, 10)
 await mongo.connect()
 
 async function main() {
-  return getAllDossiers({
+  return processAllDossiers({
     demarcheNumber,
     first: 100,
     includeDossiers: true,

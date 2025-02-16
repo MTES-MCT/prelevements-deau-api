@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import process from 'node:process'
-import {getAllDossiers} from '../lib/demarches-simplifiees/index.js'
+import {processAllDossiers} from '../lib/demarches-simplifiees/index.js'
 import mongo from '../lib/util/mongo.js'
 
 const demarcheNumber = Number.parseInt(process.env.DS_DEMARCHE_NUMBER, 10)
@@ -14,7 +14,7 @@ async function main() {
   await mongo.db.collection('dossiers').deleteMany({})
 
   // Fetch all dossiers from the API and insert them into the database
-  return getAllDossiers({
+  return processAllDossiers({
     demarcheNumber,
     first: 100,
     includeDossiers: true,
