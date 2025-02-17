@@ -18,38 +18,20 @@ Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Nod
 
 **Initialiser la base de donneés** :
 
-Ce script efface le contenu de la base de données MongoDB (si présente) et lancera la récupération des dossiers déposés sur Démarches Simplifiées. Ces dossiers seront traités : 
+Ce script lancera la récupération des dossiers déposés sur Démarches Simplifiées. Ces dossiers seront traités :
 1. Validation des données
 2. Stockage en ligne des fichiers en pièce jointe
 3. Enregistrement en base de donnée des dossiers
 
 ```bash
-yarn init-db
+yarn update-db
 ```
 
 ## Scripts
 
-**files-validation** :
-
-Lance une validation de tous les fichiers de données issue de Démarches Simplifiées.
-
 **update-db** :
 
 Récupère tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore étaient collectés puis les traites.
-
-**extract-preleveurs** :
-
-Extrait la liste des préleveurs à partir des informations contenues dans les dossiers (civilité, nom, prénom, email, etc.).
-
-> **Stocké dans** : `/data/preleveurs.csv`
-
-**extract-points-prelevement** :
-
-**Prérequis** : `get-dossiers`, `get-files`
-
-Extrait les points de prélèvement à partir des dossiers et des fichiers Excel.
-
-> **Stocké dans** : `/data/points-prelevement.csv`
 
 ## Récupérer les fichiers CSV :
 
