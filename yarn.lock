@@ -687,6 +687,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@date-fns/utc@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "@date-fns/utc@npm:2.1.0"
+  checksum: 10c0/3f093e0f748b6e8c3df434e42e168b31762e1674b8313d43907c6a85c6540138a0bec01826eb998142e08a8839d3190a776e4e6bba41fe29073f6a3de206e365
+  languageName: node
+  linkType: hard
+
 "@eslint-community/eslint-utils@npm:^4.1.2, @eslint-community/eslint-utils@npm:^4.2.0, @eslint-community/eslint-utils@npm:^4.4.0, @eslint-community/eslint-utils@npm:^4.4.1":
   version: 4.4.1
   resolution: "@eslint-community/eslint-utils@npm:4.4.1"
@@ -4215,6 +4222,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"hasha@npm:^6.0.0":
+  version: 6.0.0
+  resolution: "hasha@npm:6.0.0"
+  dependencies:
+    is-stream: "npm:^3.0.0"
+    type-fest: "npm:^4.7.1"
+  checksum: 10c0/af6f324c60b65bc3b293ac27e2719a29d0c996b0f443a202e6fadf0497e7e28c30b5a61740b9e40af6d386cdd9660ee2b242090954506c3abd140476abf890d0
+  languageName: node
+  linkType: hard
+
 "hasown@npm:^2.0.0, hasown@npm:^2.0.1, hasown@npm:^2.0.2":
   version: 2.0.2
   resolution: "hasown@npm:2.0.2"
@@ -4685,6 +4702,13 @@ __metadata:
   dependencies:
     call-bind: "npm:^1.0.7"
   checksum: 10c0/adc11ab0acbc934a7b9e5e9d6c588d4ec6682f6fea8cda5180721704fa32927582ede5b123349e32517fdadd07958973d24716c80e7ab198970c47acc09e59c7
+  languageName: node
+  linkType: hard
+
+"is-stream@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "is-stream@npm:3.0.0"
+  checksum: 10c0/eb2f7127af02ee9aa2a0237b730e47ac2de0d4e76a4a905a50a11557f2339df5765eaea4ceb8029f1efa978586abe776908720bfcb1900c20c6ec5145f6f29d8
   languageName: node
   linkType: hard
 
@@ -5913,6 +5937,7 @@ __metadata:
   dependencies:
     "@aws-sdk/client-s3": "npm:^3.741.0"
     "@aws-sdk/lib-storage": "npm:^3.741.0"
+    "@date-fns/utc": "npm:^2.1.0"
     ava: "npm:^6.2.0"
     cors: "npm:^2.8.5"
     date-fns: "npm:^4.1.0"
@@ -5920,6 +5945,7 @@ __metadata:
     express: "npm:^4.21.2"
     file-type: "npm:^20.0.1"
     got: "npm:^14.4.5"
+    hasha: "npm:^6.0.0"
     http-errors: "npm:^2.0.0"
     lodash-es: "npm:^4.17.21"
     mongodb: "npm:^6.13.0"
@@ -6955,6 +6981,13 @@ __metadata:
   version: 4.26.1
   resolution: "type-fest@npm:4.26.1"
   checksum: 10c0/d2719ff8d380befe8a3c61068f37f28d6fa2849fd140c5d2f0f143099e371da6856aad7c97e56b83329d45bfe504afe9fd936a7cff600cc0d46aa9ffb008d6c6
+  languageName: node
+  linkType: hard
+
+"type-fest@npm:^4.7.1":
+  version: 4.35.0
+  resolution: "type-fest@npm:4.35.0"
+  checksum: 10c0/7032a8a940c33d45947a4ff0f74e3aa43b6fd8bb4745b32bba8e61ee47c0dd088cacd102f8377e9e889362e1ae8e0292b64a4c0698c1e42fd297bf6f8899d220
   languageName: node
   linkType: hard
 
