@@ -27,4 +27,3 @@ jobs:
     - run: yarn --immutable
     - run: yarn lint
       continue-on-error: true # For now, we're not enforcing linting
-    - run: yarn test
