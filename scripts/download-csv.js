@@ -31,7 +31,8 @@ const filenames = [
   'commune.csv',
   'exploitation-document.csv',
   'me-continentales-bv.csv',
-  'bv-bdcarthage.csv'
+  'bv-bdcarthage.csv',
+  'meso.csv'
 ]
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
