@@ -13,7 +13,7 @@ import errorHandler from './lib/util/error-handler.js'
 import routes from './lib/routes.js'
 
 // Connect to MongoDB
-await mongo.ensureConnected()
+await mongo.connect()
 
 const PORT = process.env.PORT || 5000
 const DEV = process.env.NODE_ENV !== 'production'
