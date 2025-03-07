@@ -6,7 +6,7 @@ import {processAllDossiers} from '../lib/demarches-simplifiees/index.js'
 const demarcheNumber = Number.parseInt(process.env.DS_DEMARCHE_NUMBER, 10)
 
 // Connect to MongoDB
-await mongo.connect()
+await mongo.ensureConnected()
 
 async function main() {
   return processAllDossiers({
