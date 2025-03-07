@@ -14,7 +14,7 @@ import got from 'got'
 const {CSV_SOURCE_URL} = process.env
 
 const filenames = [
-  'beneficiaire.csv',
+  'beneficiaire-email.csv',
   'document.csv',
   'exploitation-regle.csv',
   'exploitation.csv',
