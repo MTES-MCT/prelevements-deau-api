@@ -22,7 +22,7 @@ async function importBSS(bss) {
     const result = await collection.insertMany(documents)
     console.log('=> ' + result.insertedCount + ' documents BSS insérés')
   } catch (error) {
-    console.error('Erreur lors de l’importation : ' + error)
+    throw new Error('Erreur lors de l’importation : ' + error)
   }
 }
 
@@ -47,7 +47,7 @@ async function importBNPE(bnpe) {
     const result = await collection.insertMany(documents)
     console.log('=> ' + result.insertedCount + ' documents BNPE insérés')
   } catch (error) {
-    console.error('Erreur lors de l’importation : ' + error)
+    throw new Error('Erreur lors de l’importation : ' + error)
   }
 }
 
