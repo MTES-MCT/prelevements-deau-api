@@ -6,6 +6,7 @@
     "start": "node api.js",
     "update-db": "node scripts/update-db.js",
     "download-csv": "node scripts/download-csv.js",
+    "mongo-import": "node scripts/mongo-import.js",
     "scalingo-postbuild": "yarn download-csv",
     "lint": "xo",
     "test": "ava"
