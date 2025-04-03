@@ -10,6 +10,13 @@ async function importBSS(bss) {
 
   const collection = mongo.db.collection('bss')
 
+  try {
+    console.log('Nettoyage de la collection...')
+    await collection.deleteMany({})
+  } catch (error) {
+    console.error('Erreur lors du nettoyage de la collection : ' + error)
+  }
+
   const documents = bss.map(b => ({
     id_bss: b.id_bss,
     lien_infoterre: b.lien_infoterre
@@ -31,6 +38,13 @@ async function importBNPE(bnpe) {
   }
 
   const collection = mongo.db.collection('bnpe')
+
+  try {
+    console.log('Nettoyage de la collection...')
+    await collection.deleteMany({})
+  } catch (error) {
+    console.error('Erreur lors du nettoyage de la collection : ' + error)
+  }
 
   const documents = bnpe.map(b => ({
     code_point_prelevement: b.code_point_prelevement,
