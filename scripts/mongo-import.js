@@ -142,6 +142,39 @@ async function addBnpeToPoints() {
     console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
   }
 }
+
+async function addMeContinentaleBvToPoints() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout de meContinentalesBv dans les points')
+  const points = await mongo.db.collection('points_prelevement').find().toArray()
+  const bulkOps = []
+
+  const meContinentaleData = points
+    .filter(point => point.code_me_continentales_bv)
+    .map(point => {
+      const meContinentalesBv = storage.indexedMeContinentalesBv[point.code_me_continentales_bv]
+      return {
+        id_point: point.id_point,
+        meContinentalesBv
+      }
+    })
+
+  for (const {id_point, meContinentalesBv} of meContinentaleData) {
+    bulkOps.push({
+      updateOne: {
+        filter: {id_point},
+        update: {
+          $set: {meContinentalesBv},
+          $unset: {code_me_continentales_bv: ''}
+        }
+      }
+    })
+  }
+
+  if (bulkOps.length > 0) {
+    const result = await mongo.db.collection('points_prelevement').bulkWrite(bulkOps)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
+  }
+}
   }
 }
 
@@ -151,6 +184,9 @@ await importCollection(storage.beneficiaires, 'preleveurs')
 await importCollection(storage.exploitations, 'exploitations')
 await importCollection(storage.pointsPrelevement, 'points_prelevement')
 
+await addBssToPoints()
+await addBnpeToPoints()
+await addMeContinentaleBvToPoints()
 await updateExploitationsWithDocuments()
 await updateExploitationsWithRegles()
 await updateExploitationsWithModalites()
