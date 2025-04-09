@@ -34,10 +34,21 @@ async function updateExploitationsWithRegles() {
   console.log('\u001B[32;1m%s\u001B[0m', `\n=> ${bulkOperations.length} règles insérées\n\n`)
 }
 
+async function updateExploitationsWithModalites() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout des modalités dans les exploitations')
 
+  const bulkOperations = storage.exploitationModalites.map(er => ({
+    updateOne: {
+      filter: {id_exploitation: er.id_exploitation},
+      update: {$addToSet: {modalites: storage.indexedModalitesSuivis[er.id_modalite]}}
+    }
   }))
 
+  if (bulkOperations.length > 0) {
+    await mongo.db.collection('exploitations').bulkWrite(bulkOperations, {ordered: false})
   }
+
+  console.log('\u001B[32;1m%s\u001B[0m', `\n=> ${bulkOperations.length} modalités insérées\n\n`)
 }
 
     console.error('Le fichier est vide !')
@@ -59,4 +70,6 @@ await importCollection(storage.pointsPrelevement, 'points_prelevement')
 
 await updateExploitationsWithDocuments()
 await updateExploitationsWithRegles()
+await updateExploitationsWithModalites()
+
 await mongo.disconnect()
