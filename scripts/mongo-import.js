@@ -17,8 +17,22 @@ async function updateExploitationsWithDocuments() {
   console.log('\u001B[32;1m%s\u001B[0m', `\n=> ${bulkOperations.length} documents insérés\n\n`)
 }
 
+async function updateExploitationsWithRegles() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout des regles dans les exploitations')
+
+  const bulkOperations = storage.exploitationsRegles.map(er => ({
+    updateOne: {
+      filter: {id_exploitation: er.id_exploitation},
+      update: {$addToSet: {regles: storage.indexedRegles[er.id_regle]}}
+    }
+  }))
+
+  if (bulkOperations.length > 0) {
+    await mongo.db.collection('exploitations').bulkWrite(bulkOperations, {ordered: false})
   }
 
+  console.log('\u001B[32;1m%s\u001B[0m', `\n=> ${bulkOperations.length} règles insérées\n\n`)
+}
 
 
   }))
@@ -44,4 +58,5 @@ await importCollection(storage.exploitations, 'exploitations')
 await importCollection(storage.pointsPrelevement, 'points_prelevement')
 
 await updateExploitationsWithDocuments()
+await updateExploitationsWithRegles()
 await mongo.disconnect()
