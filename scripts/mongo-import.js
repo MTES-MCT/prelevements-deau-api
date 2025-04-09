@@ -175,6 +175,72 @@ async function addMeContinentaleBvToPoints() {
     console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
   }
 }
+
+async function addBvBdCarthageToPoints() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout de BvBdCarthage dans les points')
+  const points = await mongo.db.collection('points_prelevement').find().toArray()
+  const bulkOps = []
+
+  const bvBdCarthageData = points
+    .filter(point => point.code_bv_bdcarthage)
+    .map(point => {
+      const bvBdCarthage = storage.indexedBvBdCarthage[point.code_bv_bdcarthage]
+      return {
+        id_point: point.id_point,
+        bvBdCarthage
+      }
+    })
+
+  for (const {id_point, bvBdCarthage} of bvBdCarthageData) {
+    bulkOps.push({
+      updateOne: {
+        filter: {id_point},
+        update: {
+          $set: {bvBdCarthage},
+          $unset: {code_bv_bdcarthage: ''}
+        }
+      }
+    })
+  }
+
+  if (bulkOps.length > 0) {
+    const result = await mongo.db.collection('points_prelevement').bulkWrite(bulkOps)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
+  }
+}
+
+async function addMesoToPoints() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout de Meso dans les points')
+  const points = await mongo.db.collection('points_prelevement').find().toArray()
+  const bulkOps = []
+
+  const mesoData = points
+    .filter(point => point.code_meso)
+    .map(point => {
+      const meso = storage.indexedMeso[point.code_meso]
+      return {
+        id_point: point.id_point,
+        meso
+      }
+    })
+
+  for (const {id_point, meso} of mesoData) {
+    bulkOps.push({
+      updateOne: {
+        filter: {id_point},
+        update: {
+          $set: {meso},
+          $unset: {code_meso: ''}
+        }
+      }
+    })
+  }
+
+  if (bulkOps.length > 0) {
+    const result = await mongo.db.collection('points_prelevement').bulkWrite(bulkOps)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
+  }
+}
   }
 }
 
@@ -187,6 +253,8 @@ await importCollection(storage.pointsPrelevement, 'points_prelevement')
 await addBssToPoints()
 await addBnpeToPoints()
 await addMeContinentaleBvToPoints()
+await addBvBdCarthageToPoints()
+await addMesoToPoints()
 await updateExploitationsWithDocuments()
 await updateExploitationsWithRegles()
 await updateExploitationsWithModalites()
