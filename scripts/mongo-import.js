@@ -241,6 +241,38 @@ async function addMesoToPoints() {
     console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
   }
 }
+
+async function addLIbelleCommuneToPoints() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout des libéllés de commune dans les points')
+  const points = await mongo.db.collection('points_prelevement').find().toArray()
+  const bulkOps = []
+
+  const mesoData = points
+    .filter(point => point.insee_com)
+    .map(point => {
+      const libelleCommune = storage.indexedLibellesCommunes[point.insee_com]
+      return {
+        id_point: point.id_point,
+        libelleCommune
+      }
+    })
+
+  for (const {id_point, libelleCommune} of mesoData) {
+    bulkOps.push({
+      updateOne: {
+        filter: {id_point},
+        update: {
+          $set: {libelleCommune: libelleCommune.nom}
+        }
+      }
+    })
+  }
+
+  if (bulkOps.length > 0) {
+    const result = await mongo.db.collection('points_prelevement').bulkWrite(bulkOps)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
+  }
+}
   }
 }
 
@@ -255,6 +287,7 @@ await addBnpeToPoints()
 await addMeContinentaleBvToPoints()
 await addBvBdCarthageToPoints()
 await addMesoToPoints()
+await addLIbelleCommuneToPoints()
 await updateExploitationsWithDocuments()
 await updateExploitationsWithRegles()
 await updateExploitationsWithModalites()
