@@ -51,14 +51,27 @@ async function updateExploitationsWithModalites() {
   console.log('\u001B[32;1m%s\u001B[0m', `\n=> ${bulkOperations.length} modalités insérées\n\n`)
 }
 
+async function importCollection(data, collectionName) {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Importation des données : ' + collectionName)
+
+  if (!data || data.length === 0) {
     console.error('Le fichier est vide !')
     return
   }
 
+  const collection = mongo.db.collection(collectionName)
 
+  console.log('\n=> Nettoyage de la collection...')
+  await collection.deleteMany()
+  console.log('...Ok !')
 
   try {
+    const result = await collection.insertMany(data)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans ' + collectionName + '\n\n')
   } catch (error) {
+    throw new Error('Erreur lors de l’importation des données : ' + error)
+  }
+}
   }
 }
 
