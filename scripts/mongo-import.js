@@ -1,3 +1,5 @@
+import {chain} from 'lodash-es'
+
 import mongo from '../lib/util/mongo.js'
 import * as storage from '../lib/models/internal/in-memory.js'
 import {getBnpe, getBssById} from '../lib/models/points-prelevement.js'
@@ -273,6 +275,39 @@ async function addLIbelleCommuneToPoints() {
     console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
   }
 }
+
+async function addExploitationsInfosToPoints() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout des informations sur les exploitations dans les points')
+  const points = await mongo.db.collection('points_prelevement').find().toArray()
+  const bulkOps = []
+
+  const exploitationsData = points
+    .map(point => {
+      const exploitations = storage.exploitationsIndexes.point[point.id_point]
+      return {
+        id_point: point.id_point,
+        exploitations: exploitations.map(e => e.id_exploitation),
+        usages: chain(exploitations).map('usages').flatten().uniq().value()
+      }
+    })
+
+  for (const e of exploitationsData) {
+    bulkOps.push({
+      updateOne: {
+        filter: {id_point: e.id_point},
+        update: {
+          $set: {
+            exploitations: e.exploitations,
+            usages: e.usages
+          }
+        }
+      }
+    })
+  }
+
+  if (bulkOps.length > 0) {
+    const result = await mongo.db.collection('points_prelevement').bulkWrite(bulkOps)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
   }
 }
 
@@ -288,6 +323,7 @@ await addMeContinentaleBvToPoints()
 await addBvBdCarthageToPoints()
 await addMesoToPoints()
 await addLIbelleCommuneToPoints()
+await addExploitationsInfosToPoints()
 await updateExploitationsWithDocuments()
 await updateExploitationsWithRegles()
 await updateExploitationsWithModalites()
