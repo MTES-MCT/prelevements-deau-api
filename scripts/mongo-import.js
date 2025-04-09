@@ -1,5 +1,7 @@
 import mongo from '../lib/util/mongo.js'
 import * as storage from '../lib/models/internal/in-memory.js'
+import {getBnpe, getBssById} from '../lib/models/points-prelevement.js'
+
 async function updateExploitationsWithDocuments() {
   console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout des documments dans les exploitations')
 
@@ -70,6 +72,74 @@ async function importCollection(data, collectionName) {
     console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans ' + collectionName + '\n\n')
   } catch (error) {
     throw new Error('Erreur lors de l’importation des données : ' + error)
+  }
+}
+
+async function addBssToPoints() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout du BSS dans les points')
+  const points = await mongo.db.collection('points_prelevement').find().toArray()
+  const bulkOps = []
+
+  const bssData = points
+    .filter(point => point.id_bss)
+    .map(point => {
+      const bss = getBssById(point.id_bss)
+      return {
+        id_point: point.id_point,
+        bss: {
+          ...bss
+        }
+      }
+    })
+
+  for (const {id_point, bss} of bssData) {
+    bulkOps.push({
+      updateOne: {
+        filter: {id_point},
+        update: {
+          $set: {bss},
+          $unset: {id_bss: ''}
+        }
+      }
+    })
+  }
+
+  if (bulkOps.length > 0) {
+    const result = await mongo.db.collection('points_prelevement').bulkWrite(bulkOps)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
+  }
+}
+
+async function addBnpeToPoints() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Ajout du BNPE dans les points')
+  const points = await mongo.db.collection('points_prelevement').find().toArray()
+  const bulkOps = []
+
+  const bnpeData = points
+    .filter(point => point.code_bnpe)
+    .map(point => {
+      const bnpe = getBnpe(point.code_bnpe)
+      return {
+        id_point: point.id_point,
+        bnpe
+      }
+    })
+
+  for (const {id_point, bnpe} of bnpeData) {
+    bulkOps.push({
+      updateOne: {
+        filter: {id_point},
+        update: {
+          $set: {bnpe},
+          $unset: {code_bnpe: ''}
+        }
+      }
+    })
+  }
+
+  if (bulkOps.length > 0) {
+    const result = await mongo.db.collection('points_prelevement').bulkWrite(bulkOps)
+    console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.modifiedCount + ' points modifiés\n\n')
   }
 }
   }
