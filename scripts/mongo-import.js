@@ -311,6 +311,23 @@ async function addExploitationsInfosToPoints() {
   }
 }
 
+async function removeUsageFromExploitations() {
+  console.log('\u001B[35;1;4m%s\u001B[0m', '• Suppression du champ usage des exploitations')
+
+  try {
+    const result = await mongo.db.collection('exploitations').updateMany(
+      {usage: {$exists: true}},
+      {$unset: {usage: ''}}
+    )
+
+    console.log('\u001B[32;1m%s\u001B[0m', `\n=> ${result.modifiedCount} exploitations modifiées`)
+    return result
+  } catch (error) {
+    console.error('\u001B[31mErreur:', error, '\u001B[0m')
+    throw error
+  }
+}
+
 await mongo.connect()
 
 await importCollection(storage.beneficiaires, 'preleveurs')
@@ -327,5 +344,6 @@ await addExploitationsInfosToPoints()
 await updateExploitationsWithDocuments()
 await updateExploitationsWithRegles()
 await updateExploitationsWithModalites()
+await removeUsageFromExploitations()
 
 await mongo.disconnect()
