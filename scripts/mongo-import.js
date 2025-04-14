@@ -1,3 +1,4 @@
+import chain from 'lodash-es'
 import mongo from '../lib/util/mongo.js'
 import * as storage from '../lib/models/internal/in-memory.js'
 import {
@@ -56,6 +57,8 @@ async function preparePoint(pointId) {
 
   const exploitations = await getExploitationsFromPointId(pointId)
   point.exploitations = exploitations.map(e => e.id_exploitation)
+
+  point.usages = chain(exploitations).map('usages').flatten().uniq().value()
 
   return point
 }
