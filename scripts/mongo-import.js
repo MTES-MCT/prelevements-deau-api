@@ -113,8 +113,8 @@ async function importPreleveurs() {
   console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection preleveurs\n\n')
 }
 
-await importPoints()
-await importExploitations()
 await importPreleveurs()
+await importExploitations()
+await importPoints()
 
 await mongo.disconnect()
