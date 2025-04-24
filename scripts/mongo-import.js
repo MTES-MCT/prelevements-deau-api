@@ -55,11 +55,6 @@ async function preparePoint(pointId) {
 
   delete point.insee_com
 
-  const exploitations = await getExploitationsFromPointId(pointId)
-  point.exploitations = exploitations.map(e => e.id_exploitation)
-
-  point.usages = chain(exploitations).map('usages').flatten().uniq().value()
-
   return point
 }
 
