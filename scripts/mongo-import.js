@@ -1,9 +1,7 @@
-import chain from 'lodash-es'
 import mongo from '../lib/util/mongo.js'
 import * as storage from '../lib/models/internal/in-memory.js'
 import {
   getDocumentFromExploitationId,
-  getExploitationsFromPointId,
   getModalitesFromExploitationId,
   getReglesFromExploitationId
 } from '../lib/models/exploitation.js'
