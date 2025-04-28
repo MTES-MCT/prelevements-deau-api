@@ -1,9 +1,7 @@
-import chain from 'lodash-es'
 import mongo from '../lib/util/mongo.js'
 import * as storage from '../lib/models/internal/in-memory.js'
 import {
   getDocumentFromExploitationId,
-  getExploitationsFromPointId,
   getModalitesFromExploitationId,
   getReglesFromExploitationId
 } from '../lib/models/exploitation.js'
@@ -54,11 +52,6 @@ async function preparePoint(pointId) {
   }) : null
 
   delete point.insee_com
-
-  const exploitations = await getExploitationsFromPointId(pointId)
-  point.exploitations = exploitations.map(e => e.id_exploitation)
-
-  point.usages = chain(exploitations).map('usages').flatten().uniq().value()
 
   return point
 }
@@ -113,8 +106,8 @@ async function importPreleveurs() {
   console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection preleveurs\n\n')
 }
 
-await importPoints()
-await importExploitations()
 await importPreleveurs()
+await importExploitations()
+await importPoints()
 
 await mongo.disconnect()
