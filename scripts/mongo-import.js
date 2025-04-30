@@ -8,8 +8,25 @@ import {
 
 await mongo.connect()
 
+export function parseAutresNoms(autresNoms) {
+  if (!autresNoms) {
+    return null
+  }
+
+  const cleanedStr = autresNoms.replaceAll(/[{}"]/g, '')
+  const result = [...new Set(cleanedStr.split(','))].join(', ')
+
+  return result
+}
+
 async function preparePoint(pointId) {
   const point = storage.indexedPointsPrelevement[pointId]
+
+  point.autresNoms = point.autres_noms ? (
+    parseAutresNoms(point.autres_noms)
+  ) : null
+
+  delete point.autres_noms
 
   point.bss = point.id_bss ? ({
     id_bss: storage.indexedBss[point.id_bss].id_bss,
