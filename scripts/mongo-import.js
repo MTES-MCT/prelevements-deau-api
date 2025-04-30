@@ -8,7 +8,7 @@ import {
 
 await mongo.connect()
 
-export function formatAutresNoms(autresNoms) {
+export function parseAutresNoms(autresNoms) {
   if (!autresNoms) {
     return null
   }
@@ -23,7 +23,7 @@ async function preparePoint(pointId) {
   const point = storage.indexedPointsPrelevement[pointId]
 
   point.autresNoms = point.autres_noms ? (
-    formatAutresNoms(point.autres_noms)
+    parseAutresNoms(point.autres_noms)
   ) : null
 
   delete point.autres_noms
