@@ -123,8 +123,73 @@ async function importPreleveurs() {
   console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection preleveurs\n\n')
 }
 
+async function importBNPE() {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données BNPE')
+
+  console.log('\n=> Nettoyage de la collection bnpe...')
+  await mongo.db.collection('bnpe').deleteMany()
+  console.log('...Ok !')
+
+  const result = await mongo.db.collection('bnpe').insertMany(storage.bnpe)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection bnpe\n\n')
+}
+
+async function importBSS() {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données BSS')
+
+  console.log('\n=> Nettoyage de la collection bss...')
+  await mongo.db.collection('bss').deleteMany()
+  console.log('...Ok !')
+
+  const result = await mongo.db.collection('bss').insertMany(storage.bss)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection bss\n\n')
+}
+
+async function importMeso() {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données meso')
+
+  console.log('\n=> Nettoyage de la collection meso...')
+  await mongo.db.collection('meso').deleteMany()
+  console.log('...Ok !')
+
+  const result = await mongo.db.collection('meso').insertMany(storage.meso)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection meso\n\n')
+}
+
+async function importMeContinentalesBV() {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données meContinentalesBv')
+
+  console.log('\n=> Nettoyage de la collection meContinentalesBv...')
+  await mongo.db.collection('me_continentales_bv').deleteMany()
+  console.log('...Ok !')
+
+  const result = await mongo.db.collection('me_continentales_bv').insertMany(storage.meContinentalesBv)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection meContinentalesBv\n\n')
+}
+
+async function importBvBdCarthage() {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données bvBdCarthage')
+
+  console.log('\n=> Nettoyage de la collection bvBdCarthage...')
+  await mongo.db.collection('bv_bdcarthage').deleteMany()
+  console.log('...Ok !')
+
+  const result = await mongo.db.collection('bv_bdcarthage').insertMany(storage.bvBdCarthage)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection bvBdCarthage\n\n')
+}
+
 await importPreleveurs()
 await importExploitations()
 await importPoints()
+await importBNPE()
+await importBSS()
+await importMeso()
+await importMeContinentalesBV()
+await importBvBdCarthage()
 
 await mongo.disconnect()
