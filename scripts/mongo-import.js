@@ -70,6 +70,9 @@ async function preparePoint(pointId) {
 
   delete point.insee_com
 
+  point.createdAt = new Date()
+  point.updatedAt = new Date()
+
   return point
 }
 
