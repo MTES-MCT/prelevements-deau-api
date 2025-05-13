@@ -31,14 +31,23 @@ yarn update-db
 
 **update-db** :
 
-Récupère tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore étaient collectés puis les traites.
+Récupère et traite tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore été collectés.
 
-## Récupérer les fichiers CSV :
+### Récupérer les fichiers CSV :
 
-- Remplir les informations dans le fichier `.env`
+- Remplir les informations dans le fichier `.env` (`CSV_SOURCE_URL`):
 - Lancer le script de téléchargement :
 ```bash
-node download-csv
+yarn download-csv
+```
+- Puis importer les fichiers dans la base MongoDB :
+```bash
+yarn mongo-import
+```
+
+### Lancer l'application :
+```bash
+yarn start
 ```
 
 ## Linter
@@ -52,6 +61,7 @@ yarn lint
 ## Prérequis
 
 - Node.js version 22 LTS (22.11+)
+- MongoDB version 4.4.29
 
 ## License
 
