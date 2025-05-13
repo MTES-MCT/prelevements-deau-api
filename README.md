@@ -79,7 +79,7 @@ yarn lint
 | `/beneficiaires/:id/points-prelevement`| **GET** | *Retourne les points exploités par le préleveur* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
 
-> [!info]
+> [!NOTE]
 > *Les routes avec une `*` sont protégées par un jeton*
 
 ### Objet `point_prelevement` :
