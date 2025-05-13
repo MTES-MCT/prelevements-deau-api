@@ -63,6 +63,27 @@ yarn lint
 - Node.js version 22 LTS (22.11+)
 - MongoDB version 4.4.29
 
+## Routes de l'API :
+| Route | Type | Description |
+|-------|------|-------------|
+| `/points-prelevement`| **GET** * | *Retourne la liste des points de prélèvement* |
+| `/points-prelevement`| **POST** * | *Permet d'ajouter un point de prélèvement* |
+| `/points-prelevement/:id`| **GET** * | *Retourne le point de prélèvement* |
+| `/points-prelevement/:id`| **PUT** * | *Modifie le point de prélèvement* |
+| `/points-prelevement/:id`| **DELETE** * | *Supprime le point de prélèvement* |
+| `/points-prelevement/:id/exploitations`| **GET** | *Retourne la liste des exploitations du point* |
+| `/exploitations:id`| **GET** | *Retourne l'exploitation* |
+| `/exploitations/:id/volumes-preleves`| **GET** | *Retourne les volumes prélevés de l'exploitations* |
+| `/beneficiaires`| **GET** | *Retourne la liste des préleveurs* |
+| `/beneficiaires/:id`| **GET** | *Retourne le préleveur* |
+| `/beneficiaires/:id/points-prelevement`| **GET** | *Retourne les points exploités par le préleveur* |
+| `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
+
+> [!info]
+> *Les routes avec une `*` sont protégées par un jeton*
+
+---
+
 ## License
 
 Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
