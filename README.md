@@ -31,7 +31,7 @@ yarn update-db
 
 **update-db** :
 
-Récupère tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore étaient collectés puis les traites.
+Récupère et traite tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore été collectés.
 
 ### Récupérer les fichiers CSV :
 
