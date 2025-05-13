@@ -82,6 +82,29 @@ yarn lint
 > [!info]
 > *Les routes avec une `*` sont protégées par un jeton*
 
+### Objet `point_prelevement` :
+
+| Propriété | Type | Obligatoire |
+|-----------|------|-------------|
+| `nom` | string | oui |
+| `autres_noms` | string | non |
+| `code_aiot` | string | non |
+| `type_milieu` | string | oui |
+| `profondeur` | number | non |
+| `zre` | bool | non |
+| `reservoir_biologique` | bool | non |
+| `cours_eau` | string | non |
+| `detail_localisation` | string | non |
+| `geom` | Feature Point | oui |
+| `precision_geom` | string | oui |
+| `remarque` | string | non |
+| `bss` | string | non |
+| `bnpe` | string | non |
+| `meso` | string | non |
+| `meContinentalesBv` | string | non |
+| `bvBdCarthage` | string | non |
+| `commune` | string | oui |
+
 ---
 
 ## License
