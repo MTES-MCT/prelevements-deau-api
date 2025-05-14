@@ -71,9 +71,12 @@ yarn lint
 | `/points-prelevement/:id`| **GET** * | *Retourne le point de prélèvement* |
 | `/points-prelevement/:id`| **PUT** * | *Modifie le point de prélèvement* |
 | `/points-prelevement/:id`| **DELETE** * | *Supprime le point de prélèvement* |
-| `/points-prelevement/:id/exploitations`| **GET** | *Retourne la liste des exploitations du point* |
-| `/exploitations:id`| **GET** | *Retourne l'exploitation* |
-| `/exploitations/:id/volumes-preleves`| **GET** | *Retourne les volumes prélevés de l'exploitations* |
+| `/points-prelevement/:id/exploitations`| **GET** * | *Retourne la liste des exploitations du point* |
+| `/exploitations`| **POST** * | *Crée une exploitation* |
+| `/exploitations:id`| **GET** * | *Retourne l'exploitation* |
+| `/exploitations:id`| **PUT** * | *Modifie l'exploitation* |
+| `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
+| `/exploitations/:id/volumes-preleves`| **GET** * | *Retourne les volumes prélevés de l'exploitations* |
 | `/beneficiaires`| **GET** | *Retourne la liste des préleveurs* |
 | `/beneficiaires/:id`| **GET** | *Retourne le préleveur* |
 | `/beneficiaires/:id/points-prelevement`| **GET** | *Retourne les points exploités par le préleveur* |
@@ -104,6 +107,20 @@ yarn lint
 | `meContinentalesBv` | string | non |
 | `bvBdCarthage` | string | non |
 | `commune` | string | oui |
+
+### Objet `exploitation` :
+
+| Propriété | Type | Obligatoire |
+|-----------|------|-------------|
+| `date_debut` | string | oui |
+| `statut` | string | oui |
+| `remarque` | string | non |
+| `id_point` | string | oui |
+| `id_beneficiaire` | string | oui |
+| `usages` | array | oui |
+| `regles` | array | non |
+| `documents` | array | non |
+| `modalites` | array | non |
 
 ---
 
