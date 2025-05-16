@@ -113,7 +113,9 @@ yarn lint
 | Propriété | Type | Obligatoire |
 |-----------|------|-------------|
 | `date_debut` | string | oui |
+| `date_fin` | string | non |
 | `statut` | string | oui |
+| `raison_abandon` | string | non |
 | `remarque` | string | non |
 | `id_point` | string | oui |
 | `id_beneficiaire` | string | oui |
