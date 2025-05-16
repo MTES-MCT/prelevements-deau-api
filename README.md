@@ -64,7 +64,7 @@ yarn lint
 - MongoDB version 4.4.29
 
 ## Routes de l'API :
-| Route | Type | Description |
+| Route | Type    | Description |
 |-------|------|-------------|
 | `/points-prelevement`| **GET** * | *Retourne la liste des points de prélèvement* |
 | `/points-prelevement`| **POST** * | *Permet d'ajouter un point de prélèvement* |
@@ -77,9 +77,9 @@ yarn lint
 | `/exploitations:id`| **PUT** * | *Modifie l'exploitation* |
 | `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
 | `/exploitations/:id/volumes-preleves`| **GET** * | *Retourne les volumes prélevés de l'exploitations* |
-| `/beneficiaires`| **GET** | *Retourne la liste des préleveurs* |
-| `/beneficiaires/:id`| **GET** | *Retourne le préleveur* |
-| `/beneficiaires/:id/points-prelevement`| **GET** | *Retourne les points exploités par le préleveur* |
+| `/beneficiaires`| **GET** *| *Retourne la liste des préleveurs* |
+| `/beneficiaires/:id`| **GET** *| *Retourne le préleveur* |
+| `/beneficiaires/:id/points-prelevement`| **GET** *| *Retourne les points exploités par le préleveur* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
 
 > [!NOTE]
@@ -121,6 +121,23 @@ yarn lint
 | `regles` | array | non |
 | `documents` | array | non |
 | `modalites` | array | non |
+
+### Objet `preleveur` :
+
+| Propriété | Type | Obligatoire |
+|-----------|------|-------------|
+| `raison_sociale` | string | non |
+| `sigle` | string | non |
+| `civilite` | string | non |
+| `nom` | string | non |
+| `prenom` | string | non |
+| `email` | string | non |
+| `adresse_1` | string | non |
+| `adresse_2` | string | non |
+| `bp` | string | non |
+| `code_postal` | string | non |
+| `commune` | string | non |
+| `numero_telephone` | string | non |
 
 ---
 
