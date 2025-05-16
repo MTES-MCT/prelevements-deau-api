@@ -64,18 +64,18 @@ yarn lint
 - MongoDB version 4.4.29
 
 ## Routes de l'API :
-| Route | Type    | Description |
+| Route | Type | Description |
 |-------|------|-------------|
 | `/points-prelevement`| **GET** * | *Retourne la liste des points de prélèvement* |
 | `/points-prelevement`| **POST** * | *Permet d'ajouter un point de prélèvement* |
 | `/points-prelevement/:id`| **GET** * | *Retourne le point de prélèvement* |
 | `/points-prelevement/:id`| **PUT** * | *Modifie le point de prélèvement* |
-| `/points-prelevement/:id`| **DELETE** * | *Supprime le point de prélèvement* |
+| `/points-prelevement/:id`| **DELETE** * | *Supprime le point de prélèvement* |
 | `/points-prelevement/:id/exploitations`| **GET** * | *Retourne la liste des exploitations du point* |
 | `/exploitations`| **POST** * | *Crée une exploitation* |
 | `/exploitations:id`| **GET** * | *Retourne l'exploitation* |
 | `/exploitations:id`| **PUT** * | *Modifie l'exploitation* |
-| `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
+| `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
 | `/exploitations/:id/volumes-preleves`| **GET** * | *Retourne les volumes prélevés de l'exploitations* |
 | `/beneficiaires`| **GET** *| *Retourne la liste des préleveurs* |
 | `/beneficiaires/:id`| **GET** *| *Retourne le préleveur* |
