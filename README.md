@@ -77,9 +77,9 @@ yarn lint
 | `/exploitations:id`| **PUT** * | *Modifie l'exploitation* |
 | `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
 | `/exploitations/:id/volumes-preleves`| **GET** * | *Retourne les volumes prélevés de l'exploitations* |
-| `/beneficiaires`| **GET** *| *Retourne la liste des préleveurs* |
-| `/beneficiaires/:id`| **GET** *| *Retourne le préleveur* |
-| `/beneficiaires/:id/points-prelevement`| **GET** *| *Retourne les points exploités par le préleveur* |
+| `/preleveurs`| **GET** *| *Retourne la liste des préleveurs* |
+| `/preleveurs/:id`| **GET** *| *Retourne le préleveur* |
+| `/preleveurs/:id/points-prelevement`| **GET** *| *Retourne les points exploités par le préleveur* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
 
 > [!NOTE]
@@ -118,7 +118,7 @@ yarn lint
 | `raison_abandon` | string | non |
 | `remarque` | string | non |
 | `id_point` | string | oui |
-| `id_beneficiaire` | string | oui |
+| `id_preleveur` | string | oui |
 | `usages` | array | oui |
 | `regles` | array | non |
 | `documents` | array | non |

@@ -79,11 +79,13 @@ async function preparePoint(pointId) {
 async function prepareExploitation(idExploitation) {
   const exploitation = storage.indexedExploitations[idExploitation]
 
+  exploitation.id_preleveur = exploitation.id_beneficiaire
   exploitation.regles = await getReglesFromExploitationId(idExploitation)
   exploitation.documents = await getDocumentFromExploitationId(idExploitation)
   exploitation.modalites = await getModalitesFromExploitationId(idExploitation)
 
   delete exploitation.usage
+  delete exploitation.id_beneficiaire
 
   return exploitation
 }
@@ -120,6 +122,11 @@ async function importPreleveurs() {
   console.log('\n=> Nettoyage de la collection preleveurs...')
   await mongo.db.collection('preleveurs').deleteMany()
   console.log('...Ok !')
+
+  for (const preleveur of storage.beneficiaires) {
+    preleveur.id_preleveur = preleveur.id_beneficiaire
+    delete preleveur.id_beneficiaire
+  }
 
   const result = await mongo.db.collection('preleveurs').insertMany(storage.beneficiaires)
 
