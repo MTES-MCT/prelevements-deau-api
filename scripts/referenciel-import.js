@@ -12,7 +12,7 @@ import {
   LIBELLES_DEFINITION,
   ME_CONTINENTALES_BV_DEFINITION,
   BV_BDCARTHAGE_DEFINITION,
-  MESO_DEFINITION,
+  MESO_DEFINITION
 } from '../lib/models/internal/in-memory.js'
 import {readDataFromCsvFile} from '../lib/util/csv.js'
 
@@ -116,6 +116,15 @@ async function importMeso(filePath) {
 }
 
 async function importReferentiel(folderPath) {
+  if (!folderPath) {
+    console.error(
+      '\u001B[41m\u001B[30m%s\u001B[0m',
+      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn referentiel-import /data/reunion'
+    )
+
+    process.exit(1)
+  }
+
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données référentielles')
 
   await mongo.connect()
@@ -133,6 +142,6 @@ async function importReferentiel(folderPath) {
   await mongo.disconnect()
 }
 
-const folderPath = argv[2] || 'data'
+const folderPath = argv[2]
 
 await importReferentiel(folderPath)
