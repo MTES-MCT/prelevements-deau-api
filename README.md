@@ -100,9 +100,11 @@ yarn lint
 | `/exploitations:id`| **PUT** * | *Modifie l'exploitation* |
 | `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
 | `/exploitations/:id/volumes-preleves`| **GET** * | *Retourne les volumes prélevés de l'exploitations* |
-| `/preleveurs`| **GET** *| *Retourne la liste des préleveurs* |
-| `/preleveurs/:id`| **GET** *| *Retourne le préleveur* |
-| `/preleveurs/:id/points-prelevement`| **GET** *| *Retourne les points exploités par le préleveur* |
+| `/preleveurs`| **GET** * | *Retourne la liste des préleveurs* |
+| `/preleveurs/:id`| **GET** * | *Retourne le préleveur* |
+| `/preleveurs/:id/points-prelevement`| **GET** * | *Retourne les points exploités par le préleveur* |
+| `/territoires/:codeTerritoire/points-prelevement` | **GET** * | *Retourne les points à partir du code territoire* |
+| `/territoires/:codeTerritoire/preleveurs` | **GET** * | *Retourne les préleveurs à partir du code territoire* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
 
 > [!NOTE]
