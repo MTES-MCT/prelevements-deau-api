@@ -7,6 +7,8 @@
     "update-db": "node scripts/update-db.js",
     "download-csv": "node scripts/download-csv.js",
     "mongo-import": "node scripts/mongo-import.js",
+    "data-import": "node scripts/data-import.js",
+    "referentiel-import": "node scripts/referentiel-import.js",
     "scalingo-postbuild": "yarn download-csv",
     "lint": "xo",
     "test": "ava"
