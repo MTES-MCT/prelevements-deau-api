@@ -3,8 +3,10 @@
 
 import {argv} from 'node:process'
 import mongo from '../lib/util/mongo.js'
-import {readDataFromCsvFile} from '../lib/util/csv.js'
+import {readDataFromCsvFile, parseNomenclature} from '../lib/util/csv.js'
+import {usages} from '../lib/nomenclature.js'
 import {
+  indexedLibellesCommunes,
   POINTS_PRELEVEMENT_DEFINITION,
   EXPLOITATIONS_DEFINITION,
   PRELEVEURS_DEFINITION
@@ -33,32 +35,78 @@ async function preparePoint(point, codeTerritoire) {
   delete pointToInsert.autres_noms
 
   if (point.id_bss) {
-    pointToInsert.bss = await mongo.db.collection('bss').findOne({id_bss: point.id_bss})
-    delete pointToInsert.id_bss
+    const bss = await mongo.db.collection('bss').findOne({id_bss: point.id_bss})
+
+    pointToInsert.bss = {
+      id_bss: bss.id_bss,
+      lien: bss.lien_infoterre
+    }
+  } else {
+    pointToInsert.bss = null
   }
+
+  delete pointToInsert.id_bss
 
   if (point.code_bnpe) {
-    pointToInsert.bnpe = await mongo.db.collection('bnpe').findOne({code_point_prelevement: point.code_bnpe})
-    delete pointToInsert.code_bnpe
+    const bnpe = await mongo.db.collection('bnpe').findOne({code_point_prelevement: point.code_bnpe})
+
+    pointToInsert.bnpe = {
+      point: bnpe.code_point_prelevement,
+      lien: bnpe.uri_ouvrage
+    }
+  } else {
+    pointToInsert.bnpe = null
   }
 
-  if (point.code_meso) {
-    pointToInsert.meso = await mongo.db.collection('meso').findOne({code: point.code_meso})
-    delete pointToInsert.code_meso
+  delete pointToInsert.code_bnpe
+
+  if (point.meso) {
+    const meso = await mongo.db.collection('meso').findOne({code: point.code_meso})
+
+    pointToInsert.meso = {
+      code: meso.code,
+      nom: meso.nom_provis
+    }
+  } else {
+    pointToInsert.meso = null
   }
 
-  if (point.meContinentalesBv) {
-    pointToInsert.meContinentalesBv = await mongo.db.collection('meContinentalesBv').findOne({code_dce: point.code_dce})
+  delete pointToInsert.code_meso
+
+  if (point.me_continentales_bv) {
+    const meContinentalesBv = await mongo.db.collection('me_continentales_bv').findOne({code_dce: point.code_me_continentales_bv})
+
+    pointToInsert.meContinentalesBv = {
+      code: meContinentalesBv.code_dce,
+      nom: meContinentalesBv.nom
+    }
+  } else {
+    pointToInsert.meContinentalesBv = null
   }
 
-  if (point.bvBdCarthage) {
-    pointToInsert.bvBdCarthage = await mongo.db.collection('bvBdCarthage').findOne({code_cours: point.code_cours})
+  delete pointToInsert.code_me_continentales_bv
+
+  if (point.code_bv_bdcarthage) {
+    const bvBdCarthage = await mongo.db.collection('bv_bdcarthage').findOne({code_cours: point.code_bv_bdcarthage})
+
+    pointToInsert.bvBdCarthage = {
+      code: bvBdCarthage.code_cours,
+      nom: bvBdCarthage.toponyme_t
+    }
+  } else {
+    pointToInsert.bvBdCarthage = null
   }
+
+  delete pointToInsert.code_bv_bdcarthage
 
   if (point.insee_com) {
-    pointToInsert.commune = point.insee_com
-    delete pointToInsert.insee_com
+    pointToInsert.commune = {
+      code: point.insee_com,
+      nom: indexedLibellesCommunes[point.insee_com].nom
+    }
   }
+
+  delete pointToInsert.insee_com
 
   pointToInsert.territoire = codeTerritoire
   pointToInsert.createdAt = new Date()
@@ -67,7 +115,7 @@ async function preparePoint(point, codeTerritoire) {
   return pointToInsert
 }
 
-async function prepareExploitation(exploitation, codeTerritoire) {
+async function prepareExploitation(exploitation, codeTerritoire, exploitationsUsages) {
   const exploitationToInsert = exploitation
 
   if (exploitation.id_beneficiaire) {
@@ -80,6 +128,10 @@ async function prepareExploitation(exploitation, codeTerritoire) {
   exploitationToInsert.modalites = await getModalitesFromExploitationId(exploitation.id_exploitation)
 
   delete exploitationToInsert.usage
+
+  exploitation.usages = exploitationsUsages
+    .filter(u => u.id_exploitation === exploitation.id_exploitation)
+    .map(u => parseNomenclature(u.id_usage, usages))
 
   exploitationToInsert.territoire = codeTerritoire
   exploitationToInsert.createdAt = new Date()
@@ -105,7 +157,7 @@ async function preparePreleveur(preleveur, codeTerritoire) {
 
 async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
   try {
-    const points = await readDataFromCsvFile(folderPath + '/points-prelevement.csv', POINTS_PRELEVEMENT_DEFINITION)
+    const points = await readDataFromCsvFile(folderPath + '/point-prelevement.csv', POINTS_PRELEVEMENT_DEFINITION)
     console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données points_prelevement pour : ' + nomTerritoire)
 
     const pointsToInsert = await Promise.all(points.map(point => preparePoint(point, codeTerritoire)))
@@ -122,10 +174,11 @@ async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
 
 async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
   try {
-    const exploitations = await readDataFromCsvFile(folderPath + '/exploitations.csv', EXPLOITATIONS_DEFINITION)
+    const exploitationsUsages = await readDataFromCsvFile(folderPath + '/exploitation-usage.csv')
+    const exploitations = await readDataFromCsvFile(folderPath + '/exploitation.csv', EXPLOITATIONS_DEFINITION)
     console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
 
-    const exploitationsToInsert = await Promise.all(exploitations.map(exploitation => prepareExploitation(exploitation, codeTerritoire)))
+    const exploitationsToInsert = await Promise.all(exploitations.map(exploitation => prepareExploitation(exploitation, codeTerritoire, exploitationsUsages)))
     const result = await mongo.db.collection('exploitations').insertMany(exploitationsToInsert)
     console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection exploitations\n\n')
   } catch (error) {
@@ -138,7 +191,7 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
 
 async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   try {
-    const preleveurs = await readDataFromCsvFile(folderPath + '/preleveurs.csv', PRELEVEURS_DEFINITION)
+    const preleveurs = await readDataFromCsvFile(folderPath + '/beneficiaire.csv', PRELEVEURS_DEFINITION)
     console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données preleveurs pour : ' + nomTerritoire)
 
     const preleveursToInsert = await Promise.all(preleveurs.map(preleveur => preparePreleveur(preleveur, codeTerritoire)))
