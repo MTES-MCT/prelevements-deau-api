@@ -54,14 +54,14 @@ yarn mongo-import
 db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974'})
 ```
 
-- Importer les données référentielles :
+- Importer les données référentielles :   
 _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
 
 ```bash
 yarn referentiel-import /chemin/du/dossier
 ```
 
-- Importer les points/préleveurs/exploitations :
+- Importer les points / préleveurs / exploitations / règles / documents / modalités :   
 _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
 
 ```bash
