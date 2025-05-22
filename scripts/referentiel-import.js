@@ -4,9 +4,6 @@
 import {argv} from 'node:process'
 import mongo from '../lib/util/mongo.js'
 import {
-  REGLES_DEFINITION,
-  DOCUMENTS_DEFINITION,
-  MODALITES_DEFINITION,
   BSS_DEFINITION,
   BNPE_DEFINITION,
   LIBELLES_DEFINITION,
@@ -15,39 +12,6 @@ import {
   MESO_DEFINITION
 } from '../lib/models/internal/in-memory.js'
 import {readDataFromCsvFile} from '../lib/util/csv.js'
-
-async function importRegles(filePath) {
-  const regles = await readDataFromCsvFile(
-    `${filePath}/regle.csv`,
-    REGLES_DEFINITION
-  )
-
-  const result = await mongo.db.collection('regles').insertMany(regles)
-
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection regles\n\n')
-}
-
-async function importDocuments(filePath) {
-  const documents = await readDataFromCsvFile(
-    `${filePath}/document.csv`,
-    DOCUMENTS_DEFINITION
-  )
-
-  const result = await mongo.db.collection('documents').insertMany(documents)
-
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection documents\n\n')
-}
-
-async function importModalites(filePath) {
-  const modalites = await readDataFromCsvFile(
-    `${filePath}/modalite-suivi.csv`,
-    MODALITES_DEFINITION
-  )
-
-  const result = await mongo.db.collection('modalites').insertMany(modalites)
-
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection modalites\n\n')
-}
 
 async function importBss(filePath) {
   const bss = await readDataFromCsvFile(
@@ -129,9 +93,6 @@ async function importReferentiel(folderPath) {
 
   await mongo.connect()
 
-  await importRegles(folderPath)
-  await importDocuments(folderPath)
-  await importModalites(folderPath)
   await importBss(folderPath)
   await importBnpe(folderPath)
   await importLibellesCommunes(folderPath)

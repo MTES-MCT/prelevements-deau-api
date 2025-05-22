@@ -7,6 +7,9 @@ import {readDataFromCsvFile, parseNomenclature} from '../lib/util/csv.js'
 import {usages} from '../lib/nomenclature.js'
 import {
   indexedLibellesCommunes,
+  REGLES_DEFINITION,
+  DOCUMENTS_DEFINITION,
+  MODALITES_DEFINITION,
   POINTS_PRELEVEMENT_DEFINITION,
   EXPLOITATIONS_DEFINITION,
   PRELEVEURS_DEFINITION
@@ -205,6 +208,45 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   }
 }
 
+async function importRegles(filePath, nomTerritoire) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des règles pour : ' + nomTerritoire)
+
+  const regles = await readDataFromCsvFile(
+    `${filePath}/regle.csv`,
+    REGLES_DEFINITION
+  )
+
+  const result = await mongo.db.collection('regles').insertMany(regles)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection regles\n\n')
+}
+
+async function importDocuments(filePath, nomTerritoire) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des documents pour : ' + nomTerritoire)
+
+  const documents = await readDataFromCsvFile(
+    `${filePath}/document.csv`,
+    DOCUMENTS_DEFINITION
+  )
+
+  const result = await mongo.db.collection('documents').insertMany(documents)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection documents\n\n')
+}
+
+async function importModalites(filePath, nomTerritoire) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des modalités de suivi pour : ' + nomTerritoire)
+
+  const modalites = await readDataFromCsvFile(
+    `${filePath}/modalite-suivi.csv`,
+    MODALITES_DEFINITION
+  )
+
+  const result = await mongo.db.collection('modalites').insertMany(modalites)
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection modalites\n\n')
+}
+
 async function importData(folderPath, codeTerritoire) {
   if (!codeTerritoire) {
     console.error(
@@ -239,6 +281,9 @@ async function importData(folderPath, codeTerritoire) {
     process.exit(1)
   }
 
+  await importRegles(folderPath, validTerritoire.nom)
+  await importDocuments(folderPath, validTerritoire.nom)
+  await importModalites(folderPath, validTerritoire.nom)
   await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
