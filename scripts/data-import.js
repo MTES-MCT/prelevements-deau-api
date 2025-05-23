@@ -159,66 +159,59 @@ async function preparePreleveur(preleveur, codeTerritoire) {
 }
 
 async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
-  try {
-    console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données points_prelevement pour : ' + nomTerritoire)
-    const points = await readDataFromCsvFile(folderPath + '/point-prelevement.csv', POINTS_PRELEVEMENT_DEFINITION)
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données points_prelevement pour : ' + nomTerritoire)
+  const points = await readDataFromCsvFile(
+    folderPath + '/point-prelevement.csv',
+    POINTS_PRELEVEMENT_DEFINITION
+  )
 
-    if (points) {
-      const pointsToInsert = await Promise.all(points.map(point => preparePoint(point, codeTerritoire)))
-      const result = await mongo.db.collection('points_prelevement').insertMany(pointsToInsert)
+  const pointsToInsert = await Promise.all(points.map(point => preparePoint(point, codeTerritoire)))
+  const result = await mongo.db.collection('points_prelevement').insertMany(pointsToInsert)
 
-      console.log(
-        '\u001B[32;1m%s\u001B[0m',
-        '\n=> ' + result.insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
-      )
-    }
-  } catch (error) {
-    console.error(
-      '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Erreur : ' + error.message
-    )
-  }
+  console.log(
+    '\u001B[32;1m%s\u001B[0m',
+    '\n=> ' + result.insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
+  )
 }
 
 async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
-  try {
-    console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
-    const exploitationsUsages = await readDataFromCsvFile(folderPath + '/exploitation-usage.csv')
-    const exploitations = await readDataFromCsvFile(folderPath + '/exploitation.csv', EXPLOITATIONS_DEFINITION)
-    const exploitationsToInsert = await Promise.all(exploitations.map(exploitation => prepareExploitation(exploitation, codeTerritoire, exploitationsUsages)))
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
+  const exploitationsUsages = await readDataFromCsvFile(
+    folderPath + '/exploitation-usage.csv',
+    null,
+    false
+  )
+  const exploitations = await readDataFromCsvFile(
+    folderPath + '/exploitation.csv',
+    EXPLOITATIONS_DEFINITION,
+    false
+  )
 
-    if (exploitationsToInsert) {
-      const result = await mongo.db.collection('exploitations').insertMany(exploitationsToInsert)
-      console.log(
-        '\u001B[32;1m%s\u001B[0m',
-        '\n=> ' + result.insertedCount + ' documents insérés dans la collection exploitations\n\n'
-      )
-    }
-  } catch (error) {
-    console.error(
-      '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Erreur : ' + error.message
+  const exploitationsToInsert = await Promise.all(exploitations.map(exploitation => prepareExploitation(exploitation, codeTerritoire, exploitationsUsages)))
+
+  if (exploitationsToInsert) {
+    const result = await mongo.db.collection('exploitations').insertMany(exploitationsToInsert)
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection exploitations\n\n'
     )
   }
 }
 
 async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
-  try {
-    console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données preleveurs pour : ' + nomTerritoire)
-    const preleveurs = await readDataFromCsvFile(folderPath + '/beneficiaire.csv', PRELEVEURS_DEFINITION)
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données preleveurs pour : ' + nomTerritoire)
+  const preleveurs = await readDataFromCsvFile(
+    folderPath + '/beneficiaire.csv',
+    PRELEVEURS_DEFINITION,
+    false
+  )
 
-    if (preleveurs) {
-      const preleveursToInsert = await Promise.all(preleveurs.map(preleveur => preparePreleveur(preleveur, codeTerritoire)))
-      const result = await mongo.db.collection('preleveurs').insertMany(preleveursToInsert)
-      console.log(
-        '\u001B[32;1m%s\u001B[0m',
-        '\n=> ' + result.insertedCount + ' documents insérés dans la collection preleveurs\n\n'
-      )
-    }
-  } catch (error) {
-    console.error(
-      '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Erreur : ' + error.message
+  if (preleveurs.length > 0) {
+    const preleveursToInsert = await Promise.all(preleveurs.map(preleveur => preparePreleveur(preleveur, codeTerritoire)))
+    const result = await mongo.db.collection('preleveurs').insertMany(preleveursToInsert)
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection preleveurs\n\n'
     )
   }
 }
@@ -228,10 +221,11 @@ async function importRegles(filePath, nomTerritoire) {
 
   const regles = await readDataFromCsvFile(
     `${filePath}/regle.csv`,
-    REGLES_DEFINITION
+    REGLES_DEFINITION,
+    false
   )
 
-  if (regles) {
+  if (regles.length > 0) {
     const result = await mongo.db.collection('regles').insertMany(regles)
 
     console.log(
@@ -246,10 +240,11 @@ async function importDocuments(filePath, nomTerritoire) {
 
   const documents = await readDataFromCsvFile(
     `${filePath}/document.csv`,
-    DOCUMENTS_DEFINITION
+    DOCUMENTS_DEFINITION,
+    false
   )
 
-  if (documents) {
+  if (documents.length > 0) {
     const result = await mongo.db.collection('documents').insertMany(documents)
 
     console.log(
@@ -264,10 +259,11 @@ async function importModalites(filePath, nomTerritoire) {
 
   const modalites = await readDataFromCsvFile(
     `${filePath}/modalite-suivi.csv`,
-    MODALITES_DEFINITION
+    MODALITES_DEFINITION,
+    false
   )
 
-  if (modalites) {
+  if (modalites.length > 0) {
     const result = await mongo.db.collection('modalites').insertMany(modalites)
 
     console.log(
