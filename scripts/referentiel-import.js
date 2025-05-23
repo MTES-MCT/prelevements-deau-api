@@ -19,9 +19,14 @@ async function importBss(filePath) {
     BSS_DEFINITION
   )
 
-  const result = await mongo.db.collection('bss').insertMany(bss)
+  if (bss) {
+    const result = await mongo.db.collection('bss').insertMany(bss)
 
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection bss\n\n')
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection bss\n\n'
+    )
+  }
 }
 
 async function importBnpe(filePath) {
@@ -30,9 +35,14 @@ async function importBnpe(filePath) {
     BNPE_DEFINITION
   )
 
-  const result = await mongo.db.collection('bnpe').insertMany(bnpe)
+  if (bnpe) {
+    const result = await mongo.db.collection('bnpe').insertMany(bnpe)
 
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection bnpe\n\n')
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection bnpe\n\n'
+    )
+  }
 }
 
 async function importLibellesCommunes(filePath) {
@@ -41,9 +51,14 @@ async function importLibellesCommunes(filePath) {
     LIBELLES_DEFINITION
   )
 
-  const result = await mongo.db.collection('communes').insertMany(communes)
+  if (communes) {
+    const result = await mongo.db.collection('communes').insertMany(communes)
 
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection communes\n\n')
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection communes\n\n'
+    )
+  }
 }
 
 async function importMeContinentalesBV(filePath) {
@@ -52,9 +67,14 @@ async function importMeContinentalesBV(filePath) {
     ME_CONTINENTALES_BV_DEFINITION
   )
 
-  const result = await mongo.db.collection('me_continentales_bv').insertMany(meContinentalesBv)
+  if (meContinentalesBv) {
+    const result = await mongo.db.collection('me_continentales_bv').insertMany(meContinentalesBv)
 
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection me_continentales_bv\n\n')
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection me_continentales_bv\n\n'
+    )
+  }
 }
 
 async function importBvBdCarthage(filePath) {
@@ -63,9 +83,14 @@ async function importBvBdCarthage(filePath) {
     BV_BDCARTHAGE_DEFINITION
   )
 
-  const result = await mongo.db.collection('bv_bdcarthage').insertMany(bvBdCarthage)
+  if (bvBdCarthage) {
+    const result = await mongo.db.collection('bv_bdcarthage').insertMany(bvBdCarthage)
 
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection bv_bdcarthage\n\n')
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection bv_bdcarthage\n\n'
+    )
+  }
 }
 
 async function importMeso(filePath) {
@@ -74,9 +99,14 @@ async function importMeso(filePath) {
     MESO_DEFINITION
   )
 
-  const result = await mongo.db.collection('meso').insertMany(meso)
+  if (meso) {
+    const result = await mongo.db.collection('meso').insertMany(meso)
 
-  console.log('\u001B[32;1m%s\u001B[0m', '\n=> ' + result.insertedCount + ' documents insérés dans la collection meso\n\n')
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + result.insertedCount + ' documents insérés dans la collection meso\n\n'
+    )
+  }
 }
 
 async function importReferentiel(folderPath) {
