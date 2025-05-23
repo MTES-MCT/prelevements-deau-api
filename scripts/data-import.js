@@ -133,9 +133,8 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
   delete exploitationToInsert.usage
 
   exploitation.usages = exploitationsUsages
-    ? exploitationsUsages.filter(u => u.id_exploitation === exploitation.id_exploitation)
-      .map(u => parseNomenclature(u.id_usage, usages))
-    : []
+    .filter(u => u.id_exploitation === exploitation.id_exploitation)
+    .map(u => parseNomenclature(u.id_usage, usages))
 
   exploitationToInsert.territoire = codeTerritoire
   exploitationToInsert.createdAt = new Date()
