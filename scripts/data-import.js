@@ -127,6 +127,9 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
     .filter(u => u.id_exploitation === exploitation.id_exploitation)
     .map(u => parseNomenclature(u.id_usage, usages))
 
+  exploitationToInsert.modalites = []
+  exploitationToInsert.documents = []
+  exploitationToInsert.regles = []
   exploitationToInsert.territoire = codeTerritoire
   exploitationToInsert.createdAt = new Date()
   exploitationToInsert.updatedAt = new Date()
