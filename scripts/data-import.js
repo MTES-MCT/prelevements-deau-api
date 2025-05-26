@@ -323,7 +323,7 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
 async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données preleveurs pour : ' + nomTerritoire)
   const preleveurs = await readDataFromCsvFile(
-    folderPath + '/beneficiaire.csv',
+    folderPath + '/beneficiaire-email.csv',
     PRELEVEURS_DEFINITION,
     false
   )
