@@ -16,10 +16,11 @@ import {readDataFromCsvFile} from '../lib/util/csv.js'
 async function importBss(filePath) {
   const bss = await readDataFromCsvFile(
     `${filePath}/bss.csv`,
-    BSS_DEFINITION
+    BSS_DEFINITION,
+    false
   )
 
-  if (bss) {
+  if (bss.length > 0) {
     const result = await mongo.db.collection('bss').insertMany(bss)
 
     console.log(
@@ -32,10 +33,11 @@ async function importBss(filePath) {
 async function importBnpe(filePath) {
   const bnpe = await readDataFromCsvFile(
     `${filePath}/bnpe.csv`,
-    BNPE_DEFINITION
+    BNPE_DEFINITION,
+    false
   )
 
-  if (bnpe) {
+  if (bnpe.length > 0) {
     const result = await mongo.db.collection('bnpe').insertMany(bnpe)
 
     console.log(
@@ -48,10 +50,11 @@ async function importBnpe(filePath) {
 async function importLibellesCommunes(filePath) {
   const communes = await readDataFromCsvFile(
     `${filePath}/commune.csv`,
-    LIBELLES_DEFINITION
+    LIBELLES_DEFINITION,
+    false
   )
 
-  if (communes) {
+  if (communes.length > 0) {
     const result = await mongo.db.collection('communes').insertMany(communes)
 
     console.log(
@@ -64,10 +67,11 @@ async function importLibellesCommunes(filePath) {
 async function importMeContinentalesBV(filePath) {
   const meContinentalesBv = await readDataFromCsvFile(
     `${filePath}/me-continentales-bv.csv`,
-    ME_CONTINENTALES_BV_DEFINITION
+    ME_CONTINENTALES_BV_DEFINITION,
+    false
   )
 
-  if (meContinentalesBv) {
+  if (meContinentalesBv.length > 0) {
     const result = await mongo.db.collection('me_continentales_bv').insertMany(meContinentalesBv)
 
     console.log(
@@ -80,10 +84,11 @@ async function importMeContinentalesBV(filePath) {
 async function importBvBdCarthage(filePath) {
   const bvBdCarthage = await readDataFromCsvFile(
     `${filePath}/bv-bdcarthage.csv`,
-    BV_BDCARTHAGE_DEFINITION
+    BV_BDCARTHAGE_DEFINITION,
+    false
   )
 
-  if (bvBdCarthage) {
+  if (bvBdCarthage.length > 0) {
     const result = await mongo.db.collection('bv_bdcarthage').insertMany(bvBdCarthage)
 
     console.log(
@@ -96,10 +101,11 @@ async function importBvBdCarthage(filePath) {
 async function importMeso(filePath) {
   const meso = await readDataFromCsvFile(
     `${filePath}/meso.csv`,
-    MESO_DEFINITION
+    MESO_DEFINITION,
+    false
   )
 
-  if (meso) {
+  if (meso.length > 0) {
     const result = await mongo.db.collection('meso').insertMany(meso)
 
     console.log(
