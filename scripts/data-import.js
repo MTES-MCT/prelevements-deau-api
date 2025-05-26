@@ -16,7 +16,6 @@ import {
   EXPLOITATIONS_DEFINITION,
   PRELEVEURS_DEFINITION
 } from '../lib/models/internal/in-memory.js'
-import {getDocumentFromExploitationId} from '../lib/models/exploitation.js'
 
 function parseAutresNoms(autresNoms) {
   if (!autresNoms) {
@@ -124,8 +123,6 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
     delete exploitationToInsert.id_beneficiaire
   }
 
-  exploitationToInsert.documents = await getDocumentFromExploitationId(exploitation.id_exploitation)
-
   delete exploitationToInsert.usage
 
   exploitation.usages = exploitationsUsages
@@ -208,6 +205,43 @@ async function importReglesInExploitations(filePath) {
   }
 }
 
+async function importDocumentsInExploitations(filePath) {
+  console.log(
+    '\n\u001B[35;1;4m%s\u001B[0m',
+    '=> Insertion des documents dans les exploitations'
+  )
+
+  const documents = await readDataFromCsvFile(
+    `${filePath}/document.csv`,
+    DOCUMENTS_DEFINITION,
+    false
+  )
+
+  const csvRawDocuments = await fs.readFile(`${filePath}/exploitation-document.csv`, 'utf8')
+  const {data: exploitationsDocuments} = Papa.parse(csvRawDocuments, {header: true, skipEmptyLines: true})
+
+  if (documents.length > 0) {
+    const updatePromises = exploitationsDocuments.map(async ed => {
+      const {id_exploitation, id_document} = ed
+      const document = documents.find(d => d.id_document === id_document)
+
+      if (document) {
+        await mongo.db.collection('exploitations').updateOne(
+          {id_exploitation},
+          {$push: {documents: document}}
+        )
+      }
+    })
+
+    await Promise.all(updatePromises)
+
+    console.log(
+      '\u001B[34;1m%s\u001B[0m',
+      '\n=> Les documents ont été ajoutés aux exploitations\n\n'
+    )
+  }
+}
+
 async function importModalitesInExploitations(filePath) {
   console.log(
     '\n\u001B[35;1;4m%s\u001B[0m',
@@ -219,12 +253,12 @@ async function importModalitesInExploitations(filePath) {
     false
   )
 
-  const csvReglesContent = await fs.readFile(`${filePath}/exploitation-modalite-suivi.csv`, 'utf8')
-  const {data: exploitationsRegles} = Papa.parse(csvReglesContent, {header: true, skipEmptyLines: true})
+  const csvRawModalites = await fs.readFile(`${filePath}/exploitation-modalite-suivi.csv`, 'utf8')
+  const {data: exploitationsModalites} = Papa.parse(csvRawModalites, {header: true, skipEmptyLines: true})
 
   if (modalites.length > 0) {
-    const updatePromises = exploitationsRegles.map(async er => {
-      const {id_exploitation, id_modalite} = er
+    const updatePromises = exploitationsModalites.map(async em => {
+      const {id_exploitation, id_modalite} = em
       const modalite = modalites.find(r => r.id_modalite === id_modalite)
 
       if (modalite) {
@@ -271,8 +305,9 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
     )
   }
 
-  await importReglesInExploitations(folderPath, nomTerritoire)
-  await importModalitesInExploitations(folderPath, nomTerritoire)
+  await importReglesInExploitations(folderPath)
+  await importModalitesInExploitations(folderPath)
+  await importDocumentsInExploitations(folderPath)
 }
 
 async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
