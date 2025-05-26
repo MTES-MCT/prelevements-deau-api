@@ -2,8 +2,6 @@
 /* eslint-disable unicorn/no-process-exit */
 
 import {argv} from 'node:process'
-import fs from 'node:fs/promises'
-import Papa from 'papaparse'
 import mongo from '../lib/util/mongo.js'
 import {readDataFromCsvFile, parseNomenclature} from '../lib/util/csv.js'
 import {usages} from '../lib/nomenclature.js'
@@ -180,8 +178,11 @@ async function importReglesInExploitations(filePath) {
     false
   )
 
-  const csvReglesContent = await fs.readFile(`${filePath}/exploitation-regle.csv`, 'utf8')
-  const {data: exploitationsRegles} = Papa.parse(csvReglesContent, {header: true, skipEmptyLines: true})
+  const exploitationsRegles = await readDataFromCsvFile(
+    `${filePath}/exploitation-regle.csv`,
+    null,
+    false
+  )
 
   if (regles.length > 0) {
     const updatePromises = exploitationsRegles.map(async er => {
@@ -217,8 +218,11 @@ async function importDocumentsInExploitations(filePath) {
     false
   )
 
-  const csvRawDocuments = await fs.readFile(`${filePath}/exploitation-document.csv`, 'utf8')
-  const {data: exploitationsDocuments} = Papa.parse(csvRawDocuments, {header: true, skipEmptyLines: true})
+  const exploitationsDocuments = await readDataFromCsvFile(
+    `${filePath}/exploitation-document.csv`,
+    null,
+    false
+  )
 
   if (documents.length > 0) {
     const updatePromises = exploitationsDocuments.map(async ed => {
@@ -253,8 +257,11 @@ async function importModalitesInExploitations(filePath) {
     false
   )
 
-  const csvRawModalites = await fs.readFile(`${filePath}/exploitation-modalite-suivi.csv`, 'utf8')
-  const {data: exploitationsModalites} = Papa.parse(csvRawModalites, {header: true, skipEmptyLines: true})
+  const exploitationsModalites = await readDataFromCsvFile(
+    `${filePath}/exploitation-modalite-suivi.csv`,
+    null,
+    false
+  )
 
   if (modalites.length > 0) {
     const updatePromises = exploitationsModalites.map(async em => {
