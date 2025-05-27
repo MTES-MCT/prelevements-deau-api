@@ -14,11 +14,6 @@ import {
   EXPLOITATIONS_DEFINITION,
   PRELEVEURS_DEFINITION
 } from '../lib/models/internal/in-memory.js'
-import {
-  getDocumentFromExploitationId,
-  getModalitesFromExploitationId,
-  getReglesFromExploitationId
-} from '../lib/models/exploitation.js'
 
 function parseAutresNoms(autresNoms) {
   if (!autresNoms) {
@@ -126,16 +121,15 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
     delete exploitationToInsert.id_beneficiaire
   }
 
-  exploitationToInsert.regles = await getReglesFromExploitationId(exploitation.id_exploitation)
-  exploitationToInsert.documents = await getDocumentFromExploitationId(exploitation.id_exploitation)
-  exploitationToInsert.modalites = await getModalitesFromExploitationId(exploitation.id_exploitation)
-
   delete exploitationToInsert.usage
 
   exploitation.usages = exploitationsUsages
     .filter(u => u.id_exploitation === exploitation.id_exploitation)
     .map(u => parseNomenclature(u.id_usage, usages))
 
+  exploitationToInsert.modalites = []
+  exploitationToInsert.documents = []
+  exploitationToInsert.regles = []
   exploitationToInsert.territoire = codeTerritoire
   exploitationToInsert.createdAt = new Date()
   exploitationToInsert.updatedAt = new Date()
@@ -165,6 +159,10 @@ async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
     POINTS_PRELEVEMENT_DEFINITION
   )
 
+  console.log('\n=> Nettoyage de la collection points_prelevement...')
+  await mongo.db.collection('points_prelevement').deleteMany({territoire: codeTerritoire})
+  console.log('...Ok !')
+
   const pointsToInsert = await Promise.all(points.map(point => preparePoint(point, codeTerritoire)))
   const result = await mongo.db.collection('points_prelevement').insertMany(pointsToInsert)
 
@@ -172,6 +170,122 @@ async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
     '\u001B[32;1m%s\u001B[0m',
     '\n=> ' + result.insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
   )
+}
+
+async function importReglesInExploitations(filePath) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Insertion des règles dans les exploitations')
+
+  const regles = await readDataFromCsvFile(
+    `${filePath}/regle.csv`,
+    REGLES_DEFINITION,
+    false
+  )
+
+  const exploitationsRegles = await readDataFromCsvFile(
+    `${filePath}/exploitation-regle.csv`,
+    null,
+    false
+  )
+
+  if (regles.length > 0) {
+    const updatePromises = exploitationsRegles.map(async er => {
+      const {id_exploitation, id_regle} = er
+      const regle = regles.find(r => r.id_regle === id_regle)
+
+      if (regle) {
+        await mongo.db.collection('exploitations').updateOne(
+          {id_exploitation},
+          {$push: {regles: regle}}
+        )
+      }
+    })
+
+    await Promise.all(updatePromises)
+
+    console.log(
+      '\u001B[34;1m%s\u001B[0m',
+      '\n=> Les règles ont été ajoutées aux exploitations\n\n'
+    )
+  }
+}
+
+async function importDocumentsInExploitations(filePath) {
+  console.log(
+    '\n\u001B[35;1;4m%s\u001B[0m',
+    '=> Insertion des documents dans les exploitations'
+  )
+
+  const documents = await readDataFromCsvFile(
+    `${filePath}/document.csv`,
+    DOCUMENTS_DEFINITION,
+    false
+  )
+
+  const exploitationsDocuments = await readDataFromCsvFile(
+    `${filePath}/exploitation-document.csv`,
+    null,
+    false
+  )
+
+  if (documents.length > 0) {
+    const updatePromises = exploitationsDocuments.map(async ed => {
+      const {id_exploitation, id_document} = ed
+      const document = documents.find(d => d.id_document === id_document)
+
+      if (document) {
+        await mongo.db.collection('exploitations').updateOne(
+          {id_exploitation},
+          {$push: {documents: document}}
+        )
+      }
+    })
+
+    await Promise.all(updatePromises)
+
+    console.log(
+      '\u001B[34;1m%s\u001B[0m',
+      '\n=> Les documents ont été ajoutés aux exploitations\n\n'
+    )
+  }
+}
+
+async function importModalitesInExploitations(filePath) {
+  console.log(
+    '\n\u001B[35;1;4m%s\u001B[0m',
+    '=> Insertion des modalités de suivi dans les exploitations')
+
+  const modalites = await readDataFromCsvFile(
+    `${filePath}/modalite-suivi.csv`,
+    MODALITES_DEFINITION,
+    false
+  )
+
+  const exploitationsModalites = await readDataFromCsvFile(
+    `${filePath}/exploitation-modalite-suivi.csv`,
+    null,
+    false
+  )
+
+  if (modalites.length > 0) {
+    const updatePromises = exploitationsModalites.map(async em => {
+      const {id_exploitation, id_modalite} = em
+      const modalite = modalites.find(r => r.id_modalite === id_modalite)
+
+      if (modalite) {
+        await mongo.db.collection('exploitations').updateOne(
+          {id_exploitation},
+          {$push: {modalites: modalite}}
+        )
+      }
+    })
+
+    await Promise.all(updatePromises)
+
+    console.log(
+      '\u001B[34;1m%s\u001B[0m',
+      '\n=> Les modalités de suivi ont été ajoutées aux exploitations\n\n'
+    )
+  }
 }
 
 async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
@@ -190,23 +304,35 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
   const exploitationsToInsert = await Promise.all(exploitations.map(exploitation => prepareExploitation(exploitation, codeTerritoire, exploitationsUsages)))
 
   if (exploitationsToInsert) {
+    console.log('\n=> Nettoyage de la collection exploitations...')
+    await mongo.db.collection('exploitations').deleteMany({territoire: codeTerritoire})
+    console.log('...Ok !')
+
     const result = await mongo.db.collection('exploitations').insertMany(exploitationsToInsert)
     console.log(
       '\u001B[32;1m%s\u001B[0m',
       '\n=> ' + result.insertedCount + ' documents insérés dans la collection exploitations\n\n'
     )
   }
+
+  await importReglesInExploitations(folderPath)
+  await importModalitesInExploitations(folderPath)
+  await importDocumentsInExploitations(folderPath)
 }
 
 async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données preleveurs pour : ' + nomTerritoire)
   const preleveurs = await readDataFromCsvFile(
-    folderPath + '/beneficiaire.csv',
+    folderPath + '/beneficiaire-email.csv',
     PRELEVEURS_DEFINITION,
     false
   )
 
   if (preleveurs.length > 0) {
+    console.log('\n=> Nettoyage de la collection preleveurs...')
+    await mongo.db.collection('preleveurs').deleteMany({territoire: codeTerritoire})
+    console.log('...Ok !')
+
     const preleveursToInsert = await Promise.all(preleveurs.map(preleveur => preparePreleveur(preleveur, codeTerritoire)))
     const result = await mongo.db.collection('preleveurs').insertMany(preleveursToInsert)
     console.log(
@@ -216,26 +342,7 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   }
 }
 
-async function importRegles(filePath, nomTerritoire) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des règles pour : ' + nomTerritoire)
-
-  const regles = await readDataFromCsvFile(
-    `${filePath}/regle.csv`,
-    REGLES_DEFINITION,
-    false
-  )
-
-  if (regles.length > 0) {
-    const result = await mongo.db.collection('regles').insertMany(regles)
-
-    console.log(
-      '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + result.insertedCount + ' documents insérés dans la collection regles\n\n'
-    )
-  }
-}
-
-async function importDocuments(filePath, nomTerritoire) {
+async function importDocuments(filePath, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des documents pour : ' + nomTerritoire)
 
   const documents = await readDataFromCsvFile(
@@ -245,30 +352,19 @@ async function importDocuments(filePath, nomTerritoire) {
   )
 
   if (documents.length > 0) {
+    console.log('\n=> Nettoyage de la collection documents...')
+    await mongo.db.collection('documents').deleteMany({territoire: codeTerritoire})
+    console.log('...Ok !')
+
+    for (const document of documents) {
+      document.territoire = codeTerritoire
+    }
+
     const result = await mongo.db.collection('documents').insertMany(documents)
 
     console.log(
       '\u001B[32;1m%s\u001B[0m',
       '\n=> ' + result.insertedCount + ' documents insérés dans la collection documents\n\n'
-    )
-  }
-}
-
-async function importModalites(filePath, nomTerritoire) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des modalités de suivi pour : ' + nomTerritoire)
-
-  const modalites = await readDataFromCsvFile(
-    `${filePath}/modalite-suivi.csv`,
-    MODALITES_DEFINITION,
-    false
-  )
-
-  if (modalites.length > 0) {
-    const result = await mongo.db.collection('modalites').insertMany(modalites)
-
-    console.log(
-      '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + result.insertedCount + ' documents insérés dans la collection modalites\n\n'
     )
   }
 }
@@ -307,9 +403,7 @@ async function importData(folderPath, codeTerritoire) {
     process.exit(1)
   }
 
-  await importRegles(folderPath, validTerritoire.nom)
-  await importDocuments(folderPath, validTerritoire.nom)
-  await importModalites(folderPath, validTerritoire.nom)
+  await importDocuments(folderPath, codeTerritoire, validTerritoire.nom)
   await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
