@@ -12,7 +12,7 @@ Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Nod
    yarn install
    ```
 
-2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez la valeur `API_TOKEN`.
+2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez les variables obligatoires.
 
 ## Initialisation
 
@@ -54,14 +54,14 @@ yarn mongo-import
 db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974'})
 ```
 
-- Importer les données référentielles :   
+- Importer les données référentielles :
 _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
 
 ```bash
 yarn referentiel-import /chemin/du/dossier
 ```
 
-- Importer les points / préleveurs / exploitations / règles / documents / modalités :   
+- Importer les points / préleveurs / exploitations / règles / documents / modalités :
 _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
 
 ```bash
