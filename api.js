@@ -31,6 +31,12 @@ if (DEV) {
 // Setup JSON parsing
 app.use(express.json())
 
+// Ensure body is always an object
+app.use((req, res, next) => {
+  req.body ||= {}
+  next()
+})
+
 app.use('/', routes)
 app.use('/api', routes) // Deprecated
 
