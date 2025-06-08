@@ -758,6 +758,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@etalab/decoupage-administratif@npm:^5.2.0":
+  version: 5.2.0
+  resolution: "@etalab/decoupage-administratif@npm:5.2.0"
+  checksum: 10c0/1b4c380469807446e427a9901df6802df3a60a3f35cfaa1efc33af155dbb4d7dd7ded8bfaa5bee81dfdce8f83e0d71985a1d7e47838e13ff57c0177f8aef37d3
+  languageName: node
+  linkType: hard
+
 "@hapi/hoek@npm:^9.0.0, @hapi/hoek@npm:^9.3.0":
   version: 9.3.0
   resolution: "@hapi/hoek@npm:9.3.0"
@@ -6092,6 +6099,7 @@ __metadata:
     "@aws-sdk/client-s3": "npm:^3.826.0"
     "@aws-sdk/lib-storage": "npm:^3.826.0"
     "@date-fns/utc": "npm:^2.1.0"
+    "@etalab/decoupage-administratif": "npm:^5.2.0"
     ava: "npm:^6.4.0"
     cors: "npm:^2.8.5"
     date-fns: "npm:^4.1.0"

@@ -3,17 +3,18 @@
 
 import {argv} from 'node:process'
 import mongo from '../lib/util/mongo.js'
-import {readDataFromCsvFile, parseNomenclature} from '../lib/util/csv.js'
-import {usages} from '../lib/nomenclature.js'
+import {readDataFromCsvFile} from '../lib/import/csv.js'
+import {getCommune} from '../lib/util/cog.js'
+import {parseNomenclature} from '../lib/import/generic.js'
 import {
-  indexedLibellesCommunes,
   REGLES_DEFINITION,
   DOCUMENTS_DEFINITION,
   MODALITES_DEFINITION,
   POINTS_PRELEVEMENT_DEFINITION,
   EXPLOITATIONS_DEFINITION,
   PRELEVEURS_DEFINITION
-} from '../lib/models/internal/in-memory.js'
+} from '../lib/import/mapping.js'
+import {usages} from '../lib/nomenclature.js'
 
 function parseAutresNoms(autresNoms) {
   if (!autresNoms) {
@@ -100,7 +101,7 @@ async function preparePoint(point, codeTerritoire) {
   if (point.insee_com) {
     pointToInsert.commune = {
       code: point.insee_com,
-      nom: indexedLibellesCommunes[point.insee_com].nom
+      nom: getCommune(point.insee_com).nom
     }
   }
 

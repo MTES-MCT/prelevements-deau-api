@@ -10,8 +10,8 @@ import {
   ME_CONTINENTALES_BV_DEFINITION,
   BV_BDCARTHAGE_DEFINITION,
   MESO_DEFINITION
-} from '../lib/models/internal/in-memory.js'
-import {readDataFromCsvFile} from '../lib/util/csv.js'
+} from '../lib/import/mapping.js'
+import {readDataFromCsvFile} from '../lib/import/csv.js'
 
 async function importBss(filePath) {
   const bss = await readDataFromCsvFile(

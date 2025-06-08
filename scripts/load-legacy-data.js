@@ -5,7 +5,8 @@ import 'dotenv/config'
 import {groupBy} from 'lodash-es'
 
 import mongo from '../lib/util/mongo.js'
-import {parseString, parseNomenclature, parseDate, parseBoolean, parseNumber, readDataFromCsvFile} from '../lib/util/csv.js'
+import {readDataFromCsvFile} from '../lib/import/csv.js'
+import {parseString, parseNomenclature, parseDate, parseBoolean, parseNumber} from '../lib/import/generic.js'
 import {parametres, unites, frequences, traitements} from '../lib/nomenclature.js'
 import {insertVolumesPreleves} from '../lib/models/volume-preleve.js'
 

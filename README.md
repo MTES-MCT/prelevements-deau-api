@@ -33,19 +33,7 @@ yarn update-db
 
 Récupère et traite tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore été collectés.
 
-### Récupérer les fichiers CSV _(Uniquement pour la Réunion pour l'instant)_ :
-
-- Remplir les informations dans le fichier `.env` (`CSV_SOURCE_URL`):
-- Lancer le script de téléchargement :
-```bash
-yarn download-csv
-```
-- Puis importer les fichiers dans la base MongoDB :
-```bash
-yarn mongo-import
-```
-
-### Importer des fichiers CSV d'un autre territoire :
+### Importer les fichiers CSV d'un territoire :
 
 - Ajouter une entrée dans la base MongoDB _("à la main" pour l'instant)_
 - Exemple :
