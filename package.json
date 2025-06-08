@@ -2,6 +2,9 @@
   "name": "prelevement-deau-data",
   "packageManager": "yarn@4.6.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "start": "node api.js",
     "update-db": "node scripts/update-db.js",
@@ -15,11 +18,11 @@
     "@aws-sdk/lib-storage": "^3.826.0",
     "@date-fns/utc": "^2.1.0",
     "@etalab/decoupage-administratif": "^5.2.0",
+    "@fabrique/timeseries-parsers": "workspace:*",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "file-type": "^21.0.0",
     "got": "^14.4.7",
     "hasha": "^6.0.0",
     "http-errors": "^2.0.0",
@@ -31,8 +34,7 @@
     "p-limit": "^6.2.0",
     "papaparse": "^5.5.3",
     "proj4": "^2.17.0",
-    "wkx": "^0.5.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "wkx": "^0.5.0"
   },
   "devDependencies": {
     "ava": "^6.4.0",

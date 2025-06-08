@@ -765,6 +765,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fabrique/timeseries-parsers@workspace:*, @fabrique/timeseries-parsers@workspace:packages/timeseries-parsers":
+  version: 0.0.0-use.local
+  resolution: "@fabrique/timeseries-parsers@workspace:packages/timeseries-parsers"
+  dependencies:
+    file-type: "npm:^21.0.0"
+    lodash-es: "npm:^4.17.21"
+    xlsx: "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  languageName: unknown
+  linkType: soft
+
 "@hapi/hoek@npm:^9.0.0, @hapi/hoek@npm:^9.3.0":
   version: 9.3.0
   resolution: "@hapi/hoek@npm:9.3.0"
@@ -6100,12 +6110,12 @@ __metadata:
     "@aws-sdk/lib-storage": "npm:^3.826.0"
     "@date-fns/utc": "npm:^2.1.0"
     "@etalab/decoupage-administratif": "npm:^5.2.0"
+    "@fabrique/timeseries-parsers": "workspace:*"
     ava: "npm:^6.4.0"
     cors: "npm:^2.8.5"
     date-fns: "npm:^4.1.0"
     dotenv: "npm:^16.5.0"
     express: "npm:^5.1.0"
-    file-type: "npm:^21.0.0"
     got: "npm:^14.4.7"
     hasha: "npm:^6.0.0"
     http-errors: "npm:^2.0.0"
@@ -6119,7 +6129,6 @@ __metadata:
     papaparse: "npm:^5.5.3"
     proj4: "npm:^2.17.0"
     wkx: "npm:^0.5.0"
-    xlsx: "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
     xo: "npm:^0.60.0"
   languageName: unknown
   linkType: soft

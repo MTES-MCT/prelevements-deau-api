@@ -3,7 +3,7 @@ import process from 'node:process'
 import path from 'node:path'
 import {readFile} from 'node:fs/promises'
 
-import {validateMultiParamFile} from '../lib/input-datasets/multi-params/index.js'
+import {validateMultiParamFile} from '@fabrique/timeseries-parsers'
 
 const filePath = process.argv[2]
 
