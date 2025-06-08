@@ -25,7 +25,7 @@
     "http-errors": "^2.0.0",
     "joi": "^17.13.3",
     "lodash-es": "^4.17.21",
-    "mongodb": "^6.17.0",
+    "mongodb": "~6.16.0",
     "morgan": "^1.10.0",
     "nanoid": "^5.1.5",
     "p-limit": "^6.2.0",
