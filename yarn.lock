@@ -765,6 +765,14 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fabrique/demarches-simplifiees@workspace:*, @fabrique/demarches-simplifiees@workspace:packages/demarches-simplifiees":
+  version: 0.0.0-use.local
+  resolution: "@fabrique/demarches-simplifiees@workspace:packages/demarches-simplifiees"
+  dependencies:
+    got: "npm:^14.4.7"
+  languageName: unknown
+  linkType: soft
+
 "@fabrique/timeseries-parsers@workspace:*, @fabrique/timeseries-parsers@workspace:packages/timeseries-parsers":
   version: 0.0.0-use.local
   resolution: "@fabrique/timeseries-parsers@workspace:packages/timeseries-parsers"
@@ -6110,13 +6118,13 @@ __metadata:
     "@aws-sdk/lib-storage": "npm:^3.826.0"
     "@date-fns/utc": "npm:^2.1.0"
     "@etalab/decoupage-administratif": "npm:^5.2.0"
+    "@fabrique/demarches-simplifiees": "workspace:*"
     "@fabrique/timeseries-parsers": "workspace:*"
     ava: "npm:^6.4.0"
     cors: "npm:^2.8.5"
     date-fns: "npm:^4.1.0"
     dotenv: "npm:^16.5.0"
     express: "npm:^5.1.0"
-    got: "npm:^14.4.7"
     hasha: "npm:^6.0.0"
     http-errors: "npm:^2.0.0"
     joi: "npm:^17.13.3"
