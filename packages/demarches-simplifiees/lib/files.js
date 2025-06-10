@@ -26,7 +26,7 @@ export function transformUrlsDeep(obj, urlCollector) {
     if (typeof url === 'string' && typeof filename === 'string' && typeof checksum === 'string') {
       const {url: _, ...rest} = transformed
       const storageKey = computeStorageKey(transformed)
-      urlCollector.set(storageKey, url)
+      urlCollector.set(storageKey, {url, filename, type: transformed.contentType})
       return {...rest, storageKey}
     }
 
@@ -35,3 +35,4 @@ export function transformUrlsDeep(obj, urlCollector) {
 
   return obj
 }
+

@@ -770,6 +770,8 @@ __metadata:
   resolution: "@fabrique/demarches-simplifiees@workspace:packages/demarches-simplifiees"
   dependencies:
     got: "npm:^14.4.7"
+    hash-object: "npm:^5.0.1"
+    hasha: "npm:^6.0.0"
   languageName: unknown
   linkType: soft
 
@@ -2801,6 +2803,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"decircular@npm:^0.1.0":
+  version: 0.1.1
+  resolution: "decircular@npm:0.1.1"
+  checksum: 10c0/3ff9dc33790c230b55a5ba56a6c0fbf6c19c2a60b3139dfd594dc95057ebb858b9f84329a99885e562bc9e1f94b77fa4cc8cd23ea519188a9f43d1671c5d9704
+  languageName: node
+  linkType: hard
+
 "decompress-response@npm:^6.0.0":
   version: 6.0.0
   resolution: "decompress-response@npm:6.0.0"
@@ -4385,6 +4394,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"hash-object@npm:^5.0.1":
+  version: 5.0.1
+  resolution: "hash-object@npm:5.0.1"
+  dependencies:
+    decircular: "npm:^0.1.0"
+    is-obj: "npm:^3.0.0"
+    sort-keys: "npm:^5.0.0"
+    type-fest: "npm:^4.6.0"
+  checksum: 10c0/4c59be8995472e2582215a4668fc0853c38004aa60e30fbe2ed46a3af6a21933ea2b01cef031e0ee0664f8cad363867172f86abac9018ac6fdacea7b93ac5af9
+  languageName: node
+  linkType: hard
+
 "hasha@npm:^6.0.0":
   version: 6.0.0
   resolution: "hasha@npm:6.0.0"
@@ -4787,6 +4808,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"is-obj@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "is-obj@npm:3.0.0"
+  checksum: 10c0/48d678fa15c56fd38353634ae2106a538827af9050211b18df13540dba0b38aa25c5cb498648a01311bf493a99ac3ce416576649b8cace10bcce7344611fa56a
+  languageName: node
+  linkType: hard
+
 "is-path-inside@npm:^3.0.3":
   version: 3.0.3
   resolution: "is-path-inside@npm:3.0.3"
@@ -4794,7 +4822,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"is-plain-obj@npm:^4.1.0":
+"is-plain-obj@npm:^4.0.0, is-plain-obj@npm:^4.1.0":
   version: 4.1.0
   resolution: "is-plain-obj@npm:4.1.0"
   checksum: 10c0/32130d651d71d9564dc88ba7e6fda0e91a1010a3694648e9f4f47bb6080438140696d3e3e15c741411d712e47ac9edc1a8a9de1fe76f3487b0d90be06ac9975e
@@ -6747,6 +6775,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"sort-keys@npm:^5.0.0":
+  version: 5.1.0
+  resolution: "sort-keys@npm:5.1.0"
+  dependencies:
+    is-plain-obj: "npm:^4.0.0"
+  checksum: 10c0/fdb7aeb02368ad91b2ea947b59f3c95d80f8c71bbcb5741ebd55852994f54a129af3b3663b280951566fe5897de056428810dbb58c61db831e588c0ac110f2b0
+  languageName: node
+  linkType: hard
+
 "sparse-bitfield@npm:^3.0.3":
   version: 3.0.3
   resolution: "sparse-bitfield@npm:3.0.3"
@@ -7235,6 +7272,13 @@ __metadata:
   version: 4.26.1
   resolution: "type-fest@npm:4.26.1"
   checksum: 10c0/d2719ff8d380befe8a3c61068f37f28d6fa2849fd140c5d2f0f143099e371da6856aad7c97e56b83329d45bfe504afe9fd936a7cff600cc0d46aa9ffb008d6c6
+  languageName: node
+  linkType: hard
+
+"type-fest@npm:^4.6.0":
+  version: 4.41.0
+  resolution: "type-fest@npm:4.41.0"
+  checksum: 10c0/f5ca697797ed5e88d33ac8f1fec21921839871f808dc59345c9cf67345bfb958ce41bd821165dbf3ae591cedec2bf6fe8882098dfdd8dc54320b859711a2c1e4
   languageName: node
   linkType: hard
 

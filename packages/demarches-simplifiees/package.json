@@ -4,6 +4,8 @@
   "main": "index.js",
   "type": "module",
   "dependencies": {
-    "got": "^14.4.7"
+    "got": "^14.4.7",
+    "hash-object": "^5.0.1",
+    "hasha": "^6.0.0"
   }
 }
