@@ -126,7 +126,7 @@ class SyncProcess {
     this.database = new Map()
 
     try {
-      const {dossiers} = readDatabase(this.s3, this.demarcheNumber)
+      const {dossiers} = await readDatabase(this.s3, this.demarcheNumber)
 
       for (const dossier of dossiers) {
         this.database.set(dossier.number, dossier)
