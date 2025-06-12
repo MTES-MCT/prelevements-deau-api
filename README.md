@@ -42,6 +42,13 @@ Récupère et traite tous les dossiers déposés sur Démarches Simplifiées qui
 db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974'})
 ```
 
+- Ajouter un jeton d'accès dans la collection `tokens` :
+- Exemple :
+
+```mongo
+db.tokens.insertOne({token: '<votre_token>', territoire: 'DEP-974'})
+```
+
 - Importer les données référentielles :
 _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
 
