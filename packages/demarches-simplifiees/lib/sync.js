@@ -4,7 +4,8 @@ import hashObject from 'hash-object'
 import got from 'got'
 
 import {fetchData} from './graphql/request.js'
-import {transformUrlsDeep} from './files.js'
+import {transformUrlsDeep, getAttachmentObjectKey} from './files.js'
+import {readDatabase, writeDatabase, writeDossier} from './database.js'
 
 export async function * fetchDossiersGenerator(demarcheNumber, {includeChamps = true, cursor = null} = {}) {
   const variables = {
@@ -49,7 +50,6 @@ class SyncProcess {
     this.onDossier = onDossier || (() => {})
     this.database = null
     this.databaseChanges = 0
-    this.databaseObjectKey = `demarche-${demarcheNumber}/database.json`
   }
 
   async exec() {
@@ -71,7 +71,7 @@ class SyncProcess {
       const existingEntry = this.database.get(dossier.number)
 
       if (existingEntry && existingEntry.hash === dossierHash) {
-        this.onDossier({...existingEntry, dossier, isUpdated: false})
+        await this.onDossier({...existingEntry, dossier, isUpdated: false})
         continue
       }
 
@@ -86,7 +86,7 @@ class SyncProcess {
           continue
         }
 
-        const objectKey = `demarche-${this.demarcheNumber}/dossiers/${dossier.number}/attachments/${storageKey}`
+        const objectKey = getAttachmentObjectKey(this.demarcheNumber, dossier.number, storageKey)
 
         try {
           await downloadAndStore(fileEntry.url, objectKey, {
@@ -99,9 +99,7 @@ class SyncProcess {
         }
       }
 
-      const dossierBuffer = Buffer.from(JSON.stringify(dossier), 'utf8')
-
-      await this.s3.uploadObject(`demarche-${this.demarcheNumber}/dossiers/${dossier.number}/dossier.json`, dossierBuffer)
+      await writeDossier(this.s3, this.demarcheNumber, dossier)
 
       // Delete old attachments
 
@@ -110,7 +108,7 @@ class SyncProcess {
           existingEntry.attachments
             .filter(storageKey => !attachmentsCollector.has(storageKey))
             .map(storageKey =>
-              this.s3.deleteObject(`demarche-${this.demarcheNumber}/dossiers/${dossier.number}/attachments/${storageKey}`, true)))
+              this.s3.deleteObject(getAttachmentObjectKey(this.demarcheNumber, dossier.number, storageKey), true)))
       }
 
       // Intermediary save
@@ -118,7 +116,7 @@ class SyncProcess {
         await this.saveDatabase()
       }
 
-      this.onDossier({...dbEntry, dossier, isUpdated: true})
+      await this.onDossier({...dbEntry, dossier, isUpdated: true})
     }
 
     await this.saveDatabase()
@@ -128,8 +126,7 @@ class SyncProcess {
     this.database = new Map()
 
     try {
-      const buffer = await this.s3.downloadObject(this.databaseObjectKey)
-      const {dossiers} = JSON.parse(buffer.toString('utf8'))
+      const {dossiers} = readDatabase(this.s3, this.demarcheNumber)
 
       for (const dossier of dossiers) {
         this.database.set(dossier.number, dossier)
@@ -144,8 +141,9 @@ class SyncProcess {
       return
     }
 
-    const buffer = Buffer.from(JSON.stringify({dossiers: [...this.database.values()]}), 'utf8')
-    await this.s3.uploadObject(this.databaseObjectKey, buffer)
+    await writeDatabase(this.s3, this.demarcheNumber, {
+      dossiers: [...this.database.values()]
+    })
 
     this.databaseChanges = 0
   }
@@ -155,4 +153,3 @@ export async function sync(demarcheNumber, {s3, onDossier} = {}) {
   const process = new SyncProcess(demarcheNumber, {s3, onDossier})
   await process.exec()
 }
-

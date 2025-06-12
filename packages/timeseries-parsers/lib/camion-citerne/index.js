@@ -7,9 +7,9 @@ import {
   readAsDateString
 } from '../xlsx.js'
 
-import {validateDateInPeriod, validateNumericValue} from '../validate.js'
+import {validateNumericValue} from '../validate.js'
 
-export async function validateCamionCiterneFile(buffer, {startDate, endDate} = {}) {
+export async function validateCamionCiterneFile(buffer) {
   let workbook
 
   try {
@@ -33,7 +33,7 @@ export async function validateCamionCiterneFile(buffer, {startDate, endDate} = {
   validateHeaders(sheet, errors)
 
   // Vérifier les lignes de données
-  validateDataRows(sheet, {startDate, endDate}, errors)
+  validateDataRows(sheet, errors)
 
   return errors.map(e => pick(e, [
     'message',
@@ -120,7 +120,7 @@ function validateHeaders(sheet, errors) {
   }
 }
 
-function validateDataRows(sheet, {startDate, endDate}, errors) {
+function validateDataRows(sheet, errors) {
   const range = XLSX.utils.decode_range(sheet['!ref'])
   const firstDataRowIndex = 3 // Index de la première ligne de données (ligne 4)
 
@@ -166,15 +166,6 @@ function validateDataRows(sheet, {startDate, endDate}, errors) {
     }
 
     hasDataLines = true // Une ligne de données valide a été trouvée
-
-    // Valider que la date est dans la période du formulaire
-    try {
-      validateDateInPeriod(dateValue, {startDate, endDate})
-    } catch {
-      errors.push({
-        message: `Ligne ${rowIndex}: La date ${dateValue} n'est pas dans la période du formulaire (${startDate} - ${endDate}).`
-      })
-    }
 
     // Vérifier si la date est déjà présente
     // const dateString = dateCell.toISOString().split('T')[0] // Format 'YYYY-MM-DD'

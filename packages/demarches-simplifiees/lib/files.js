@@ -36,3 +36,6 @@ export function transformUrlsDeep(obj, urlCollector) {
   return obj
 }
 
+export function getAttachmentObjectKey(demarcheNumber, dossierNumber, storageKey) {
+  return `demarche-${demarcheNumber}/dossiers/${dossierNumber}/attachments/${storageKey}`
+}

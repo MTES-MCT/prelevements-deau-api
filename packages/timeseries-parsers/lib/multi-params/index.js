@@ -5,7 +5,7 @@ import {readSheet} from '../xlsx.js'
 import {validateAndExtract as validateAndExtractMetadata} from './tabs/metadata.js'
 import {validateAndExtract as validateAndExtractData} from './tabs/data.js'
 
-export async function validateMultiParamFile(buffer, {startDate, endDate} = {}) {
+export async function validateMultiParamFile(buffer) {
   let workbook
 
   try {
@@ -34,7 +34,7 @@ export async function validateMultiParamFile(buffer, {startDate, endDate} = {}) 
   const dataSheets = dataSheetNames.map(name => ({name, sheet: workbook.Sheets[name]}))
 
   for (const dataSheet of dataSheets) {
-    const dataSheetResult = validateAndExtractData(dataSheet, {startDate, endDate})
+    const dataSheetResult = validateAndExtractData(dataSheet)
 
     errors.push(...dataSheetResult.errors)
     data.dataTabs.push({...dataSheetResult.data, originalSheetName: dataSheet.name})

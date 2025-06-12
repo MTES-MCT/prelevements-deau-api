@@ -9,17 +9,16 @@ import {
   readAsTimeString
 } from '../../xlsx.js'
 
-import {validateDateInPeriod} from '../../validate.js'
 import {ErrorCollector} from '../error-collector.js'
 
-export function validateAndExtract(dataSheet, {startDate, endDate}) {
+export function validateAndExtract(dataSheet) {
   const data = {}
   const errors = []
   const result = {errors, data}
 
   data.period = extractPeriod(dataSheet.name)
 
-  const {errors: structureErrors} = validateStructure(dataSheet, {startDate, endDate})
+  const {errors: structureErrors} = validateStructure(dataSheet)
 
   if (structureErrors.length > 0) {
     errors.push(...structureErrors)
@@ -37,7 +36,7 @@ export function validateAndExtract(dataSheet, {startDate, endDate}) {
   // Valider les lignes de données et récupérer les colonnes de paramètres utilisées
   const {dataRows} = getDataRows(dataSheet, {errorCollector})
 
-  const parameters = validateAndExtractParameters(dataSheet, dataRows, {startDate, endDate, errorCollector})
+  const parameters = validateAndExtractParameters(dataSheet, dataRows, {errorCollector})
 
   errors.push(...errorCollector.getErrors())
 
@@ -105,7 +104,7 @@ function validateStructure(dataSheet) {
   return {errors}
 }
 
-function validateAndExtractParameters(dataSheet, dataRows, {startDate, endDate, errorCollector}) {
+function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
   const allowedFrequenceValues = getAllowedFrequenceValuesFromSheetName(dataSheet.name)
   const parameters = []
 
@@ -134,7 +133,7 @@ function validateAndExtractParameters(dataSheet, dataRows, {startDate, endDate, 
 
     // Valider les entrées de données pour ce paramètre
     const isHeureMandatory = isFrequencyLessThanOneDay(frequence)
-    validateParameterData(dataRows, {startDate, endDate, paramIndex, paramName, isHeureMandatory, errorCollector})
+    validateParameterData(dataRows, {paramIndex, paramName, isHeureMandatory, errorCollector})
     validateTimeStepConsistency(dataRows, {frequence, paramName, errorCollector})
 
     // Extraction des données du paramètre
@@ -379,7 +378,7 @@ function combineDateAndTime(date, time) {
   return `${date}T${time || '00:00:00'}Z`
 }
 
-function validateParameterData(dataRows, {startDate, endDate, paramIndex, paramName, isHeureMandatory, errorCollector}) {
+function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandatory, errorCollector}) {
   for (const row of dataRows) {
     const {rowNum} = row
     const valeur = row.values[paramIndex]
@@ -407,16 +406,6 @@ function validateParameterData(dataRows, {startDate, endDate, paramIndex, paramN
       if (isHeureMandatory && !row.heure) {
         errorCollector.addError('missingHeure', heureCellAddress)
       }
-
-      continue
-    }
-
-    const dateCellAddress = XLSX.utils.encode_cell({c: 0, r: rowNum})
-
-    try {
-      validateDateInPeriod(row.date, {startDate, endDate})
-    } catch {
-      errorCollector.addError('invalidDateRange', dateCellAddress, {startDate, endDate})
     }
   }
 }
