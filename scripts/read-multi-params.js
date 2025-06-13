@@ -15,4 +15,4 @@ if (!filePath) {
 const file = await readFile(path.resolve(filePath))
 
 const result = await validateMultiParamFile(file)
-console.log(result)
+console.log(JSON.stringify(result.data, null, 2))
