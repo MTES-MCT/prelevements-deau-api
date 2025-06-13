@@ -8,7 +8,7 @@ export class ErrorCollector {
   }
 
   addSingleError(error) {
-    this.singleErrors.push(pick(error, 'message', 'explanation', 'severity', 'scope'))
+    this.singleErrors.push(pick(error, 'message', 'explanation', 'severity'))
   }
 
   addError(type, cell, data = {}) {

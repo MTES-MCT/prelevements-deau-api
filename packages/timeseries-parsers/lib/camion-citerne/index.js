@@ -39,8 +39,7 @@ export async function validateCamionCiterneFile(buffer) {
     'message',
     'explanation',
     'internalMessage',
-    'severity',
-    'scope'
+    'severity'
   ]))
 }
 

@@ -1,4 +1,4 @@
-import {pick} from 'lodash-es'
+import {chain, pick, minBy, maxBy, sumBy} from 'lodash-es'
 
 import {readSheet} from '../xlsx.js'
 
@@ -41,12 +41,100 @@ export async function validateMultiParamFile(buffer) {
   }
 
   return {
-    data,
+    rawData: data,
+    data: consolidateData(data),
     errors: errors.map(e => formatError(e))
   }
 }
 
 /* Helpers */
+
+function consolidateData(rawData) {
+  const data = {}
+
+  try {
+    data.pointPrelevement = parsePointPrelevement(rawData.metadata.pointPrelevement)
+  } catch {}
+
+  const dailyDataTab = rawData.dataTabs.find(tab => tab.period === '1 jour' && tab.hasData)
+  const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
+
+  if (!dailyDataTab) {
+    throw new Error('Le fichier ne contient pas de données à la maille journalière')
+  }
+
+  data.minDate = minBy(dailyDataTab.rows, 'date').date
+  data.maxDate = maxBy(dailyDataTab.rows, 'date').date
+
+  data.dailyParameters = dailyDataTab.parameters.map(p => pick(p, [
+    'paramIndex',
+    'nom_parametre',
+    'type',
+    'unite'
+  ]))
+
+  let fifteenMinutesDataByDate
+
+  if (fifteenMinutesDataTab) {
+    data.fifteenMinutesParameters = fifteenMinutesDataTab.parameters.map(p => pick(p, [
+      'paramIndex',
+      'nom_parametre',
+      'type',
+      'unite'
+    ]))
+
+    fifteenMinutesDataByDate = chain(fifteenMinutesDataTab.rows)
+      .groupBy('date')
+      .mapValues(
+        rows => rows.map(
+          ({heure, values}) => ({
+            heure,
+            values: Object.values(
+              pick(values, fifteenMinutesDataTab.parameters.map(p => p.paramIndex))
+            )
+          })
+        )
+      )
+      .value()
+  }
+
+  const volumePreleveParam = dailyDataTab.parameters.find(p => p.nom_parametre === 'volume prélevé')
+
+  if (!volumePreleveParam) {
+    throw new Error('Le fichier ne contient pas de données de volume prélevé')
+  }
+
+  const sortedDailyRows = chain(dailyDataTab.rows)
+    .filter(row => typeof row.values[volumePreleveParam.paramIndex] === 'number')
+    .sortBy('date')
+    .value()
+
+  data.dailyValues = sortedDailyRows.map(row => ({
+    date: row.date,
+    values: Object.values(pick(row.values, dailyDataTab.parameters.map(p => p.paramIndex))),
+    fifteenMinutesValues: fifteenMinutesDataByDate[row.date]
+  }))
+
+  data.volumePreleveTotal = sumBy(sortedDailyRows, row => row.values[volumePreleveParam.paramIndex])
+
+  return data
+}
+
+function parsePointPrelevement(value) {
+  if (/^\d+\s\|\s(.+)$/.test(value)) {
+    return value.split(' | ')[0].trim()
+  }
+
+  if (/^\d+\s-\s(.+)$/.test(value)) {
+    return value.split(' - ')[0].trim()
+  }
+
+  if (/^\d+\s(.+)$/.test(value)) {
+    return value.split(' ')[0].trim()
+  }
+
+  throw new Error(`Point de prélèvement invalide : ${value}`)
+}
 
 function extractDataSheetNames(workbook) {
   return workbook.SheetNames
@@ -68,7 +156,6 @@ function formatError(error) {
     'message',
     'explanation',
     'internalMessage',
-    'severity',
-    'scope'
+    'severity'
   ])
 }
