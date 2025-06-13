@@ -112,7 +112,7 @@ function consolidateData(rawData) {
   data.dailyValues = sortedDailyRows.map(row => ({
     date: row.date,
     values: Object.values(pick(row.values, dailyDataTab.parameters.map(p => p.paramIndex))),
-    fifteenMinutesValues: fifteenMinutesDataByDate[row.date]
+    fifteenMinutesValues: fifteenMinutesDataByDate?.[row.date]
   }))
 
   data.volumePreleveTotal = sumBy(sortedDailyRows, row => row.values[volumePreleveParam.paramIndex])
