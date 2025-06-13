@@ -40,9 +40,17 @@ export async function validateMultiParamFile(buffer) {
     data.dataTabs.push({...dataSheetResult.data, originalSheetName: dataSheet.name})
   }
 
+  let consolidatedData
+
+  try {
+    consolidatedData = consolidateData(data)
+  } catch (error) {
+    errors.push({message: error.message, severity: 'error'})
+  }
+
   return {
     rawData: data,
-    data: consolidateData(data),
+    data: consolidatedData,
     errors: errors.map(e => formatError(e))
   }
 }
