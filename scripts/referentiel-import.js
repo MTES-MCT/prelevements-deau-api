@@ -9,7 +9,8 @@ import {
   LIBELLES_DEFINITION,
   ME_CONTINENTALES_BV_DEFINITION,
   BV_BDCARTHAGE_DEFINITION,
-  MESO_DEFINITION
+  MESO_DEFINITION,
+  OUVRAGE_BNPE_DEFINITION
 } from '../lib/import/mapping.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 
@@ -31,13 +32,29 @@ async function importBss(filePath) {
 }
 
 async function importBnpe(filePath) {
+  const ouvrageBnpe = await readDataFromCsvFile(
+    `${filePath}/ouvrage-bnpe.csv`,
+    OUVRAGE_BNPE_DEFINITION,
+    false
+  )
+
   const bnpe = await readDataFromCsvFile(
     `${filePath}/bnpe.csv`,
     BNPE_DEFINITION,
     false
   )
 
+  console.log('=> Nettoyage de la collection bnpe...')
+  await mongo.db.collection('bnpe').deleteMany()
+  console.log('...Ok !')
+
   if (bnpe.length > 0) {
+    for (const b of bnpe) {
+      b.nom_ouvrage = ouvrageBnpe.find(
+        o => o.code_point_referent === b.code_point_prelevement
+      )?.nom_ouvrage || 'Pas de nom renseigné'
+    }
+
     const result = await mongo.db.collection('bnpe').insertMany(bnpe)
 
     console.log(
