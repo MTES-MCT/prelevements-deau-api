@@ -21,6 +21,10 @@ async function importBss(filePath) {
     false
   )
 
+  console.log('=> Nettoyage de la collection bss...')
+  await mongo.db.collection('bss').deleteMany()
+  console.log('...Ok !')
+
   if (bss.length > 0) {
     const result = await mongo.db.collection('bss').insertMany(bss)
 
@@ -71,6 +75,10 @@ async function importLibellesCommunes(filePath) {
     false
   )
 
+  console.log('=> Nettoyage de la collection communes...')
+  await mongo.db.collection('communes').deleteMany()
+  console.log('...Ok !')
+
   if (communes.length > 0) {
     const result = await mongo.db.collection('communes').insertMany(communes)
 
@@ -87,6 +95,10 @@ async function importMeContinentalesBV(filePath) {
     ME_CONTINENTALES_BV_DEFINITION,
     false
   )
+
+  console.log('=> Nettoyage de la collection me_continentales_bv...')
+  await mongo.db.collection('me_continentales_bv').deleteMany()
+  console.log('...Ok !')
 
   if (meContinentalesBv.length > 0) {
     const result = await mongo.db.collection('me_continentales_bv').insertMany(meContinentalesBv)
@@ -105,6 +117,10 @@ async function importBvBdCarthage(filePath) {
     false
   )
 
+  console.log('=> Nettoyage de la collection bv_bdcarthage...')
+  await mongo.db.collection('bv_bdcarthage').deleteMany()
+  console.log('...Ok !')
+
   if (bvBdCarthage.length > 0) {
     const result = await mongo.db.collection('bv_bdcarthage').insertMany(bvBdCarthage)
 
@@ -121,6 +137,10 @@ async function importMeso(filePath) {
     MESO_DEFINITION,
     false
   )
+
+  console.log('=> Nettoyage de la collection meso...')
+  await mongo.db.collection('meso').deleteMany()
+  console.log('...Ok !')
 
   if (meso.length > 0) {
     const result = await mongo.db.collection('meso').insertMany(meso)
