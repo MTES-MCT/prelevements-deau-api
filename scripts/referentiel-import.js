@@ -2,6 +2,7 @@
 /* eslint-disable unicorn/no-process-exit */
 
 import {argv} from 'node:process'
+import {keyBy} from 'lodash-es'
 import mongo from '../lib/util/mongo.js'
 import {
   BSS_DEFINITION,
@@ -9,7 +10,8 @@ import {
   LIBELLES_DEFINITION,
   ME_CONTINENTALES_BV_DEFINITION,
   BV_BDCARTHAGE_DEFINITION,
-  MESO_DEFINITION
+  MESO_DEFINITION,
+  OUVRAGE_BNPE_DEFINITION
 } from '../lib/import/mapping.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 
@@ -19,6 +21,10 @@ async function importBss(filePath) {
     BSS_DEFINITION,
     false
   )
+
+  console.log('=> Nettoyage de la collection bss...')
+  await mongo.db.collection('bss').deleteMany()
+  console.log('...Ok !')
 
   if (bss.length > 0) {
     const result = await mongo.db.collection('bss').insertMany(bss)
@@ -31,13 +37,29 @@ async function importBss(filePath) {
 }
 
 async function importBnpe(filePath) {
+  const ouvrageBnpe = await readDataFromCsvFile(
+    `${filePath}/ouvrage-bnpe.csv`,
+    OUVRAGE_BNPE_DEFINITION,
+    false
+  )
+
+  const ouvragesByKey = keyBy(ouvrageBnpe, 'code_point_referent')
+
   const bnpe = await readDataFromCsvFile(
     `${filePath}/bnpe.csv`,
     BNPE_DEFINITION,
     false
   )
 
+  console.log('=> Nettoyage de la collection bnpe...')
+  await mongo.db.collection('bnpe').deleteMany()
+  console.log('...Ok !')
+
   if (bnpe.length > 0) {
+    for (const b of bnpe) {
+      b.nom_ouvrage = ouvragesByKey[b.code_point_prelevement]?.nom_ouvrage || 'Pas de nom renseigné'
+    }
+
     const result = await mongo.db.collection('bnpe').insertMany(bnpe)
 
     console.log(
@@ -53,6 +75,10 @@ async function importLibellesCommunes(filePath) {
     LIBELLES_DEFINITION,
     false
   )
+
+  console.log('=> Nettoyage de la collection communes...')
+  await mongo.db.collection('communes').deleteMany()
+  console.log('...Ok !')
 
   if (communes.length > 0) {
     const result = await mongo.db.collection('communes').insertMany(communes)
@@ -71,6 +97,10 @@ async function importMeContinentalesBV(filePath) {
     false
   )
 
+  console.log('=> Nettoyage de la collection me_continentales_bv...')
+  await mongo.db.collection('me_continentales_bv').deleteMany()
+  console.log('...Ok !')
+
   if (meContinentalesBv.length > 0) {
     const result = await mongo.db.collection('me_continentales_bv').insertMany(meContinentalesBv)
 
@@ -88,6 +118,10 @@ async function importBvBdCarthage(filePath) {
     false
   )
 
+  console.log('=> Nettoyage de la collection bv_bdcarthage...')
+  await mongo.db.collection('bv_bdcarthage').deleteMany()
+  console.log('...Ok !')
+
   if (bvBdCarthage.length > 0) {
     const result = await mongo.db.collection('bv_bdcarthage').insertMany(bvBdCarthage)
 
@@ -104,6 +138,10 @@ async function importMeso(filePath) {
     MESO_DEFINITION,
     false
   )
+
+  console.log('=> Nettoyage de la collection meso...')
+  await mongo.db.collection('meso').deleteMany()
+  console.log('...Ok !')
 
   if (meso.length > 0) {
     const result = await mongo.db.collection('meso').insertMany(meso)
