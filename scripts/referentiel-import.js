@@ -2,6 +2,7 @@
 /* eslint-disable unicorn/no-process-exit */
 
 import {argv} from 'node:process'
+import {keyBy} from 'lodash-es'
 import mongo from '../lib/util/mongo.js'
 import {
   BSS_DEFINITION,
@@ -42,6 +43,8 @@ async function importBnpe(filePath) {
     false
   )
 
+  const ouvragesByKey = keyBy(ouvrageBnpe, 'code_point_referent')
+
   const bnpe = await readDataFromCsvFile(
     `${filePath}/bnpe.csv`,
     BNPE_DEFINITION,
@@ -54,9 +57,7 @@ async function importBnpe(filePath) {
 
   if (bnpe.length > 0) {
     for (const b of bnpe) {
-      b.nom_ouvrage = ouvrageBnpe.find(
-        o => o.code_point_referent === b.code_point_prelevement
-      )?.nom_ouvrage || 'Pas de nom renseigné'
+      b.nom_ouvrage = ouvragesByKey[b.code_point_prelevement]?.nom_ouvrage || 'Pas de nom renseigné'
     }
 
     const result = await mongo.db.collection('bnpe').insertMany(bnpe)
