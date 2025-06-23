@@ -2,6 +2,8 @@
 
 Ce projet vise à collecter, organiser et analyser les données de prélèvement d'eau provenant de Démarche Simplifiée. Il fournit divers scripts pour récupérer les dossiers de prélèvements, extraire des données précises et générer des rapports.
 
+Consultez la [documentation de validation](docs/validation.md) pour les erreurs et avertissements possibles.
+
 ## Installation
 
 Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 22.11) installé avant de commencer.
