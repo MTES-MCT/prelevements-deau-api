@@ -12,6 +12,7 @@
     "import-territoire-data": "node scripts/data-import.js",
     "referentiel-import": "node scripts/referentiel-import.js",
     "download-csv": "node scripts/download-csv.js",
+    "import-territoire-historical-data": "node scripts/import-territoire-historical-data.js",
     "lint": "xo",
     "test": "ava"
   },

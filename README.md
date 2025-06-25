@@ -35,6 +35,14 @@ yarn update-db
 
 Récupère et traite tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore été collectés.
 
+**import-territoire-historical-data** :
+
+Importe les anciens volumes journaliers prélevés à partir de fichiers CSV (`serie-donnees.csv`, `resultat-suivi.csv`, `exploitation-serie.csv`) en les enregistrant dans la base MongoDB. Ce script doit être utilisé pour migrer des données historiques non présentes sur Démarches Simplifiées.
+
+```bash
+yarn import-territoire-historical-data /chemin/du/dossier
+```
+
 ### Importer les fichiers CSV d'un territoire :
 
 - Ajouter une entrée dans la base MongoDB _("à la main" pour l'instant)_
