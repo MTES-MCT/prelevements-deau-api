@@ -47,11 +47,11 @@ db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20
 db.tokens.insertOne({token: '<votre_token>', territoire: 'DEP-974'})
 ```
 
- - Importer les données référentielles :
+ - Importe les données de référence :
  _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
 
  ```bash
- yarn import-referential-data /chemin/du/dossier
+ yarn import-reference-data /chemin/du/dossier
  ```
 
 - Importer les points / préleveurs / exploitations / règles / documents / modalités :

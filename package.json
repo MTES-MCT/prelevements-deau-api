@@ -10,7 +10,7 @@
     "sync-updated-dossiers": "node scripts/sync-updated-dossiers.js",
     "resync-all-dossiers": "node scripts/resync-all-dossiers.js",
     "import-territoire-data": "node scripts/import-territoire-data.js",
-    "import-referential-data": "node scripts/import-referential-data.js",
+    "import-reference-data": "node scripts/import-reference-data.js",
     "import-territoire-historical-data": "node scripts/import-territoire-historical-data.js",
     "download-csv": "node scripts/download-csv.js",
     "lint": "xo",
