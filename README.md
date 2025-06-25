@@ -62,7 +62,7 @@ yarn referentiel-import /chemin/du/dossier
 _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
 
 ```bash
-yarn data-import DEP-974 /chemin/du/dossier
+yarn import-territoire-data DEP-974 /chemin/du/dossier
 ```
 
 ### Lancer l'application :
