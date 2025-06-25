@@ -37,7 +37,7 @@ const CHAR_TO_TRIM = ' -\'"'
 export function readAsString(sheet, rowIndex, colIndex) {
   const cell = sheet[XLSX.utils.encode_cell({c: colIndex, r: rowIndex})]
 
-  if (!cell || !cell.v) {
+  if (!cell || cell.v === undefined || cell.v === null || cell.v === '') {
     return
   }
 
@@ -66,7 +66,7 @@ export function readAsGivenType(sheet, rowIndex, colIndex, type) {
 
 export function readAsNumber(sheet, rowIndex, colIndex) {
   const cell = sheet[XLSX.utils.encode_cell({c: colIndex, r: rowIndex})]
-  if (!cell || !cell.v) {
+  if (!cell || cell.v === undefined || cell.v === null || cell.v === '') {
     return
   }
 
@@ -87,7 +87,7 @@ export function readAsNumber(sheet, rowIndex, colIndex) {
 export function readAsDateString(sheet, rowIndex, colIndex) {
   const cell = sheet[XLSX.utils.encode_cell({c: colIndex, r: rowIndex})]
 
-  if (!cell || !cell.v) {
+  if (!cell || cell.v === undefined || cell.v === null || cell.v === '') {
     return
   }
 
