@@ -29,5 +29,5 @@ test('transformUrlsDeep', t => {
   })
 
   t.is(urlCollector.size, 1)
-  t.is(urlCollector.get('c775e7b7-foo.txt'), 'https://example.com/foo.txt')
+  t.is(urlCollector.get('c775e7b7-foo.txt').url, 'https://example.com/foo.txt')
 })
