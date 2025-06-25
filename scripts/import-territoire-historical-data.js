@@ -2,6 +2,9 @@
 /* eslint-disable no-await-in-loop */
 import 'dotenv/config'
 
+import process from 'node:process'
+import path from 'node:path'
+
 import {groupBy} from 'lodash-es'
 
 import mongo from '../lib/util/mongo.js'
@@ -9,6 +12,17 @@ import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {parseString, parseNomenclature, parseDate, parseBoolean, parseNumber} from '../lib/import/generic.js'
 import {parametres, unites, frequences, traitements} from '../lib/nomenclature.js'
 import {insertVolumesPreleves} from '../lib/models/volume-preleve.js'
+
+if (!process.argv[2]) {
+  console.error('Le chemin vers le dossier contenant les données est obligatoire.')
+  process.exit(1)
+}
+
+const dataPath = path.resolve(process.argv[2])
+
+function getFilePath(fileName) {
+  return path.join(dataPath, fileName)
+}
 
 await mongo.connect()
 
@@ -44,17 +58,17 @@ const RESULTATS_DEFINITION = {
   requiredFields: ['id_resultat']
 }
 
-const exploitationsSerie = await readDataFromCsvFile('data/exploitation-serie.csv')
+const exploitationsSerie = await readDataFromCsvFile(getFilePath('exploitation-serie.csv'))
 const seriesGroups = groupBy(exploitationsSerie, 'id_serie')
 
 const resultatsSuivi = await readDataFromCsvFile(
-  'data/resultat-suivi.csv',
+  getFilePath('resultat-suivi.csv'),
   RESULTATS_DEFINITION
 )
 const indexedResultats = groupBy(resultatsSuivi, 'id_serie')
 
 const series = await readDataFromCsvFile(
-  'data/serie-donnees.csv',
+  getFilePath('serie-donnees.csv'),
   SERIES_DEFINITION
 )
 const seriesVolumesPreleves = series.filter(s => s.parametre === 'Volume journalier')
