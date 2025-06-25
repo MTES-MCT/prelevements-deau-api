@@ -1,6 +1,6 @@
 /* eslint-disable n/prefer-global/process */
 /* eslint-disable unicorn/no-process-exit */
-
+import 'dotenv/config'
 import {argv} from 'node:process'
 import mongo from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
