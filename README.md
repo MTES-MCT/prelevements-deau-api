@@ -65,15 +65,6 @@ _(Il faut préciser le code du territoire ainsi que le chemin du dossier contena
 yarn data-import DEP-974 /chemin/du/dossier
 ```
 
-### Reprocesser les pièces jointes existantes :
-
-Permet de relancer `processAttachments` sur l'ensemble des fichiers déjà stockés
-afin de mettre à jour les données en base.
-
-```bash
-yarn reprocess-attachments
-```
-
 ### Lancer l'application :
 ```bash
 yarn start

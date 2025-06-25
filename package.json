@@ -12,7 +12,6 @@
     "data-import": "node scripts/data-import.js",
     "referentiel-import": "node scripts/referentiel-import.js",
     "download-csv": "node scripts/download-csv.js",
-    "reprocess-attachments": "node scripts/reprocess-attachments.js",
     "lint": "xo",
     "test": "ava"
   },
