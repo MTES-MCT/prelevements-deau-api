@@ -26,16 +26,12 @@ Ce script lancera la récupération des dossiers déposés sur Démarches Simpli
 3. Enregistrement en base de donnée des dossiers
 
 ```bash
-yarn update-db
+yarn resync-all-dossiers
 ```
 
 ## Scripts
 
-**update-db** :
-
-Récupère et traite tous les dossiers déposés sur Démarches Simplifiées qui n'ont pas encore été collectés.
-
-### Importer les fichiers CSV d'un territoire :
+### Préparation du territoire
 
 - Ajouter une entrée dans la base MongoDB _("à la main" pour l'instant)_
 - Exemple :
@@ -51,12 +47,12 @@ db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20
 db.tokens.insertOne({token: '<votre_token>', territoire: 'DEP-974'})
 ```
 
-- Importer les données référentielles :
-_(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
+ - Importer les données référentielles :
+ _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
 
-```bash
-yarn referentiel-import /chemin/du/dossier
-```
+ ```bash
+ yarn import-referential-data /chemin/du/dossier
+ ```
 
 - Importer les points / préleveurs / exploitations / règles / documents / modalités :
 _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
@@ -65,14 +61,29 @@ _(Il faut préciser le code du territoire ainsi que le chemin du dossier contena
 yarn import-territoire-data DEP-974 /chemin/du/dossier
 ```
 
-- Import les données historiques :
+ - Importer les données historiques (optionnel) :
 
 Importe les anciens volumes journaliers prélevés à partir de fichiers CSV (`serie-donnees.csv`, `resultat-suivi.csv`, `exploitation-serie.csv`) en les enregistrant dans la base MongoDB. Ce script doit être utilisé pour migrer des données historiques non présentes sur Démarches Simplifiées.
 _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
 
-```bash
-yarn import-territoire-historical-data /chemin/du/dossier
-```
+ ```bash
+ yarn import-territoire-historical-data /chemin/du/dossier
+ ```
+
+### Autres scripts utiles
+
+- **download-csv** : télécharge l'ensemble des fichiers CSV depuis la source indiquée par `CSV_SOURCE_URL`.
+  ```bash
+  yarn download-csv
+  ```
+- **sync-updated-dossiers** : synchronise uniquement les dossiers modifiés sur Démarches Simplifiées.
+  ```bash
+  yarn sync-updated-dossiers
+  ```
+- **read-multi-params** : valide un fichier multi-paramètres avant import.
+  ```bash
+  node scripts/read-multi-params.js <fichier.csv>
+  ```
 
 ### Lancer l'application :
 ```bash
