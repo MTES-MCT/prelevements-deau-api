@@ -1,6 +1,8 @@
 import {trim} from 'lodash-es'
 import XLSX from 'xlsx'
 import {fileTypeFromBuffer} from 'file-type'
+import {parse, isValid} from 'date-fns'
+import {fr} from 'date-fns/locale'
 
 export async function readSheet(buffer) {
   const type = await fileTypeFromBuffer(buffer)
@@ -33,6 +35,60 @@ export function getCellValue(sheet, rowIndex, colIndex) {
 }
 
 const CHAR_TO_TRIM = ' -\'"'
+
+// ---------------------------------------------------------------------------
+// Helpers for tolerant French/ISO date & time parsing
+// ---------------------------------------------------------------------------
+function sanitizeRaw(str) {
+  return String(str)
+    .trim() // Espaces extrêmes
+    .replace(/['’]+$/, '') // Apostrophes finales
+    .replaceAll(/\s{2,}/g, ' ') // Multiples espaces
+    .replaceAll('\u00A0', ' ') // Espaces insécables
+    .toLowerCase()
+}
+
+const DATE_CANDIDATES = [
+  'd/M/yyyy', // 30/1/2025
+  'dd/MM/yyyy', // 26/02/2025
+  'd MMMM yyyy', // 1 février 2025
+  'EEEE d MMMM yyyy', // Samedi 1 février 2025
+  'd/M/yyyy HH:mm:ss' // 26/02/2025 00:00:00
+]
+
+const TIME_CANDIDATES = [
+  'H:m:s', // 0:6:29
+  'H:m', // 0:6
+  'HH\'h\'mm', // 12h34
+  'HH:mm:ss' // 08:05:00
+]
+
+function parseDate(value) {
+  const raw = sanitizeRaw(value)
+  for (const pattern of DATE_CANDIDATES) {
+    const parsed = parse(raw, pattern, new Date(), {locale: fr})
+    if (isValid(parsed)) {
+      const y = parsed.getFullYear()
+      const m = String(parsed.getMonth() + 1).padStart(2, '0')
+      const d = String(parsed.getDate()).padStart(2, '0')
+      return `${y}-${m}-${d}` // Yyyy-MM-dd
+    }
+  }
+}
+
+function parseTime(value) {
+  const raw = sanitizeRaw(value)
+  for (const pattern of TIME_CANDIDATES) {
+    const parsed = parse(raw, pattern, new Date(), {locale: fr})
+    if (isValid(parsed)) {
+      const hh = String(parsed.getHours()).padStart(2, '0')
+      const mm = String(parsed.getMinutes()).padStart(2, '0')
+      const ss = String(parsed.getSeconds()).padStart(2, '0')
+      return `${hh}:${mm}:${ss}` // HH:mm:ss
+    }
+  }
+}
+// ---------------------------------------------------------------------------
 
 export function readAsString(sheet, rowIndex, colIndex) {
   const cell = sheet[XLSX.utils.encode_cell({c: colIndex, r: rowIndex})]
@@ -97,18 +153,13 @@ export function readAsDateString(sheet, rowIndex, colIndex) {
   }
 
   if (cell.t === 's') {
-    const value = trim(cell.v.replaceAll('/', '-'), CHAR_TO_TRIM)
-
-    const matchISO = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
-    if (matchISO) {
-      return `${matchISO[1]}-${matchISO[2].padStart(2, '0')}-${matchISO[3].padStart(2, '0')}`
+    const parsed = parseDate(cell.v)
+    if (parsed) {
+      return parsed
     }
 
-    const matchFR = value.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
-    if (matchFR) {
-      return `${matchFR[3]}-${matchFR[2].padStart(2, '0')}-${matchFR[1].padStart(2, '0')}`
-    }
-
+    // Valeur texte mais format inconnu
+    const value = trim(cell.v.toString(), CHAR_TO_TRIM)
     throw new Error(`Format de date invalide: ${value}`)
   }
 }
@@ -126,13 +177,13 @@ export function readAsTimeString(sheet, rowIndex, colIndex) {
   }
 
   if (cell.t === 's') {
-    const value = trim(cell.v.trim(), CHAR_TO_TRIM)
-
-    const match = value.match(/^(\d{2}):(\d{2})(:(\d{2}))?$/)
-    if (match) {
-      return `${match[1]}:${match[2]}:${match[4] || '00'}`
+    const parsed = parseTime(cell.v)
+    if (parsed) {
+      return parsed
     }
 
+    // Valeur texte mais format inconnu
+    const value = trim(cell.v.toString(), CHAR_TO_TRIM)
     throw new Error(`Format horaire invalide: ${value}`)
   }
 }
