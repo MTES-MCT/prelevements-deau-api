@@ -1,5 +1,5 @@
 {
-  "name": "@fabrique/demarches-simplifiees",
+  "name": "@fabnum/demarches-simplifiees",
   "version": "0.0.0",
   "main": "index.js",
   "type": "module",

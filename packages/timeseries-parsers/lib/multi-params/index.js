@@ -1,4 +1,4 @@
-import {chain, pick, minBy, maxBy, sumBy} from 'lodash-es'
+import {pick, minBy, maxBy, sumBy, groupBy, mapValues, filter, sortBy} from 'lodash-es'
 
 import {readSheet} from '../xlsx.js'
 
@@ -90,20 +90,16 @@ function consolidateData(rawData) {
       'type',
       'unite'
     ]))
+    const groupedByDate = groupBy(fifteenMinutesDataTab.rows, 'date')
 
-    fifteenMinutesDataByDate = chain(fifteenMinutesDataTab.rows)
-      .groupBy('date')
-      .mapValues(
-        rows => rows.map(
-          ({heure, values}) => ({
-            heure,
-            values: Object.values(
-              pick(values, fifteenMinutesDataTab.parameters.map(p => p.paramIndex))
-            )
-          })
+    fifteenMinutesDataByDate = mapValues(groupedByDate, rows =>
+      rows.map(({heure, values}) => ({
+        heure,
+        values: Object.values(
+          pick(values, fifteenMinutesDataTab.parameters.map(p => p.paramIndex))
         )
-      )
-      .value()
+      }))
+    )
   }
 
   const volumePreleveParam = dailyDataTab.parameters.find(p => p.nom_parametre === 'volume prélevé')
@@ -112,10 +108,10 @@ function consolidateData(rawData) {
     throw new Error('Le fichier ne contient pas de données de volume prélevé')
   }
 
-  const sortedDailyRows = chain(dailyDataTab.rows)
-    .filter(row => typeof row.values[volumePreleveParam.paramIndex] === 'number')
-    .sortBy('date')
-    .value()
+  const sortedDailyRows = sortBy(
+    filter(dailyDataTab.rows, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
+    'date'
+  )
 
   data.dailyValues = sortedDailyRows.map(row => ({
     date: row.date,
