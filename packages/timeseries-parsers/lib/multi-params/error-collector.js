@@ -58,8 +58,7 @@ export class ErrorCollector {
         }
 
         case 'missingHeure': {
-          const {frequence} = errors[0]
-          message = `Le champ 'heure' est obligatoire dans l'onglet '${this.sheetName}' à la fréquence '${frequence}' pour les ${cellIntervals}.`
+          message = `Le champ 'heure' est obligatoire dans l'onglet '${this.sheetName}' pour les ${cellIntervals}.`
           break
         }
 

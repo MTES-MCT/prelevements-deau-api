@@ -31,7 +31,7 @@ export function validateAndExtract(dataSheet) {
     return result
   }
 
-  const errorCollector = new ErrorCollector()
+  const errorCollector = new ErrorCollector(dataSheet.name)
 
   // Valider les lignes de données et récupérer les colonnes de paramètres utilisées
   const {dataRows} = getDataRows(dataSheet, {errorCollector})
@@ -57,7 +57,9 @@ const NORMALIZED_PERIODS = {
 }
 
 function extractPeriod(sheetName) {
-  const match = sheetName.match(/^data\s\|\s*t\s*=([a-z\d\s]+)$/i)
+  const sanitized = sheetName.replaceAll('\u00A0', ' ')
+  // Allow optional spaces and more word chars
+  const match = sanitized.match(/^data\s*\|\s*t\s*=\s*([\w\s]+)$/i)
 
   if (!match) {
     return
@@ -97,7 +99,7 @@ function validateStructure(dataSheet) {
   const remarqueCellValue = getCellValue(dataSheet.sheet, 11, colIndex)
   if (!remarqueCellValue || remarqueCellValue.toString().trim().toLowerCase() !== 'remarque') {
     errors.push({
-      message: `L'intitulé de la colonne ${String.fromCodePoint(65 + colIndex)}12 dans l'onglet '${dataSheet.sheetName}' a été modifié. Attendu : 'Remarque', trouvé : '${remarqueCellValue}'`
+      message: `L'intitulé de la colonne ${String.fromCodePoint(65 + colIndex)}12 dans l'onglet '${dataSheet.name}' a été modifié. Attendu : 'Remarque', trouvé : '${remarqueCellValue}'`
     })
   }
 
@@ -253,7 +255,11 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
           'autre'
         ])
 
-        value = value.toLowerCase().trim().replaceAll('1 jour', 'jour')
+        value = value
+          .toLowerCase()
+          .trim()
+          .replace(/1\s*jour/, 'jour')
+          .replace(/15\s*m(in|n)?$/, '15 minutes')
 
         if (allowedValues.has(value)) {
           return value

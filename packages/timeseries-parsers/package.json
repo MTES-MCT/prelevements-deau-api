@@ -1,8 +1,12 @@
 {
-  "name": "@fabrique/timeseries-parsers",
-  "version": "0.0.0",
+  "name": "@fabnum/prelevements-deau-timeseries-parsers",
+  "version": "0.0.3",
+  "license": "MIT",
   "main": "index.js",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "file-type": "^21.0.0",
     "lodash-es": "^4.17.21",

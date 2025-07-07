@@ -758,9 +758,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fabrique/demarches-simplifiees@workspace:*, @fabrique/demarches-simplifiees@workspace:packages/demarches-simplifiees":
+"@fabnum/demarches-simplifiees@workspace:*, @fabnum/demarches-simplifiees@workspace:packages/demarches-simplifiees":
   version: 0.0.0-use.local
-  resolution: "@fabrique/demarches-simplifiees@workspace:packages/demarches-simplifiees"
+  resolution: "@fabnum/demarches-simplifiees@workspace:packages/demarches-simplifiees"
   dependencies:
     got: "npm:^14.4.7"
     hash-object: "npm:^5.0.1"
@@ -768,9 +768,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@fabrique/timeseries-parsers@workspace:*, @fabrique/timeseries-parsers@workspace:packages/timeseries-parsers":
+"@fabnum/prelevements-deau-timeseries-parsers@workspace:*, @fabnum/prelevements-deau-timeseries-parsers@workspace:packages/timeseries-parsers":
   version: 0.0.0-use.local
-  resolution: "@fabrique/timeseries-parsers@workspace:packages/timeseries-parsers"
+  resolution: "@fabnum/prelevements-deau-timeseries-parsers@workspace:packages/timeseries-parsers"
   dependencies:
     file-type: "npm:^21.0.0"
     lodash-es: "npm:^4.17.21"
@@ -6162,8 +6162,8 @@ __metadata:
     "@aws-sdk/client-s3": "npm:^3.826.0"
     "@aws-sdk/lib-storage": "npm:^3.826.0"
     "@etalab/decoupage-administratif": "npm:^5.2.0"
-    "@fabrique/demarches-simplifiees": "workspace:*"
-    "@fabrique/timeseries-parsers": "workspace:*"
+    "@fabnum/demarches-simplifiees": "workspace:*"
+    "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*"
     ava: "npm:^6.4.0"
     content-disposition: "npm:^0.5.4"
     cors: "npm:^2.8.5"
