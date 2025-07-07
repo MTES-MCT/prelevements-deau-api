@@ -32,6 +32,7 @@
     "lodash-es": "^4.17.21",
     "mongodb": "~6.16.0",
     "morgan": "^1.10.0",
+    "multer": "^2.0.1",
     "nanoid": "^5.1.5",
     "p-queue": "^8.1.0",
     "papaparse": "^5.5.3",
