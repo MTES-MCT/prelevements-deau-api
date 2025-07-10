@@ -323,8 +323,23 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
   }
 
   for (const {fieldName, type, enum: enumValues, row, required, parse} of definitions) {
-    const value = readAsGivenType(sheet, row, colIndex, type)
+    let value
     const cellAddress = XLSX.utils.encode_cell({c: colIndex, r: row})
+
+    try {
+      value = readAsGivenType(sheet, row, colIndex, type)
+    } catch (error) {
+      if (error.message.includes('not supported')) {
+        throw error // Re-throw code errors
+      }
+
+      // Treat as a validation error
+      errorCollector.addSingleError({
+        message: `Le champ '${fieldName}' (cellule ${cellAddress}) n'est pas valide pour le paramètre '${paramName}'`,
+        explanation: error.message
+      })
+      continue // Skip further validation for this field
+    }
 
     fields[fieldName] = value
 
