@@ -138,6 +138,28 @@ function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
     validateParameterData(dataRows, {paramIndex, paramName, isHeureMandatory, errorCollector})
     validateTimeStepConsistency(dataRows, {frequence, paramName, errorCollector})
 
+    const {date_debut, date_fin} = fields
+    if (date_debut || date_fin) {
+      const startDate = date_debut ? new Date(`${date_debut}T00:00:00Z`) : null
+      const endDate = date_fin ? new Date(`${date_fin}T00:00:00Z`) : null
+
+      for (const row of dataRows) {
+        if (row.values[paramIndex] === undefined || !row.date) {
+          continue
+        }
+
+        const rowDate = new Date(`${row.date}T00:00:00Z`)
+
+        if ((startDate && rowDate < startDate) || (endDate && rowDate > endDate)) {
+          const cellAddress = XLSX.utils.encode_cell({r: row.rowNum, c: 0})
+          errorCollector.addError('invalidDateRange', cellAddress, {
+            startDate: date_debut,
+            endDate: date_fin
+          })
+        }
+      }
+    }
+
     // Extraction des données du paramètre
     const paramDefinition = PARAM_TYPE_DEFINITIONS[paramName]
     const validate = paramDefinition?.validate
@@ -324,32 +346,17 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       } catch (error) {
         errorCollector.addSingleError({
           message: `Le champ '${fieldName}' (cellule ${cellAddress}) n'est pas valide pour le paramètre '${paramName}'`,
-          explaination: error.message
+          explanation: error.message
         })
       }
     }
+  }
 
-    if (fieldName === 'date_debut' && value !== undefined) {
-      // Valider que 'date_debut' est une date valide
-      const date = readAsDateString(sheet, row, colIndex)
-
-      if (!date) {
-        errorCollector.addSingleError({
-          message: `Le champ 'date_debut' (cellule ${cellAddress}) doit être une date valide pour le paramètre '${paramName}'`
-        })
-      }
-    }
-
-    if (fieldName === 'date_fin' && value) {
-      // Valider que 'date_fin' est une date valide
-      const date = readAsDateString(sheet, row, colIndex)
-
-      if (!date) {
-        errorCollector.addSingleError({
-          message: `Le champ 'date_fin' (cellule ${cellAddress}) doit être une date valide pour le paramètre '${paramName}'`
-        })
-      }
-    }
+  // Check for date consistency after processing all fields
+  if (fields.date_debut && fields.date_fin && fields.date_debut > fields.date_fin) {
+    errorCollector.addSingleError({
+      message: `La date de début pour le paramètre '${paramName}' ne peut pas être postérieure à la date de fin.`
+    })
   }
 
   return fields
@@ -401,11 +408,11 @@ function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandator
     }
 
     // Vérifier si 'date' et 'heure' sont présents comme requis
-    if (!row.date || (isHeureMandatory && !row.heure)) {
+    if (!row.dateCellValue || (isHeureMandatory && !row.heure)) {
       const dateCellAddress = XLSX.utils.encode_cell({c: 0, r: rowNum})
       const heureCellAddress = XLSX.utils.encode_cell({c: 1, r: rowNum})
 
-      if (!row.date) {
+      if (!row.dateCellValue) {
         errorCollector.addError('missingDate', dateCellAddress)
       }
 
@@ -428,8 +435,9 @@ function validateTimeStepConsistency(dataRows, {frequence, paramName, errorColle
       return null
     }
 
-    return date
-  }).filter(dateTime => dateTime && dateTime instanceof Date && !Number.isNaN(dateTime))
+    // Pour les fréquences journalières, on s'assure que la date est bien interprétée en UTC
+    return date ? new Date(`${date}T00:00:00Z`) : null
+  }).filter(dateTime => dateTime instanceof Date && !Number.isNaN(dateTime))
 
   if (dateTimes.length < 2) {
     // Pas assez de données pour vérifier la cohérence
@@ -451,13 +459,14 @@ function validateTimeStepConsistency(dataRows, {frequence, paramName, errorColle
   const toleranceMs = 1000
 
   // Calculer les différences de temps entre les entrées consécutives
-
   for (let i = 1; i < dateTimes.length; i++) {
-    const diffMs = dateTimes[i] - dateTimes[i - 1]
+    const diffMs = dateTimes[i].getTime() - dateTimes[i - 1].getTime()
 
     if (Math.abs(diffMs - expectedDiffMs) > toleranceMs) {
-      const dateCellAddress = XLSX.utils.encode_cell({r: dataRows[i].rowNum, c: 0})
-      errorCollector.addError('invalidInterval', dateCellAddress)
+      const prevCellAddress = XLSX.utils.encode_cell({r: dataRows[i - 1].rowNum, c: 0})
+      const currentCellAddress = XLSX.utils.encode_cell({r: dataRows[i].rowNum, c: 0})
+      errorCollector.addError('invalidInterval', prevCellAddress)
+      errorCollector.addError('invalidInterval', currentCellAddress)
     }
   }
 }
@@ -532,7 +541,8 @@ function getDataRows(dataSheet, {errorCollector}) {
         date,
         heure,
         values,
-        remarque
+        remarque,
+        dateCellValue
       })
     }
   }
