@@ -182,3 +182,13 @@ test('validateMultiParamFile - no volume data', async t => {
   const {errors} = await validateMultiParamFile(fileContent)
   t.is(errors[0].message, 'Le fichier ne contient pas de données de volume prélevé')
 })
+
+// Warning test
+test('validateMultiParamFile - missing remark for empty value', async t => {
+  const filePath = path.join(testFilesPath, 'missing-remark.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors} = await validateMultiParamFile(fileContent)
+  const warning = errors.find(e => e.severity === 'warning')
+  t.truthy(warning)
+  t.true(warning.message.startsWith('Le champ \'Remarque\' doit être renseigné'))
+})

@@ -512,7 +512,7 @@ function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandator
     const {rowNum} = row
     const valeur = row.values[paramIndex]
 
-    if (valeur === null) {
+    if (valeur === undefined && dataRows.length > 1) {
       // Si 'Valeur' est manquante, 'Remarque' doit être renseignée
       const {remarque} = row
       if (!remarque) {
