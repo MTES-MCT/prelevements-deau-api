@@ -11,6 +11,12 @@ import {
 
 import {ErrorCollector} from '../error-collector.js'
 
+/**
+ * Valide et extrait les données d'un onglet "data".
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul, avec les propriétés `name` et `sheet`.
+ * @returns {{errors: Array, data: object}} Un objet contenant les données extraites et une liste d'erreurs.
+ */
 export function validateAndExtract(dataSheet) {
   const data = {}
   const errors = []
@@ -56,6 +62,12 @@ const NORMALIZED_PERIODS = {
   autres: 'autre'
 }
 
+/**
+ * Extrait la période à partir du nom de l'onglet.
+ *
+ * @param {string} sheetName Le nom de l'onglet.
+ * @returns {string|undefined} La chaîne de période normalisée, ou undefined si non trouvée.
+ */
 function extractPeriod(sheetName) {
   const sanitized = sheetName.replaceAll('\u00A0', ' ')
   // Allow optional spaces and more word chars
@@ -69,6 +81,12 @@ function extractPeriod(sheetName) {
   return NORMALIZED_PERIODS[period] || period
 }
 
+/**
+ * Valide la structure des en-têtes de l'onglet de données.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @returns {{errors: Array}} Un objet contenant une liste d'erreurs de structure.
+ */
 function validateStructure(dataSheet) {
   const errors = []
 
@@ -106,6 +124,14 @@ function validateStructure(dataSheet) {
   return {errors}
 }
 
+/**
+ * Valide et extrait tous les paramètres de l'onglet de données.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @param {Array<object>} dataRows Les lignes de données extraites de l'onglet.
+ * @param {{errorCollector: ErrorCollector}} param2 L'instance du collecteur d'erreurs.
+ * @returns {Array<object>} Un tableau d'objets de paramètres extraits.
+ */
 function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
   const allowedFrequenceValues = getAllowedFrequenceValuesFromSheetName(dataSheet.name)
   const parameters = []
@@ -134,6 +160,16 @@ function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
   return parameters
 }
 
+/**
+ * Valide la fréquence d'un seul paramètre.
+ *
+ * @param {object} options L'objet des options.
+ * @param {string} options.frequence La valeur de la fréquence.
+ * @param {string} options.paramName Le nom du paramètre.
+ * @param {Array<string>|null} options.allowedFrequenceValues Les valeurs de fréquence autorisées depuis le nom de l'onglet.
+ * @param {number} options.paramIndex L'index de colonne du paramètre.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
 function validateParameterFrequency({frequence, paramName, allowedFrequenceValues, paramIndex, errorCollector}) {
   if (!frequence) {
     errorCollector.addSingleError({
@@ -148,6 +184,16 @@ function validateParameterFrequency({frequence, paramName, allowedFrequenceValue
   }
 }
 
+/**
+ * Valide que les points de données pour un paramètre se situent dans la plage de dates spécifiée.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {object} options L'objet des options.
+ * @param {number} options.paramIndex L'index de colonne du paramètre.
+ * @param {string} options.date_debut La date de début.
+ * @param {string} options.date_fin La date de fin.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
 function validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin, errorCollector}) {
   if (!date_debut && !date_fin) {
     return
@@ -173,6 +219,15 @@ function validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin,
   }
 }
 
+/**
+ * Extrait et valide les lignes de données pour un seul paramètre.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {number} paramIndex L'index de colonne du paramètre.
+ * @param {string} paramName Le nom du paramètre.
+ * @param {ErrorCollector} errorCollector L'instance du collecteur d'erreurs.
+ * @returns {Array<object>} Les lignes extraites pour le paramètre.
+ */
 function extractParameterRows(dataRows, paramIndex, paramName, errorCollector) {
   const paramDefinition = PARAM_TYPE_DEFINITIONS[paramName]
   const validate = paramDefinition?.validate
@@ -212,6 +267,12 @@ const UNITE_ALLOWED_VALUES = [
   'autre'
 ]
 
+/**
+ * Normalise une chaîne d'unité pour la comparaison.
+ *
+ * @param {string} value La chaîne d'unité.
+ * @returns {string} La chaîne d'unité normalisée.
+ */
 function degradeUniteValue(value) {
   return value
     .toLowerCase()
@@ -224,6 +285,14 @@ function degradeUniteValue(value) {
 const UNITE_DEGRADED_ALLOWED_VALUES = UNITE_ALLOWED_VALUES
   .map(value => degradeUniteValue(value))
 
+/**
+ * Valide et extrait les champs de métadonnées pour une seule colonne de paramètre.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @param {number} colIndex L'index de colonne du paramètre.
+ * @param {{errorCollector: ErrorCollector}} param2 L'instance du collecteur d'erreurs.
+ * @returns {object|undefined} Les champs extraits, ou undefined si la colonne de paramètre est vide.
+ */
 function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
   const {sheet} = dataSheet
 
@@ -386,6 +455,12 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
   return fields
 }
 
+/**
+ * Vérifie s'il y a des données dans la section des lignes de données d'un onglet.
+ *
+ * @param {object} sheet L'objet de la feuille de calcul de xlsx.
+ * @returns {boolean} Vrai si des données sont trouvées, sinon faux.
+ */
 function checkIfSheetHasData(sheet) {
   // Définir la plage de la feuille
   const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1')
@@ -407,6 +482,13 @@ function checkIfSheetHasData(sheet) {
   return false // Aucune donnée trouvée
 }
 
+/**
+ * Combine une chaîne de date et une chaîne d'heure en une chaîne de type ISO.
+ *
+ * @param {string} date La chaîne de date (YYYY-MM-DD).
+ * @param {string} [time] La chaîne d'heure (HH:mm:ss). Par défaut '00:00:00'.
+ * @returns {string|undefined} La chaîne combinée, ou undefined si la date est manquante.
+ */
 function combineDateAndTime(date, time) {
   if (!date) {
     return
@@ -415,6 +497,16 @@ function combineDateAndTime(date, time) {
   return `${date}T${time || '00:00:00'}Z`
 }
 
+/**
+ * Valide les données pour un seul paramètre sur toutes les lignes.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {object} options L'objet des options.
+ * @param {number} options.paramIndex L'index de colonne du paramètre.
+ * @param {string} options.paramName Le nom du paramètre.
+ * @param {boolean} options.isHeureMandatory Indique si la partie heure est obligatoire.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
 function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandatory, errorCollector}) {
   for (const row of dataRows) {
     const {rowNum} = row
@@ -447,6 +539,15 @@ function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandator
   }
 }
 
+/**
+ * Valide que le pas de temps entre les points de données est cohérent avec la fréquence spécifiée.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {object} options L'objet des options.
+ * @param {string} options.frequence La fréquence.
+ * @param {string} options.paramName Le nom du paramètre.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
 function validateTimeStepConsistency(dataRows, {frequence, paramName, errorCollector}) {
   const dateTimes = dataRows.map(row => {
     const {date, heure} = row
@@ -495,6 +596,13 @@ function validateTimeStepConsistency(dataRows, {frequence, paramName, errorColle
   }
 }
 
+/**
+ * Extrait toutes les lignes de données de l'onglet.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @param {{errorCollector: ErrorCollector}} param1 L'instance du collecteur d'erreurs.
+ * @returns {{dataRows: Array<object>, usedParameterColumns: Array<number>}} Les lignes extraites et les index des colonnes qui contiennent des données.
+ */
 function getDataRows(dataSheet, {errorCollector}) {
   const {sheet} = dataSheet
 
@@ -577,6 +685,12 @@ function getDataRows(dataSheet, {errorCollector}) {
   }
 }
 
+/**
+ * Récupère le nom et l'index de colonne de toutes les colonnes de paramètres.
+ *
+ * @param {object} sheet L'objet de la feuille de calcul de xlsx.
+ * @returns {Array<{paramName: string, colIndex: number}>} Un tableau de définitions de colonnes de paramètres.
+ */
 function getParameterColumns(sheet) {
   // Retourne un tableau d'objets avec les noms des paramètres et les index de colonnes
   const parameterColumns = []
@@ -595,6 +709,12 @@ function getParameterColumns(sheet) {
   return parameterColumns
 }
 
+/**
+ * Détermine les valeurs de fréquence autorisées en fonction du nom de l'onglet.
+ *
+ * @param {string} sheetName Le nom de l'onglet.
+ * @returns {Array<string>|null} Un tableau de chaînes de fréquence autorisées, ou null si non contraint par le nom de l'onglet.
+ */
 function getAllowedFrequenceValuesFromSheetName(sheetName) {
   if (sheetName.includes('15 minutes')) {
     return ['15 minutes']
@@ -615,12 +735,24 @@ function getAllowedFrequenceValuesFromSheetName(sheetName) {
   return null
 }
 
+/**
+ * Vérifie si une fréquence est inférieure à un jour.
+ *
+ * @param {string} frequency La chaîne de fréquence.
+ * @returns {boolean} Vrai si la fréquence est inférieure à un jour.
+ */
 // Fonction pour déterminer si la fréquence est inférieure à un jour
 function isFrequencyLessThanOneDay(frequency) {
   const frequenciesLessThanOneDay = ['15 minutes', 'heure', 'minute', 'seconde']
   return frequenciesLessThanOneDay.includes(frequency) || false
 }
 
+/**
+ * Calcule la différence de temps attendue en millisecondes pour une fréquence donnée.
+ *
+ * @param {string} frequency La chaîne de fréquence.
+ * @returns {number|null} La différence attendue en millisecondes, ou null si inconnue.
+ */
 function getExpectedTimeDifference(frequency) {
   const msPerMinute = 60 * 1000
   const msPerHour = 60 * msPerMinute
