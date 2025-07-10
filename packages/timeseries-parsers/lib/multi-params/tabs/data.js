@@ -109,87 +109,96 @@ function validateStructure(dataSheet) {
 function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
   const allowedFrequenceValues = getAllowedFrequenceValuesFromSheetName(dataSheet.name)
   const parameters = []
-
   // Pour chaque paramètre utilisé, valider les entrées de données
   for (const paramIndex of [2, 3, 4, 5, 6, 7, 8]) {
     const fields = validateAndExtractParamFields(dataSheet, paramIndex, {errorCollector})
-
     if (!fields) {
       continue
     }
 
-    const {frequence} = fields
-    const paramName = fields.nom_parametre
+    const {frequence, nom_parametre: paramName, date_debut, date_fin} = fields
 
-    if (!frequence) {
-      errorCollector.addSingleError({
-        message: `Fréquence non renseignée pour le paramètre ${paramName}`
-      })
-    }
+    validateParameterFrequency({frequence, paramName, allowedFrequenceValues, paramIndex, errorCollector})
 
-    if (frequence && allowedFrequenceValues && !allowedFrequenceValues.includes(frequence)) {
-      errorCollector.addSingleError({
-        message: `Le champ 'frequence' (cellule ${String.fromCodePoint(65 + paramIndex)}4 a été modifié pour le paramètre '${paramName}'. Attendu : '${allowedFrequenceValues.join(',')}', trouvé : '${frequence}'`
-      })
-    }
-
-    // Valider les entrées de données pour ce paramètre
     const isHeureMandatory = isFrequencyLessThanOneDay(frequence)
     validateParameterData(dataRows, {paramIndex, paramName, isHeureMandatory, errorCollector})
     validateTimeStepConsistency(dataRows, {frequence, paramName, errorCollector})
 
-    const {date_debut, date_fin} = fields
-    if (date_debut || date_fin) {
-      const startDate = date_debut ? new Date(`${date_debut}T00:00:00Z`) : null
-      const endDate = date_fin ? new Date(`${date_fin}T00:00:00Z`) : null
+    validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin, errorCollector})
 
-      for (const row of dataRows) {
-        if (row.values[paramIndex] === undefined || !row.date) {
-          continue
-        }
-
-        const rowDate = new Date(`${row.date}T00:00:00Z`)
-
-        if ((startDate && rowDate < startDate) || (endDate && rowDate > endDate)) {
-          const cellAddress = XLSX.utils.encode_cell({r: row.rowNum, c: 0})
-          errorCollector.addError('invalidDateRange', cellAddress, {
-            startDate: date_debut,
-            endDate: date_fin
-          })
-        }
-      }
-    }
-
-    // Extraction des données du paramètre
-    const paramDefinition = PARAM_TYPE_DEFINITIONS[paramName]
-    const validate = paramDefinition?.validate
-
-    const rows = []
-
-    for (const row of dataRows) {
-      const valeur = row.values[paramIndex]
-
-      if (valeur === undefined) {
-        continue
-      }
-
-      if (validate && !validate(valeur)) {
-        errorCollector.addSingleError({
-          message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}`
-        })
-      } else {
-        rows.push({
-          date: row.date,
-          heure: row.heure,
-          valeur
-        })
-      }
-    }
+    const rows = extractParameterRows(dataRows, paramIndex, paramName, errorCollector)
 
     parameters.push({paramIndex, ...fields, rows})
   }
 
   return parameters
+}
+
+function validateParameterFrequency({frequence, paramName, allowedFrequenceValues, paramIndex, errorCollector}) {
+  if (!frequence) {
+    errorCollector.addSingleError({
+      message: `Fréquence non renseignée pour le paramètre ${paramName}`
+    })
+  }
+
+  if (frequence && allowedFrequenceValues && !allowedFrequenceValues.includes(frequence)) {
+    errorCollector.addSingleError({
+      message: `Le champ 'frequence' (cellule ${String.fromCodePoint(65 + paramIndex)}4 a été modifié pour le paramètre '${paramName}'. Attendu : '${allowedFrequenceValues.join(',')}', trouvé : '${frequence}'`
+    })
+  }
+}
+
+function validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin, errorCollector}) {
+  if (!date_debut && !date_fin) {
+    return
+  }
+
+  const startDate = date_debut ? new Date(`${date_debut}T00:00:00Z`) : null
+  const endDate = date_fin ? new Date(`${date_fin}T00:00:00Z`) : null
+
+  for (const row of dataRows) {
+    if (row.values[paramIndex] === undefined || !row.date) {
+      continue
+    }
+
+    const rowDate = new Date(`${row.date}T00:00:00Z`)
+
+    if ((startDate && rowDate < startDate) || (endDate && rowDate > endDate)) {
+      const cellAddress = XLSX.utils.encode_cell({r: row.rowNum, c: 0})
+      errorCollector.addError('invalidDateRange', cellAddress, {
+        startDate: date_debut,
+        endDate: date_fin
+      })
+    }
+  }
+}
+
+function extractParameterRows(dataRows, paramIndex, paramName, errorCollector) {
+  const paramDefinition = PARAM_TYPE_DEFINITIONS[paramName]
+  const validate = paramDefinition?.validate
+  const rows = []
+
+  for (const row of dataRows) {
+    const valeur = row.values[paramIndex]
+
+    if (valeur === undefined) {
+      continue
+    }
+
+    if (validate && !validate(valeur)) {
+      errorCollector.addSingleError({
+        message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}`
+      })
+    } else {
+      rows.push({
+        date: row.date,
+        heure: row.heure,
+        valeur
+      })
+    }
+  }
+
+  return rows
 }
 
 const UNITE_ALLOWED_VALUES = [
