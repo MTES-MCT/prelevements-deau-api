@@ -5,7 +5,7 @@ Ce dépôt fournit deux fonctions principales pour valider les fichiers provenan
 - `validateCamionCiterneFile`
 - `validateMultiParamFile`
 
-Ces fonctions sont exposées par le package `@fabnum/timeseries-parsers`. Elles renvoient une liste d'objets contenant au moins la propriété `message` (et éventuellement `explanation`, `internalMessage` et `severity`). La sévérité est `error` par défaut et vaut `warning` lorsque le problème n'empêche pas l'import.
+Ces fonctions sont exposées par le package `@fabnum/prelevements-deau-timeseries-parsers`. Elles renvoient une liste d'objets contenant au moins la propriété `message` (et éventuellement `explanation`, `internalMessage` et `severity`). La sévérité est `error` par défaut et vaut `warning` lorsque le problème n'empêche pas l'import.
 
 ## Fonction `validateCamionCiterneFile`
 
