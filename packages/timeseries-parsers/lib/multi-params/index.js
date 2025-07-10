@@ -142,7 +142,11 @@ function parsePointPrelevement(value) {
 
 function extractDataSheetNames(workbook) {
   return workbook.SheetNames
-    .filter(name => name.toLowerCase().startsWith('data | t='))
+    .filter(name => name
+      .trim()
+      .replaceAll(/\s+/g, ' ')
+      .toLowerCase()
+      .startsWith('data | t='))
 }
 
 function validateStructure(workbook) {
