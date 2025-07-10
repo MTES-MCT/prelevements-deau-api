@@ -2,7 +2,7 @@
 
 Ce projet vise à collecter, organiser et analyser les données de prélèvement d'eau provenant de Démarche Simplifiée. Il fournit divers scripts pour récupérer les dossiers de prélèvements, extraire des données précises et générer des rapports.
 
-Consultez la [documentation de validation](docs/validation.md) pour les erreurs et avertissements possibles.
+Consultez la [documentation de validation](packages/timeseries-parsers/docs/validation.md) pour les erreurs et avertissements possibles.
 
 ## Installation
 
