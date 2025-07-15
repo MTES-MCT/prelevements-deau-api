@@ -13,7 +13,10 @@ export class ErrorCollector {
 
   addError(type, cell, data = {}) {
     this.errors[type] ||= []
-    this.errors[type].push({cell, ...data})
+    // Prevent duplicates
+    if (!this.errors[type].some(e => e.cell === cell)) {
+      this.errors[type].push({cell, ...data})
+    }
   }
 
   hasErrors() {
@@ -22,71 +25,79 @@ export class ErrorCollector {
 
   getErrors() {
     const groupedErrors = []
-    // Pour chaque type d'erreur
-    for (const [type, errors] of Object.entries(this.errors)) {
-      const cells = errors.map(e => e.cell)
-      let message
-      let severity = 'error'
-      const cellRanges = []
-      for (const cell of cells) {
-        const lastRange = cellRanges.at(-1)
-        const cellNumber = Number.parseInt(cell.match(/\d+/)[0], 10)
 
-        if (lastRange && cellNumber === lastRange.end + 1) {
-          lastRange.end = cellNumber
-        } else {
-          cellRanges.push({start: cellNumber, end: cellNumber})
+    for (const [type, errors] of Object.entries(this.errors)) {
+      const rowNumbers = [...new Set(errors.map(e => Number.parseInt(e.cell.match(/\d+/)[0], 10)))].sort((a, b) => a - b)
+
+      const ranges = []
+      if (rowNumbers.length > 0) {
+        let start = rowNumbers[0]
+        let end = rowNumbers[0]
+        for (let i = 1; i < rowNumbers.length; i++) {
+          if (rowNumbers[i] === end + 1) {
+            end = rowNumbers[i]
+          } else {
+            ranges.push({start, end})
+            start = rowNumbers[i]
+            end = rowNumbers[i]
+          }
         }
+
+        ranges.push({start, end})
       }
 
-      const cellIntervals = cellRanges.map(range => range.start === range.end ? `cellule ${range.start}` : `cellules ${range.start}-${range.end}`).join(', ')
+      const intervals = ranges.map(range => {
+        if (range.start === range.end) {
+          return `la ligne ${range.start}`
+        }
+
+        return `des lignes ${range.start} à ${range.end}`
+      }).join(', ')
+
+      let message
+      let severity = 'error'
 
       switch (type) {
         case 'invalidDates': {
-          message = `Les dates dans l'onglet '${this.sheetName}' ne sont pas valides pour les ${cellIntervals}.`
+          message = `Les dates pour ${intervals} de l'onglet '${this.sheetName}' ne sont pas valides.`
           break
         }
 
         case 'invalidTimes': {
-          message = `Les heures dans l'onglet '${this.sheetName}' ne sont pas valides pour les ${cellIntervals}.`
+          message = `Les heures pour ${intervals} de l'onglet '${this.sheetName}' ne sont pas valides.`
           break
         }
 
         case 'missingDate': {
-          message = `Le champ 'date' est obligatoire dans l'onglet '${this.sheetName}' pour les ${cellIntervals}.`
+          message = `Le champ 'date' est obligatoire pour ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
 
         case 'missingHeure': {
-          message = `Le champ 'heure' est obligatoire dans l'onglet '${this.sheetName}' pour les ${cellIntervals}.`
-          break
-        }
-
-        case 'invalidDateTime': {
-          message = `Les dates et heures dans l'onglet '${this.sheetName}' ne sont pas valides pour les ${cellIntervals}.`
+          message = `Le champ 'heure' est obligatoire pour ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
 
         case 'missingRemarque': {
           const {paramName} = errors[0]
-          message = `Le champ 'Remarque' doit être renseigné si la valeur est manquante pour le paramètre '${paramName}' dans l'onglet '${this.sheetName}', ${cellIntervals}.`
+          message = `Le champ 'Remarque' doit être renseigné si la valeur est manquante pour le paramètre '${paramName}' pour ${intervals} de l'onglet '${this.sheetName}'.`
           severity = 'warning'
           break
         }
 
         case 'invalidDateRange': {
           const {startDate, endDate} = errors[0]
-          message = `Les dates dans l'onglet '${this.sheetName}' doivent être comprises entre le ${startDate} et le ${endDate} pour les ${cellIntervals}.`
+          message = `Les dates pour ${intervals} de l'onglet '${this.sheetName}' doivent être comprises entre le ${startDate} et le ${endDate}.`
           break
         }
 
         case 'invalidInterval': {
-          message = `Le pas de temps entre les lignes ${cellIntervals} de l'onglet ${this.sheetName} est incorrect`
+          message = `Le pas de temps est incorrect pour ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
 
         default: {
-          message = `Erreur inconnue de type '${type}' dans l'onglet '${this.sheetName}' pour les ${cellIntervals}.`
+          message = `Erreur inconnue de type '${type}' pour ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
       }
