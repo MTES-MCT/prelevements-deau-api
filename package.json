@@ -13,6 +13,7 @@
     "import-reference-data": "node scripts/import-reference-data.js",
     "import-territoire-historical-data": "node scripts/import-territoire-historical-data.js",
     "download-csv": "node scripts/download-csv.js",
+    "validate-declaration-file": "node scripts/validate-declaration-file.js",
     "lint": "xo",
     "test": "ava"
   },
