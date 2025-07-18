@@ -84,6 +84,10 @@ _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
   ```bash
   node scripts/read-multi-params.js <fichier.csv>
   ```
+- **validate-declaration-file** : valide un fichier de déclaration (camion citerne ou multi-paramètres).
+  ```bash
+  node scripts/validate-declaration-file.js <filePath> [camion-citerne|multi-params]
+  ```
 
 ### Lancer l'application :
 ```bash
