@@ -21,22 +21,23 @@ Cette fonction vérifie la structure et le contenu d'un fichier « Camion citer
 
 - « Format de fichier incorrect » (avec une explication sur le format attendu)
 - « Fichier illisible ou corrompu »
-- « Format de date invalide : … »
 - « Le fichier est vide ou ne contient pas de feuille. »
-- « L'intitulé de la première colonne doit être 'Date'. … »
+- « La feuille de calcul est vide. »
+- « L'intitulé de la première colonne doit être 'Date'. Trouvé : '...' »
 - « L'en-tête de la colonne X est manquant. »
-- « L'en-tête de la colonne X n'est pas au format attendu. »
-- « L'en-tête de la colonne X ne correspond pas. »
-- « Le fichier ne contient pas de données à partir de la ligne 4. »
-- « Ligne N : Format de date invalide : … »
-- « Ligne N : La date … est déjà présente dans le fichier. »
+- « L'en-tête de la colonne X n'est pas au format attendu. Trouvé : '...'. » (avec une explication e format attendu)
+- « L'en-tête de la colonne X ne correspond pas. Attendu : '...', trouvé : '...' »
+- « Le fichier ne contient pas de données à partir de la ligne 4. »
 - « Le fichier ne contient pas de données. »
-- « Ligne N : La date est renseignée, mais aucune valeur n'est indiquée dans les colonnes B à K. »
-- « Valeur numérique invalide »
+- « Le fichier ne contient pas de données journalières »
+- « Ligne N : Format de date invalide : ... »
+- « Ligne N : La date ... est déjà présente dans le fichier. » (avec une explication sur la manière de gérer les doublons)
+- « Ligne N : La date est renseignée, mais aucune valeur n'est indiquée dans les colonnes B à L. » (avec une explication sur la manière de gérer les valeurs manquantes)
+- « Ligne N - colonne X: Valeur numérique invalide » (avec une explication sur la valeur attendue) 
 
 ### Avertissements
 
-Aucun avertissement n'est émis par cette fonction.
+- « L'en-tête de la colonne 12 est manquant. Le template utilisé n'est peut-être pas à jour. »
 
 ## Fonction `validateMultiParamFile`
 
