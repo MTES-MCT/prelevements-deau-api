@@ -306,8 +306,8 @@ function consolidateData(rawData) {
   const data = rawData.headers.map((header, i) => {
     const dailyValues = rawData.dailyValues.map(row => ({
       date: row.date,
-      value: row.values[i]
-    })).filter(v => v.value)
+      values: row.values[i] ? [row.values[i]] : null
+    })).filter(v => v.values)
 
     if (dailyValues.length === 0) {
       return
@@ -325,7 +325,7 @@ function consolidateData(rawData) {
         unite: 'm3'
       }],
       dailyValues,
-      volumePreleveTotal: sumBy(dailyValues, 'value')
+      volumePreleveTotal: sumBy(dailyValues, row => row.values[0])
     }
   })
 
