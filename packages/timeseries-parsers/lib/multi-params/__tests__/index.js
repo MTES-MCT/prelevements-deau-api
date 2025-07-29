@@ -169,6 +169,13 @@ test('validateMultiParamFile - dates out of range', async t => {
   t.true(errors.some(e => e.message.includes('doivent être comprises entre le')))
 })
 
+test('validateMultiParamFile - too many errors', async t => {
+  const filePath = path.join(testFilesPath, 'too-many-errors.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors} = await validateMultiParamFile(fileContent)
+  t.true(errors.some(e => e.message === 'Les dates de 20 lignes de l\'onglet \'Data | T=1 jour\' ne sont pas valides.'))
+})
+
 test('validateMultiParamFile - no daily data', async t => {
   const filePath = path.join(testFilesPath, 'no-daily-data.xlsx')
   const fileContent = await fs.readFile(filePath)
