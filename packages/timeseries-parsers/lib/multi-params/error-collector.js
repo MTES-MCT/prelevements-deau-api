@@ -46,58 +46,68 @@ export class ErrorCollector {
         ranges.push({start, end})
       }
 
-      const intervals = ranges.map(range => {
-        if (range.start === range.end) {
-          return `la ligne ${range.start}`
-        }
+      const totalErrorRows = rowNumbers.length
+      let intervals
+      let preposition
 
-        return `des lignes ${range.start} à ${range.end}`
-      }).join(', ')
+      if (ranges.length > 5) {
+        intervals = `${totalErrorRows} lignes`
+        preposition = 'de'
+      } else {
+        intervals = ranges.map(range => {
+          if (range.start === range.end) {
+            return `la ligne ${range.start}`
+          }
+
+          return `des lignes ${range.start} à ${range.end}`
+        }).join(', ')
+        preposition = 'pour'
+      }
 
       let message
       let severity = 'error'
 
       switch (type) {
         case 'invalidDates': {
-          message = `Les dates pour ${intervals} de l'onglet '${this.sheetName}' ne sont pas valides.`
+          message = `Les dates ${preposition} ${intervals} de l'onglet '${this.sheetName}' ne sont pas valides.`
           break
         }
 
         case 'invalidTimes': {
-          message = `Les heures pour ${intervals} de l'onglet '${this.sheetName}' ne sont pas valides.`
+          message = `Les heures ${preposition} ${intervals} de l'onglet '${this.sheetName}' ne sont pas valides.`
           break
         }
 
         case 'missingDate': {
-          message = `Le champ 'date' est obligatoire pour ${intervals} de l'onglet '${this.sheetName}'.`
+          message = `Le champ 'date' est obligatoire ${preposition} ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
 
         case 'missingHeure': {
-          message = `Le champ 'heure' est obligatoire pour ${intervals} de l'onglet '${this.sheetName}'.`
+          message = `Le champ 'heure' est obligatoire ${preposition} ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
 
         case 'missingRemarque': {
           const {paramName} = errors[0]
-          message = `Le champ 'Remarque' doit être renseigné si la valeur est manquante pour le paramètre '${paramName}' pour ${intervals} de l'onglet '${this.sheetName}'.`
+          message = `Le champ 'Remarque' doit être renseigné si la valeur est manquante pour le paramètre '${paramName}' ${preposition} ${intervals} de l'onglet '${this.sheetName}'.`
           severity = 'warning'
           break
         }
 
         case 'invalidDateRange': {
           const {startDate, endDate} = errors[0]
-          message = `Les dates pour ${intervals} de l'onglet '${this.sheetName}' doivent être comprises entre le ${startDate} et le ${endDate}.`
+          message = `Les dates ${preposition} ${intervals} de l'onglet '${this.sheetName}' doivent être comprises entre le ${startDate} et le ${endDate}.`
           break
         }
 
         case 'invalidInterval': {
-          message = `Le pas de temps est incorrect pour ${intervals} de l'onglet '${this.sheetName}'.`
+          message = `Le pas de temps est incorrect ${preposition} ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
 
         default: {
-          message = `Erreur inconnue de type '${type}' pour ${intervals} de l'onglet '${this.sheetName}'.`
+          message = `Erreur inconnue de type '${type}' ${preposition} ${intervals} de l'onglet '${this.sheetName}'.`
           break
         }
       }

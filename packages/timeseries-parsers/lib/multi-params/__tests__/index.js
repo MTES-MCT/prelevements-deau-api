@@ -169,6 +169,13 @@ test('validateMultiParamFile - dates out of range', async t => {
   t.true(errors.some(e => e.message.includes('doivent être comprises entre le')))
 })
 
+test('validateMultiParamFile - too many errors', async t => {
+  const filePath = path.join(testFilesPath, 'too-many-errors.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors} = await validateMultiParamFile(fileContent)
+  t.true(errors.some(e => e.message === 'Les dates de 20 lignes de l\'onglet \'Data | T=1 jour\' ne sont pas valides.'))
+})
+
 test('validateMultiParamFile - no daily data', async t => {
   const filePath = path.join(testFilesPath, 'no-daily-data.xlsx')
   const fileContent = await fs.readFile(filePath)
@@ -191,4 +198,12 @@ test('validateMultiParamFile - missing remark for empty value', async t => {
   const warning = errors.find(e => e.severity === 'warning')
   t.truthy(warning)
   t.true(warning.message.startsWith('Le champ \'Remarque\' doit être renseigné'))
+})
+
+test('validateMultiParamFile - rows with no date are ignored', async t => {
+  const filePath = path.join(testFilesPath, 'no-date-rows.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {data, errors} = await validateMultiParamFile(fileContent)
+  t.truthy(errors.some(e => e.message.includes('Le champ \'date\' est obligatoire')))
+  t.is(data.volumePreleveTotal, 3)
 })
