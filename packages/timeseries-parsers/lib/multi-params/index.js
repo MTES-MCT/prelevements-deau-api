@@ -108,8 +108,9 @@ function consolidateData(rawData) {
     throw new Error('Le fichier ne contient pas de données de volume prélevé')
   }
 
+  const dailyRowsWithDates = filter(dailyDataTab.rows, row => row.date)
   const sortedDailyRows = sortBy(
-    filter(dailyDataTab.rows, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
+    filter(dailyRowsWithDates, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
     'date'
   )
 

@@ -199,3 +199,11 @@ test('validateMultiParamFile - missing remark for empty value', async t => {
   t.truthy(warning)
   t.true(warning.message.startsWith('Le champ \'Remarque\' doit être renseigné'))
 })
+
+test('validateMultiParamFile - rows with no date are ignored', async t => {
+  const filePath = path.join(testFilesPath, 'no-date-rows.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {data, errors} = await validateMultiParamFile(fileContent)
+  t.truthy(errors.some(e => e.message.includes('Le champ \'date\' est obligatoire')))
+  t.is(data.volumePreleveTotal, 3)
+})
