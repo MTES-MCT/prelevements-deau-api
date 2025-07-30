@@ -109,9 +109,12 @@ function validateHeaders(sheet, errors) {
   ]
 
   const headers = []
+  const foundHeaders = new Set()
 
   // Lecture des en-têtes à partir de la ligne 3 (index 2)
   const headerRowIndex = 2
+  const range = XLSX.utils.decode_range(sheet['!ref'])
+  const maxCol = range.e.c
 
   // Vérifier que la première cellule est "Date"
   const firstHeaderCell = getCellValue(sheet, headerRowIndex, 0)
@@ -123,14 +126,11 @@ function validateHeaders(sheet, errors) {
   }
 
   // Parcourir les autres en-têtes
-  for (let colNum = 1; colNum <= expectedHeaders.length; colNum++) {
+  for (let colNum = 1; colNum <= maxCol; colNum++) {
     const cellValue = getCellValue(sheet, headerRowIndex, colNum)
-    if (!cellValue) {
-      errors.push({
-        message: `L'en-tête de la colonne ${colNum + 1} est manquant.`,
-        severity: 'error'
-      })
 
+    // Si la cellule est vide, on l'ignore et on passe à la suivante
+    if (!cellValue) {
       continue
     }
 
@@ -151,18 +151,29 @@ function validateHeaders(sheet, errors) {
     const code = match[1]
     const name = match[2]
 
-    const expectedHeader = expectedHeaders[colNum - 1]
-    if (
-      code !== expectedHeader.code
-      || name.toLowerCase() !== expectedHeader.name.toLowerCase()
-    ) {
+    const isValidHeader = expectedHeaders.some(
+      h => h.code === code && h.name.toLowerCase() === name.toLowerCase()
+    )
+
+    if (!isValidHeader) {
       errors.push({
-        message: `L'en-tête de la colonne ${colNum + 1} ne correspond pas. Attendu : '${expectedHeader.code} ${expectedHeader.name}', trouvé : '${cellValue}'.`,
+        message: `L'en-tête de la colonne ${colNum + 1} ne correspond à aucun point de prélèvement connu. Trouvé : '${cellValue}'.`,
         severity: 'error'
       })
-    } else {
-      headers.push({code, name})
+      continue
     }
+
+    const headerIdentifier = `${code}-${name.toLowerCase()}`
+    if (foundHeaders.has(headerIdentifier)) {
+      errors.push({
+        message: `Le point de prélèvement ${code} - ${name} est un doublon.`,
+        severity: 'error'
+      })
+      continue
+    }
+
+    headers.push({code, name, colNum})
+    foundHeaders.add(headerIdentifier)
   }
 
   return headers
@@ -187,7 +198,7 @@ function validateDataRows(sheet, errors, data) {
     const rowIndex = rowNum + 1 // Pour affichage (1-based)
 
     // Vérifier si la ligne est entièrement vide
-    if (isRowEmpty(sheet, rowNum)) {
+    if (isRowEmpty(sheet, rowNum, data.headers)) {
       // Ignorer les lignes entièrement vides
       continue
     }
@@ -208,7 +219,8 @@ function validateDataRows(sheet, errors, data) {
     const rowContext = {
       sheet,
       rowNum,
-      rowIndex
+      rowIndex,
+      headers: data.headers
     }
 
     if (!dateValue) {
@@ -236,7 +248,7 @@ function validateDataRows(sheet, errors, data) {
       data.dailyValues.push({date: dateValue, values})
     } else {
       errors.push({
-        message: `Ligne ${rowIndex}: La date est renseignée, mais aucune valeur n'est indiquée dans les colonnes B à L.`,
+        message: `Ligne ${rowIndex}: La date est renseignée, mais aucune valeur n'est indiquée dans les colonnes des points de prélèvement.`,
         explanation: 'Si vous aucun prélèvement n\'a été effectué, renseignez la valeur 0.',
         severity: 'error'
       })
@@ -255,9 +267,15 @@ function validateDataRows(sheet, errors, data) {
 }
 
 // Fonction pour vérifier si une ligne est entièrement vide
-function isRowEmpty(sheet, rowNum) {
-  for (let colNum = 0; colNum <= 10; colNum++) {
-    const cellValue = getCellValue(sheet, rowNum, colNum)
+function isRowEmpty(sheet, rowNum, headers) {
+  // Check date column
+  if (getCellValue(sheet, rowNum, 0) !== null && getCellValue(sheet, rowNum, 0) !== '') {
+    return false
+  }
+
+  // Check data columns defined in headers
+  for (const header of headers) {
+    const cellValue = getCellValue(sheet, rowNum, header.colNum)
     if (cellValue !== null && cellValue !== '') {
       return false
     }
@@ -267,23 +285,30 @@ function isRowEmpty(sheet, rowNum) {
 }
 
 function validateNumericValues(rowContext) {
-  const {sheet, rowNum, rowIndex} = rowContext
+  const {sheet, rowNum, rowIndex, headers} = rowContext
   const values = []
   const errors = []
-  for (let colNum = 1; colNum <= 10; colNum++) {
+  let hasValues = false
+
+  for (const header of headers) {
+    const {colNum} = header
     const cellValue = getCellValue(sheet, rowNum, colNum)
     try {
       validateNumericValue(cellValue)
       values.push(cellValue)
+      if (cellValue !== null && cellValue !== '') {
+        hasValues = true
+      }
     } catch (error) {
       errors.push({
         message: `Ligne ${rowIndex} - colonne ${colNum + 1}: ${error.message}`,
         severity: 'error'
       })
+      values.push(null) // Push null to keep array length consistent
     }
   }
 
-  if (values.length === 0) {
+  if (!hasValues) {
     return {values: null, errors}
   }
 

@@ -56,7 +56,7 @@ test('validateCamionCiterneFile - incorrect headers', async t => {
   const {errors} = await validateCamionCiterneFile(fileContent)
   t.is(errors.length, 2)
   t.is(errors[0].message, 'L\'intitulé de la première colonne doit être \'Date\'. Trouvé : \'incorrect\'.')
-  t.truthy(errors[1].message.includes('L\'en-tête de la colonne 2 ne correspond pas'))
+  t.truthy(errors[1].message.includes('ne correspond à aucun point de prélèvement connu'))
 })
 
 test('validateCamionCiterneFile - no data', async t => {
@@ -73,4 +73,19 @@ test('validateCamionCiterneFile - duplicate dates', async t => {
   const {errors} = await validateCamionCiterneFile(fileContent)
   t.is(errors.length, 1)
   t.is(errors[0].message, 'Ligne 5: La date 2025-01-01 est déjà présente dans le fichier.')
+})
+
+test('validateCamionCiterneFile - only necessary points', async t => {
+  const filePath = path.join(testFilesPath, 'only-necessary-points.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors} = await validateCamionCiterneFile(fileContent)
+  t.is(errors.length, 0)
+})
+
+test('validateCamionCiterneFile - duplicates points', async t => {
+  const filePath = path.join(testFilesPath, 'duplicates-points.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors} = await validateCamionCiterneFile(fileContent)
+  t.is(errors.length, 1)
+  t.is(errors[0].message, 'Le point de prélèvement 414 - Rav. Charpentier est un doublon.')
 })
