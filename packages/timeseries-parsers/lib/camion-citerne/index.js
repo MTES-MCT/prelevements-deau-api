@@ -126,18 +126,10 @@ function validateHeaders(sheet, errors) {
   for (let colNum = 1; colNum <= expectedHeaders.length; colNum++) {
     const cellValue = getCellValue(sheet, headerRowIndex, colNum)
     if (!cellValue) {
-      if (colNum + 1 === 12) {
-        errors.push({
-          message: `L'en-tête de la colonne ${colNum + 1} est manquant.`, // Nouveau point de prélèvement ajouté en v2
-          explanation: 'Le template utilisé n\'est peut-être pas à jour.',
-          severity: 'warning'
-        })
-      } else {
-        errors.push({
-          message: `L'en-tête de la colonne ${colNum + 1} est manquant.`,
-          severity: 'error'
-        })
-      }
+      errors.push({
+        message: `L'en-tête de la colonne ${colNum + 1} est manquant.`,
+        severity: 'error'
+      })
 
       continue
     }

@@ -74,13 +74,3 @@ test('validateCamionCiterneFile - duplicate dates', async t => {
   t.is(errors.length, 1)
   t.is(errors[0].message, 'Ligne 5: La date 2025-01-01 est déjà présente dans le fichier.')
 })
-
-test('validateCamionCiterneFile - outdated template', async t => {
-  const filePath = path.join(testFilesPath, 'outdated-template.xlsx')
-  const fileContent = await fs.readFile(filePath)
-  const {errors} = await validateCamionCiterneFile(fileContent)
-  t.is(errors.length, 1)
-  t.is(errors[0].message, 'L\'en-tête de la colonne 12 est manquant.')
-  t.is(errors[0].explanation, 'Le template utilisé n\'est peut-être pas à jour.')
-  t.is(errors[0].severity, 'warning')
-})

@@ -37,7 +37,7 @@ Cette fonction vérifie la structure et le contenu d'un fichier « Camion citer
 
 ### Avertissements
 
-- « L'en-tête de la colonne 12 est manquant. Le template utilisé n'est peut-être pas à jour. »
+Aucun avertissement n'est émis pour ce type de fichier.
 
 ## Fonction `validateMultiParamFile`
 
