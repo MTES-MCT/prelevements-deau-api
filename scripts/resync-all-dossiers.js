@@ -1,7 +1,6 @@
 import 'dotenv/config'
 import process from 'node:process'
 import mongo from '../lib/util/mongo.js'
-import {finished} from '../lib/util/defer.js'
 import {resyncAllDossiers} from '../lib/demarches-simplifiees/index.js'
 
 const demarcheNumber = Number.parseInt(process.env.DS_DEMARCHE_NUMBER, 10)
@@ -18,6 +17,5 @@ try {
   await main()
 } finally {
   // Disconnect from MongoDB
-  await finished()
   await mongo.disconnect()
 }
