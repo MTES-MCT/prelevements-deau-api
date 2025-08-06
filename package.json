@@ -25,6 +25,7 @@
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*",
     "content-disposition": "^0.5.4",
     "cors": "^2.8.5",
+    "cron": "^4.3.3",
     "date-fns": "^4.1.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",

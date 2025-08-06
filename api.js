@@ -12,8 +12,13 @@ import errorHandler from './lib/util/error-handler.js'
 
 import routes from './lib/routes.js'
 
+import {startCron} from './lib/cron.js'
+
 // Connect to MongoDB
 await mongo.connect()
+
+// Start cron jobs
+await startCron()
 
 const PORT = process.env.PORT || 5000
 const DEV = process.env.NODE_ENV !== 'production'

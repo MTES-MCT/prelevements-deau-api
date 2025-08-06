@@ -1,7 +1,0 @@
-{
-    "jobs": [
-      {
-        "command": "0 * * * * node scripts/sync-updated-dossiers.js"
-      }
-    ]
-  }
