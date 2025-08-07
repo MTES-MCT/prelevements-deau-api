@@ -329,6 +329,15 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
     false
   )
 
+  // Temporary fix for multiple emails in the same field
+  for (const preleveur of preleveurs) {
+    if (preleveur.email) {
+      const emails = preleveur.email.split('|').map(email => email.trim().toLowerCase())
+      preleveur.email = emails[0] // Keep only the first email
+      preleveur.autresEmails = emails.slice(1) // Store the rest in a separate field
+    }
+  }
+
   if (preleveurs.length > 0) {
     console.log('\n=> Nettoyage de la collection preleveurs...')
     await mongo.db.collection('preleveurs').deleteMany({territoire: codeTerritoire})
