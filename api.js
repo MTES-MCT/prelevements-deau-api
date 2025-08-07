@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import 'dotenv/config.js'
+import 'dotenv/config'
 
 import process from 'node:process'
 
