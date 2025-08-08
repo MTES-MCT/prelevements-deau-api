@@ -16,6 +16,18 @@ import {
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
 
+async function getPointId(id_point) {
+  const point = await mongo.db.collection('points_prelevement').findOne({id_point})
+
+  return point._id
+}
+
+async function getPreleveurId(id_preleveur) {
+  const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur})
+
+  return preleveur._id
+}
+
 function parseAutresNoms(autresNoms) {
   if (!autresNoms) {
     return null
@@ -117,8 +129,13 @@ async function preparePoint(point, codeTerritoire) {
 async function prepareExploitation(exploitation, codeTerritoire, exploitationsUsages) {
   const exploitationToInsert = exploitation
 
+  if (exploitation.id_point) {
+    exploitationToInsert.point = await getPointId(exploitation.id_point)
+    delete exploitationToInsert.id_point
+  }
+
   if (exploitation.id_beneficiaire) {
-    exploitationToInsert.id_preleveur = exploitation.id_beneficiaire
+    exploitationToInsert.preleveur = await getPreleveurId(exploitation.id_beneficiaire)
     delete exploitationToInsert.id_beneficiaire
   }
 
@@ -406,8 +423,8 @@ async function importData(folderPath, codeTerritoire) {
 
   await importDocuments(folderPath, codeTerritoire, validTerritoire.nom)
   await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
-  await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
+  await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
 
   await mongo.disconnect()
 }
