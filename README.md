@@ -163,8 +163,8 @@ yarn lint
 | `statut` | string | oui |
 | `raison_abandon` | string | non |
 | `remarque` | string | non |
-| `id_point` | string | oui |
-| `id_preleveur` | string | oui |
+| `point` | ObjectId | oui |
+| `preleveur` | ObjectId | oui |
 | `usages` | array | oui |
 | `regles` | array | non |
 | `documents` | array | non |
