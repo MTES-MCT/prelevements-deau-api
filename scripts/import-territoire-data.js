@@ -2,7 +2,7 @@
 /* eslint-disable unicorn/no-process-exit */
 import 'dotenv/config'
 import {argv} from 'node:process'
-import mongo from '../lib/util/mongo.js'
+import mongo, {ObjectId} from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {getCommune} from '../lib/util/cog.js'
 import {parseNomenclature} from '../lib/import/generic.js'
@@ -15,6 +15,17 @@ import {
   PRELEVEURS_DEFINITION
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
+
+const pointsIds = new Map()
+const preleveursIds = new Map()
+
+function getPointId(id_point) {
+  return pointsIds.get(id_point)
+}
+
+function getPreleveurId(id_preleveur) {
+  return preleveursIds.get(id_preleveur)
+}
 
 function parseAutresNoms(autresNoms) {
   if (!autresNoms) {
@@ -110,6 +121,9 @@ async function preparePoint(point, codeTerritoire) {
   pointToInsert.territoire = codeTerritoire
   pointToInsert.createdAt = new Date()
   pointToInsert.updatedAt = new Date()
+  pointToInsert._id = new ObjectId()
+
+  pointsIds.set(pointToInsert.id_point, pointToInsert._id)
 
   return pointToInsert
 }
@@ -117,8 +131,13 @@ async function preparePoint(point, codeTerritoire) {
 async function prepareExploitation(exploitation, codeTerritoire, exploitationsUsages) {
   const exploitationToInsert = exploitation
 
+  if (exploitation.id_point) {
+    exploitationToInsert.point = getPointId(exploitation.id_point)
+    delete exploitationToInsert.id_point
+  }
+
   if (exploitation.id_beneficiaire) {
-    exploitationToInsert.id_preleveur = exploitation.id_beneficiaire
+    exploitationToInsert.preleveur = getPreleveurId(exploitation.id_beneficiaire)
     delete exploitationToInsert.id_beneficiaire
   }
 
@@ -149,6 +168,9 @@ async function preparePreleveur(preleveur, codeTerritoire) {
   preleveurToInsert.territoire = codeTerritoire
   preleveurToInsert.createdAt = new Date()
   preleveurToInsert.updatedAt = new Date()
+  preleveurToInsert._id = new ObjectId()
+
+  preleveursIds.set(preleveurToInsert.id_preleveur, preleveurToInsert._id)
 
   return preleveurToInsert
 }
@@ -383,7 +405,7 @@ async function importData(folderPath, codeTerritoire) {
   if (!codeTerritoire) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner l’id du territoire à importer. \nExemple : yarn data-import DEP-974 /data/reunion'
+      'Vous devez renseigner l’id du territoire à importer. \nExemple : yarn import-territoire-data DEP-974 /data/reunion'
     )
 
     process.exit(1)
@@ -392,7 +414,7 @@ async function importData(folderPath, codeTerritoire) {
   if (!folderPath) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn data-import DEP-974 /data/reunion'
+      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn import-territoire-data DEP-974 /data/reunion'
     )
 
     process.exit(1)
@@ -415,8 +437,8 @@ async function importData(folderPath, codeTerritoire) {
 
   await importDocuments(folderPath, codeTerritoire, validTerritoire.nom)
   await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
-  await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
+  await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
 
   await mongo.disconnect()
 }
