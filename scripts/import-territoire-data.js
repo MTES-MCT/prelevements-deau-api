@@ -396,7 +396,7 @@ async function importData(folderPath, codeTerritoire) {
   if (!codeTerritoire) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner l’id du territoire à importer. \nExemple : yarn data-import DEP-974 /data/reunion'
+      'Vous devez renseigner l’id du territoire à importer. \nExemple : yarn import-territoire-data DEP-974 /data/reunion'
     )
 
     process.exit(1)
@@ -405,7 +405,7 @@ async function importData(folderPath, codeTerritoire) {
   if (!folderPath) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn data-import DEP-974 /data/reunion'
+      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn import-territoire-data DEP-974 /data/reunion'
     )
 
     process.exit(1)
