@@ -132,12 +132,12 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
   const exploitationToInsert = exploitation
 
   if (exploitation.id_point) {
-    exploitationToInsert.point = await getPointId(exploitation.id_point)
+    exploitationToInsert.point = getPointId(exploitation.id_point)
     delete exploitationToInsert.id_point
   }
 
   if (exploitation.id_beneficiaire) {
-    exploitationToInsert.preleveur = await getPreleveurId(exploitation.id_beneficiaire)
+    exploitationToInsert.preleveur = getPreleveurId(exploitation.id_beneficiaire)
     delete exploitationToInsert.id_beneficiaire
   }
 
