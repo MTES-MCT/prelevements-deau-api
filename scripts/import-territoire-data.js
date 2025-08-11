@@ -2,7 +2,7 @@
 /* eslint-disable unicorn/no-process-exit */
 import 'dotenv/config'
 import {argv} from 'node:process'
-import mongo from '../lib/util/mongo.js'
+import mongo, {ObjectId} from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {getCommune} from '../lib/util/cog.js'
 import {parseNomenclature} from '../lib/import/generic.js'
@@ -16,16 +16,15 @@ import {
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
 
-async function getPointId(id_point) {
-  const point = await mongo.db.collection('points_prelevement').findOne({id_point})
+const pointsIds = new Map()
+const preleveursIds = new Map()
 
-  return point._id
+function getPointId(id_point) {
+  return pointsIds.get(id_point)
 }
 
-async function getPreleveurId(id_preleveur) {
-  const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur})
-
-  return preleveur._id
+function getPreleveurId(id_preleveur) {
+  return preleveursIds.get(id_preleveur)
 }
 
 function parseAutresNoms(autresNoms) {
@@ -122,6 +121,9 @@ async function preparePoint(point, codeTerritoire) {
   pointToInsert.territoire = codeTerritoire
   pointToInsert.createdAt = new Date()
   pointToInsert.updatedAt = new Date()
+  pointToInsert._id = new ObjectId()
+
+  pointsIds.set(pointToInsert.id_point, pointToInsert._id)
 
   return pointToInsert
 }
@@ -166,6 +168,9 @@ async function preparePreleveur(preleveur, codeTerritoire) {
   preleveurToInsert.territoire = codeTerritoire
   preleveurToInsert.createdAt = new Date()
   preleveurToInsert.updatedAt = new Date()
+  preleveurToInsert._id = new ObjectId()
+
+  preleveursIds.set(preleveurToInsert.id_preleveur, preleveurToInsert._id)
 
   return preleveurToInsert
 }
