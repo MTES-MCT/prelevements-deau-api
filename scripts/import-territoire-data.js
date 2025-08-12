@@ -16,6 +16,7 @@ import {
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
 import {maxBy} from 'lodash-es'
+import {initSequence} from '../lib/util/sequences.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
@@ -449,28 +450,13 @@ async function importData(folderPath, codeTerritoire) {
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
 
   const latestPointId = maxBy([...pointsIds.keys()])
-
-  await mongo.db.collection('sequences').findOneAndUpdate(
-    {name: `territoire-${codeTerritoire}-points`},
-    {$set: {nextId: latestPointId}},
-    {upsert: true}
-  )
+  await initSequence(`territoire-${codeTerritoire}-points`, latestPointId)
 
   const latestPreleveurId = maxBy([...preleveursIds.keys()])
-
-  await mongo.db.collection('sequences').findOneAndUpdate(
-    {name: `territoire-${codeTerritoire}-preleveurs`},
-    {$set: {nextId: latestPreleveurId}},
-    {upsert: true}
-  )
+  await initSequence(`territoire-${codeTerritoire}-preleveurs`, latestPreleveurId)
 
   const latestExploitationId = maxBy([...exploitationsIds.keys()])
-
-  await mongo.db.collection('sequences').findOneAndUpdate(
-    {name: `territoire-${codeTerritoire}-exploitations`},
-    {$set: {nextId: latestExploitationId}},
-    {upsert: true}
-  )
+  await initSequence(`territoire-${codeTerritoire}-exploitations`, latestExploitationId)
 
   await mongo.disconnect()
 }
