@@ -15,7 +15,6 @@ import {
   PRELEVEURS_DEFINITION
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
-import {maxBy} from 'lodash-es'
 import {initSequence} from '../lib/util/sequences.js'
 
 const pointsIds = new Map()
@@ -449,13 +448,13 @@ async function importData(folderPath, codeTerritoire) {
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
 
-  const latestPointId = maxBy([...pointsIds.keys()])
+  const latestPointId = Math.max(...pointsIds.keys())
   await initSequence(`territoire-${codeTerritoire}-points`, latestPointId)
 
-  const latestPreleveurId = maxBy([...preleveursIds.keys()])
+  const latestPreleveurId = Math.max(...preleveursIds.keys())
   await initSequence(`territoire-${codeTerritoire}-preleveurs`, latestPreleveurId)
 
-  const latestExploitationId = maxBy([...exploitationsIds.keys()])
+  const latestExploitationId = Math.max(...exploitationsIds.keys())
   await initSequence(`territoire-${codeTerritoire}-exploitations`, latestExploitationId)
 
   await mongo.disconnect()
