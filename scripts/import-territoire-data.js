@@ -448,14 +448,20 @@ async function importData(folderPath, codeTerritoire) {
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
 
-  const latestPointId = Math.max(...pointsIds.keys())
-  await initSequence(`territoire-${codeTerritoire}-points`, latestPointId)
+  if (pointsIds.size > 0) {
+    const latestPointId = Math.max(...pointsIds.keys())
+    await initSequence(`territoire-${codeTerritoire}-points`, latestPointId)
+  }
 
-  const latestPreleveurId = Math.max(...preleveursIds.keys())
-  await initSequence(`territoire-${codeTerritoire}-preleveurs`, latestPreleveurId)
+  if (preleveursIds.size > 0) {
+    const latestPreleveurId = Math.max(...preleveursIds.keys())
+    await initSequence(`territoire-${codeTerritoire}-preleveurs`, latestPreleveurId)
+  }
 
-  const latestExploitationId = Math.max(...exploitationsIds.keys())
-  await initSequence(`territoire-${codeTerritoire}-exploitations`, latestExploitationId)
+  if (exploitationsIds.size > 0) {
+    const latestExploitationId = Math.max(...exploitationsIds.keys())
+    await initSequence(`territoire-${codeTerritoire}-exploitations`, latestExploitationId)
+  }
 
   await mongo.disconnect()
 }
