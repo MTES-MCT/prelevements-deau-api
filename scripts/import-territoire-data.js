@@ -15,16 +15,18 @@ import {
   PRELEVEURS_DEFINITION
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
+import {maxBy} from 'lodash-es'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
+const exploitationsIds = new Map()
 
 function getPointId(id_point) {
-  return pointsIds.get(id_point)
+  return pointsIds.get(Number(id_point))
 }
 
 function getPreleveurId(id_preleveur) {
-  return preleveursIds.get(id_preleveur)
+  return preleveursIds.get(Number(id_preleveur))
 }
 
 function parseAutresNoms(autresNoms) {
@@ -122,8 +124,9 @@ async function preparePoint(point, codeTerritoire) {
   pointToInsert.createdAt = new Date()
   pointToInsert.updatedAt = new Date()
   pointToInsert._id = new ObjectId()
+  pointToInsert.id_point = Number(pointToInsert.id_point)
 
-  pointsIds.set(pointToInsert.id_point, pointToInsert._id)
+  pointsIds.set(Number(pointToInsert.id_point), pointToInsert._id)
 
   return pointToInsert
 }
@@ -153,6 +156,10 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
   exploitationToInsert.territoire = codeTerritoire
   exploitationToInsert.createdAt = new Date()
   exploitationToInsert.updatedAt = new Date()
+  exploitationToInsert._id = new ObjectId()
+  exploitationToInsert.id_exploitation = Number(exploitationToInsert.id_exploitation)
+
+  exploitationsIds.set(Number(exploitationToInsert.id_exploitation, exploitationToInsert._id))
 
   return exploitationToInsert
 }
@@ -169,8 +176,9 @@ async function preparePreleveur(preleveur, codeTerritoire) {
   preleveurToInsert.createdAt = new Date()
   preleveurToInsert.updatedAt = new Date()
   preleveurToInsert._id = new ObjectId()
+  preleveurToInsert.id_preleveur = Number(preleveurToInsert.id_preleveur)
 
-  preleveursIds.set(preleveurToInsert.id_preleveur, preleveurToInsert._id)
+  preleveursIds.set(Number(preleveurToInsert.id_preleveur), preleveurToInsert._id)
 
   return preleveurToInsert
 }
@@ -217,7 +225,7 @@ async function importReglesInExploitations(filePath) {
 
       if (regle) {
         await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation},
+          {id_exploitation: Number(id_exploitation)},
           {$push: {regles: regle}}
         )
       }
@@ -257,7 +265,7 @@ async function importDocumentsInExploitations(filePath) {
 
       if (document) {
         await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation},
+          {id_exploitation: Number(id_exploitation)},
           {$push: {documents: document}}
         )
       }
@@ -296,7 +304,7 @@ async function importModalitesInExploitations(filePath) {
 
       if (modalite) {
         await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation},
+          {id_exploitation: Number(id_exploitation)},
           {$push: {modalites: modalite}}
         )
       }
@@ -439,6 +447,30 @@ async function importData(folderPath, codeTerritoire) {
   await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
+
+  const latestPointId = maxBy([...pointsIds.keys()])
+
+  await mongo.db.collection('sequences').findOneAndUpdate(
+    {name: `territoire-${codeTerritoire}-points`},
+    {$set: {nextId: latestPointId}},
+    {upsert: true}
+  )
+
+  const latestPreleveurId = maxBy([...preleveursIds.keys()])
+
+  await mongo.db.collection('sequences').findOneAndUpdate(
+    {name: `territoire-${codeTerritoire}-preleveurs`},
+    {$set: {nextId: latestPreleveurId}},
+    {upsert: true}
+  )
+
+  const latestExploitationId = maxBy([...exploitationsIds.keys()])
+
+  await mongo.db.collection('sequences').findOneAndUpdate(
+    {name: `territoire-${codeTerritoire}-exploitations`},
+    {$set: {nextId: latestExploitationId}},
+    {upsert: true}
+  )
 
   await mongo.disconnect()
 }
