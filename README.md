@@ -40,6 +40,12 @@ yarn resync-all-dossiers
 db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974'})
 ```
 
+- Exemple (Démarches Simplifiées) :
+
+```mongo
+db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974', demarcheNumber: 1234})
+```
+
 - Ajouter un jeton d'accès dans la collection `tokens` :
 - Exemple :
 
