@@ -160,7 +160,7 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
   exploitationToInsert._id = new ObjectId()
   exploitationToInsert.id_exploitation = Number(exploitationToInsert.id_exploitation)
 
-  exploitationsIds.set(Number(exploitationToInsert.id_exploitation, exploitationToInsert._id))
+  exploitationsIds.set(Number(exploitationToInsert.id_exploitation), exploitationToInsert._id)
 
   return exploitationToInsert
 }
