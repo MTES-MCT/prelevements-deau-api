@@ -1,7 +1,11 @@
 /* eslint-disable n/prefer-global/process */
 /* eslint-disable unicorn/no-process-exit */
 import 'dotenv/config'
+
 import {argv} from 'node:process'
+
+import {chain, keyBy} from 'lodash-es'
+
 import mongo, {ObjectId} from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {getCommune} from '../lib/util/cog.js'
@@ -18,7 +22,8 @@ import {usages} from '../lib/nomenclature.js'
 import {initSequence} from '../lib/util/sequences.js'
 
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
-import {bulkDeletePreleveurs, bulkInsertPreleveurs} from './lib/models/preleveur.js'
+import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
+import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/exploitation.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
@@ -131,7 +136,7 @@ async function preparePoint(point) {
   return pointToInsert
 }
 
-async function prepareExploitation(exploitation, codeTerritoire, exploitationsUsages) {
+async function prepareExploitation(exploitation, exploitationsUsages, {regles, modalites}) {
   const exploitationToInsert = exploitation
 
   if (exploitation.id_point) {
@@ -150,12 +155,9 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
     .filter(u => u.id_exploitation === exploitation.id_exploitation)
     .map(u => parseNomenclature(u.id_usage, usages))
 
-  exploitationToInsert.modalites = []
+  exploitationToInsert.modalites = modalites[exploitation.id_exploitation] || []
   exploitationToInsert.documents = []
-  exploitationToInsert.regles = []
-  exploitationToInsert.territoire = codeTerritoire
-  exploitationToInsert.createdAt = new Date()
-  exploitationToInsert.updatedAt = new Date()
+  exploitationToInsert.regles = regles[exploitation.id_exploitation] || []
   exploitationToInsert._id = new ObjectId()
   exploitationToInsert.id_exploitation = Number(exploitationToInsert.id_exploitation)
 
@@ -202,8 +204,8 @@ async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
   )
 }
 
-async function importReglesInExploitations(filePath) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Insertion des règles dans les exploitations')
+async function extractRegles(filePath) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Extraction des règles')
 
   const regles = await readDataFromCsvFile(
     `${filePath}/regle.csv`,
@@ -217,26 +219,15 @@ async function importReglesInExploitations(filePath) {
     false
   )
 
-  if (regles.length > 0) {
-    const updatePromises = exploitationsRegles.map(async er => {
-      const {id_exploitation, id_regle} = er
-      const regle = regles.find(r => r.id_regle === id_regle)
+  const reglesIndex = keyBy(regles, 'id_regle')
 
-      if (regle) {
-        await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation: Number(id_exploitation)},
-          {$push: {regles: regle}}
-        )
-      }
-    })
-
-    await Promise.all(updatePromises)
-
-    console.log(
-      '\u001B[34;1m%s\u001B[0m',
-      '\n=> Les règles ont été ajoutées aux exploitations\n\n'
-    )
-  }
+  return chain(exploitationsRegles)
+    .groupBy('id_exploitation')
+    .mapValues(items => items.map(item => {
+      const {id_regle, ...regle} = reglesIndex[item.id_regle]
+      return regle
+    }))
+    .value()
 }
 
 async function importDocumentsInExploitations(filePath) {
@@ -279,10 +270,10 @@ async function importDocumentsInExploitations(filePath) {
   }
 }
 
-async function importModalitesInExploitations(filePath) {
+async function extractModalites(filePath) {
   console.log(
     '\n\u001B[35;1;4m%s\u001B[0m',
-    '=> Insertion des modalités de suivi dans les exploitations')
+    '=> Extraction des modalités')
 
   const modalites = await readDataFromCsvFile(
     `${filePath}/modalite-suivi.csv`,
@@ -296,26 +287,15 @@ async function importModalitesInExploitations(filePath) {
     false
   )
 
-  if (modalites.length > 0) {
-    const updatePromises = exploitationsModalites.map(async em => {
-      const {id_exploitation, id_modalite} = em
-      const modalite = modalites.find(r => r.id_modalite === id_modalite)
+  const modalitesIndex = keyBy(modalites, 'id_modalite')
 
-      if (modalite) {
-        await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation: Number(id_exploitation)},
-          {$push: {modalites: modalite}}
-        )
-      }
-    })
-
-    await Promise.all(updatePromises)
-
-    console.log(
-      '\u001B[34;1m%s\u001B[0m',
-      '\n=> Les modalités de suivi ont été ajoutées aux exploitations\n\n'
-    )
-  }
+  return chain(exploitationsModalites)
+    .groupBy('id_exploitation')
+    .mapValues(items => items.map(item => {
+      const {id_modalite, ...modalite} = modalitesIndex[item.id_modalite]
+      return modalite
+    }))
+    .value()
 }
 
 async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
@@ -331,22 +311,27 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
     false
   )
 
-  const exploitationsToInsert = await Promise.all(exploitations.map(exploitation => prepareExploitation(exploitation, codeTerritoire, exploitationsUsages)))
+  const regles = await extractRegles(folderPath)
+  const modalites = await extractModalites(folderPath)
+
+  const exploitationsToInsert = await Promise.all(
+    exploitations.map(
+      exploitation => prepareExploitation(exploitation, exploitationsUsages, {regles, modalites})
+    )
+  )
 
   if (exploitationsToInsert) {
     console.log('\n=> Nettoyage de la collection exploitations...')
-    await mongo.db.collection('exploitations').deleteMany({territoire: codeTerritoire})
+    await bulkDeleteExploitations(codeTerritoire)
     console.log('...Ok !')
 
-    const result = await mongo.db.collection('exploitations').insertMany(exploitationsToInsert)
+    const {insertedCount} = await bulkInsertExploitations(codeTerritoire, exploitationsToInsert)
     console.log(
       '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + result.insertedCount + ' documents insérés dans la collection exploitations\n\n'
+      '\n=> ' + insertedCount + ' documents insérés dans la collection exploitations\n\n'
     )
   }
 
-  await importReglesInExploitations(folderPath)
-  await importModalitesInExploitations(folderPath)
   await importDocumentsInExploitations(folderPath)
 }
 
