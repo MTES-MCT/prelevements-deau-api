@@ -163,10 +163,6 @@ async function prepareExploitation(exploitation, exploitationsUsages, {regles, m
 
   exploitationsIds.set(Number(exploitationToInsert.id_exploitation), exploitationToInsert._id)
 
-  if (exploitationToInsert.modalites.length > 0) {
-    console.log(exploitationToInsert)
-  }
-
   return exploitationToInsert
 }
 
@@ -277,7 +273,7 @@ async function importDocumentsInExploitations(filePath) {
 async function extractModalites(filePath) {
   console.log(
     '\n\u001B[35;1;4m%s\u001B[0m',
-    '=> Insertion des modalités de suivi dans les exploitations')
+    '=> Extraction des modalités')
 
   const modalites = await readDataFromCsvFile(
     `${filePath}/modalite-suivi.csv`,
