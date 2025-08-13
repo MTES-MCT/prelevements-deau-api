@@ -17,6 +17,8 @@ import {
 import {usages} from '../lib/nomenclature.js'
 import {initSequence} from '../lib/util/sequences.js'
 
+import {bulkDeletePreleveurs, bulkInsertPreleveurs} from './lib/models/preleveur.js'
+
 const pointsIds = new Map()
 const preleveursIds = new Map()
 const exploitationsIds = new Map()
@@ -164,7 +166,7 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
   return exploitationToInsert
 }
 
-async function preparePreleveur(preleveur, codeTerritoire) {
+function preparePreleveur(preleveur) {
   const preleveurToInsert = preleveur
 
   if (preleveur.id_beneficiaire) {
@@ -172,9 +174,6 @@ async function preparePreleveur(preleveur, codeTerritoire) {
     delete preleveurToInsert.id_beneficiaire
   }
 
-  preleveurToInsert.territoire = codeTerritoire
-  preleveurToInsert.createdAt = new Date()
-  preleveurToInsert.updatedAt = new Date()
   preleveurToInsert._id = new ObjectId()
   preleveurToInsert.id_preleveur = Number(preleveurToInsert.id_preleveur)
 
@@ -196,7 +195,6 @@ async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
 
   const pointsToInsert = await Promise.all(points.map(point => preparePoint(point, codeTerritoire)))
   const result = await mongo.db.collection('points_prelevement').insertMany(pointsToInsert)
-
   console.log(
     '\u001B[32;1m%s\u001B[0m',
     '\n=> ' + result.insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
@@ -370,14 +368,16 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
 
   if (preleveurs.length > 0) {
     console.log('\n=> Nettoyage de la collection preleveurs...')
-    await mongo.db.collection('preleveurs').deleteMany({territoire: codeTerritoire})
+    await bulkDeletePreleveurs(codeTerritoire)
     console.log('...Ok !')
 
-    const preleveursToInsert = await Promise.all(preleveurs.map(preleveur => preparePreleveur(preleveur, codeTerritoire)))
-    const result = await mongo.db.collection('preleveurs').insertMany(preleveursToInsert)
+    const {insertedCount} = await bulkInsertPreleveurs(
+      codeTerritoire,
+      preleveurs.map(preleveur => preparePreleveur(preleveur))
+    )
     console.log(
       '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + result.insertedCount + ' documents insérés dans la collection preleveurs\n\n'
+      '\n=> ' + insertedCount + ' documents insérés dans la collection preleveurs\n\n'
     )
   }
 }
