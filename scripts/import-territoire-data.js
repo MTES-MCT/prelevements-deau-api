@@ -17,6 +17,7 @@ import {
 import {usages} from '../lib/nomenclature.js'
 import {initSequence} from '../lib/util/sequences.js'
 
+import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
 import {bulkDeletePreleveurs, bulkInsertPreleveurs} from './lib/models/preleveur.js'
 
 const pointsIds = new Map()
@@ -42,7 +43,7 @@ function parseAutresNoms(autresNoms) {
   return result
 }
 
-async function preparePoint(point, codeTerritoire) {
+async function preparePoint(point) {
   const pointToInsert = point
 
   pointToInsert.autresNoms = parseAutresNoms(point.autres_noms)
@@ -122,9 +123,6 @@ async function preparePoint(point, codeTerritoire) {
 
   delete pointToInsert.insee_com
 
-  pointToInsert.territoire = codeTerritoire
-  pointToInsert.createdAt = new Date()
-  pointToInsert.updatedAt = new Date()
   pointToInsert._id = new ObjectId()
   pointToInsert.id_point = Number(pointToInsert.id_point)
 
@@ -190,14 +188,17 @@ async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
   )
 
   console.log('\n=> Nettoyage de la collection points_prelevement...')
-  await mongo.db.collection('points_prelevement').deleteMany({territoire: codeTerritoire})
+  await bulkDeletePointsPrelevement(codeTerritoire)
   console.log('...Ok !')
 
-  const pointsToInsert = await Promise.all(points.map(point => preparePoint(point, codeTerritoire)))
-  const result = await mongo.db.collection('points_prelevement').insertMany(pointsToInsert)
+  const pointsToInsert = await Promise.all(points.map(point => preparePoint(point)))
+  const {insertedCount} = await bulkInsertPointsPrelevement(
+    codeTerritoire,
+    pointsToInsert
+  )
   console.log(
     '\u001B[32;1m%s\u001B[0m',
-    '\n=> ' + result.insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
+    '\n=> ' + insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
   )
 }
 
