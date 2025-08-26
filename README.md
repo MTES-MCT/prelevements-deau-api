@@ -133,6 +133,7 @@ yarn lint
 | `/territoires/:codeTerritoire/points-prelevement` | **GET** * | *Retourne les points à partir du code territoire* |
 | `/territoires/:codeTerritoire/preleveurs` | **GET** * | *Retourne les préleveurs à partir du code territoire* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
+| `/dossiers/stats` | **GET** * | *Retourne le nombre de dossiers par `status`* |
 
 > [!NOTE]
 > *Les routes avec une `*` sont protégées par un jeton*
