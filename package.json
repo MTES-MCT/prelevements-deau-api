@@ -18,8 +18,8 @@
     "test": "ava"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.862.0",
-    "@aws-sdk/lib-storage": "^3.862.0",
+    "@aws-sdk/client-s3": "^3.873.0",
+    "@aws-sdk/lib-storage": "^3.873.0",
     "@etalab/decoupage-administratif": "^5.2.0",
     "@fabnum/demarches-simplifiees": "workspace:*",
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*",
@@ -31,7 +31,7 @@
     "express": "^5.1.0",
     "hash-object": "^5.0.1",
     "http-errors": "^2.0.0",
-    "joi": "^18.0.0",
+    "joi": "^18.0.1",
     "lodash-es": "^4.17.21",
     "mongodb": "~6.16.0",
     "morgan": "^1.10.1",
