@@ -95,17 +95,17 @@ function validateFileNotEmpty(workbook, errors) {
 function validateHeaders(sheet, errors) {
   // Liste des codes et noms attendus
   const expectedHeaders = [
-    {code: '412', name: 'Riv. St Denis La Colline'},
-    {code: '413', name: 'Rav. à Jacques (La Montagne)'},
-    {code: '414', name: 'Rav. Charpentier'},
-    {code: '416', name: 'Ruisseau Emmanuel'},
-    {code: '417', name: 'Petite riv St Jean'},
-    {code: '418', name: 'Riv. Bras Panon'},
-    {code: '419', name: 'Riv. des Galets'},
-    {code: '420', name: 'Rav. Bernica'},
-    {code: '421', name: 'Bras de la Plaine'},
-    {code: '422', name: 'Riv. Des Remparts'},
-    {code: '423', name: 'Source des Allemands'}
+    {code: 412, name: 'Riv. St Denis La Colline'},
+    {code: 413, name: 'Rav. à Jacques (La Montagne)'},
+    {code: 414, name: 'Rav. Charpentier'},
+    {code: 416, name: 'Ruisseau Emmanuel'},
+    {code: 417, name: 'Petite riv St Jean'},
+    {code: 418, name: 'Riv. Bras Panon'},
+    {code: 419, name: 'Riv. des Galets'},
+    {code: 420, name: 'Rav. Bernica'},
+    {code: 421, name: 'Bras de la Plaine'},
+    {code: 422, name: 'Riv. Des Remparts'},
+    {code: 423, name: 'Source des Allemands'}
   ]
 
   const headers = []
@@ -148,7 +148,7 @@ function validateHeaders(sheet, errors) {
       continue
     }
 
-    const code = match[1]
+    const code = Number(match[1])
     const name = match[2]
 
     const isValidHeader = expectedHeaders.some(
