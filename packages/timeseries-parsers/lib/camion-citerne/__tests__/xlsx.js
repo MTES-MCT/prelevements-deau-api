@@ -16,7 +16,7 @@ test('validateCamionCiterneFile - valid file', async t => {
   t.deepEqual(errors, [])
   t.deepEqual(data, [
     {
-      pointPrelevement: '412',
+      pointPrelevement: 412,
       pointPrelevementNom: 'Riv. St Denis La Colline',
       minDate: '2025-01-01',
       maxDate: '2025-01-01',
@@ -49,7 +49,7 @@ test('validateCamionCiterneFile - multi points valid file', async t => {
   t.deepEqual(errors, [])
   t.deepEqual(data, [
     {
-      pointPrelevement: '412',
+      pointPrelevement: 412,
       pointPrelevementNom: 'Riv. St Denis La Colline',
       minDate: '2025-01-01',
       maxDate: '2025-01-04',
@@ -90,7 +90,7 @@ test('validateCamionCiterneFile - multi points valid file', async t => {
       volumePreleveTotal: 124
     },
     {
-      pointPrelevement: '413',
+      pointPrelevement: 413,
       pointPrelevementNom: 'Rav. à Jacques (La Montagne)',
       minDate: '2025-01-01',
       maxDate: '2025-01-06',

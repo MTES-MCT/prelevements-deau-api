@@ -127,15 +127,15 @@ function consolidateData(rawData) {
 
 function parsePointPrelevement(value) {
   if (/^\d+\s\|\s(.+)$/.test(value)) {
-    return value.split(' | ')[0].trim()
+    return Number(value.split(' | ')[0].trim())
   }
 
   if (/^\d+\s-\s(.+)$/.test(value)) {
-    return value.split(' - ')[0].trim()
+    return Number(value.split(' - ')[0].trim())
   }
 
   if (/^\d+\s(.+)$/.test(value)) {
-    return value.split(' ')[0].trim()
+    return Number(value.split(' ')[0].trim())
   }
 
   throw new Error(`Point de prélèvement invalide : ${value}`)

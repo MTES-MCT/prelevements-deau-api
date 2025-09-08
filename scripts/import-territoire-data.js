@@ -30,11 +30,11 @@ const preleveursIds = new Map()
 const exploitationsIds = new Map()
 
 function getPointId(id_point) {
-  return pointsIds.get(Number(id_point))
+  return pointsIds.get(id_point)
 }
 
 function getPreleveurId(id_preleveur) {
-  return preleveursIds.get(Number(id_preleveur))
+  return preleveursIds.get(id_preleveur)
 }
 
 function parseAutresNoms(autresNoms) {
@@ -129,9 +129,8 @@ async function preparePoint(point) {
   delete pointToInsert.insee_com
 
   pointToInsert._id = new ObjectId()
-  pointToInsert.id_point = Number(pointToInsert.id_point)
 
-  pointsIds.set(Number(pointToInsert.id_point), pointToInsert._id)
+  pointsIds.set(pointToInsert.id_point, pointToInsert._id)
 
   return pointToInsert
 }
@@ -159,9 +158,8 @@ async function prepareExploitation(exploitation, exploitationsUsages, {regles, m
   exploitationToInsert.documents = []
   exploitationToInsert.regles = regles[exploitation.id_exploitation] || []
   exploitationToInsert._id = new ObjectId()
-  exploitationToInsert.id_exploitation = Number(exploitationToInsert.id_exploitation)
 
-  exploitationsIds.set(Number(exploitationToInsert.id_exploitation), exploitationToInsert._id)
+  exploitationsIds.set(exploitationToInsert.id_exploitation, exploitationToInsert._id)
 
   return exploitationToInsert
 }
@@ -175,9 +173,8 @@ function preparePreleveur(preleveur) {
   }
 
   preleveurToInsert._id = new ObjectId()
-  preleveurToInsert.id_preleveur = Number(preleveurToInsert.id_preleveur)
 
-  preleveursIds.set(Number(preleveurToInsert.id_preleveur), preleveurToInsert._id)
+  preleveursIds.set(preleveurToInsert.id_preleveur, preleveurToInsert._id)
 
   return preleveurToInsert
 }
@@ -255,7 +252,7 @@ async function importDocumentsInExploitations(filePath) {
 
       if (document) {
         await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation: Number(id_exploitation)},
+          {id_exploitation},
           {$push: {documents: document}}
         )
       }
