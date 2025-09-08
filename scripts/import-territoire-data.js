@@ -16,7 +16,11 @@ import {
   MODALITES_DEFINITION,
   POINTS_PRELEVEMENT_DEFINITION,
   EXPLOITATIONS_DEFINITION,
-  PRELEVEURS_DEFINITION
+  PRELEVEURS_DEFINITION,
+  EXPLOITATIONS_USAGES_DEFINITION,
+  EXPLOITATIONS_REGLES_DEFINITION,
+  EXPLOITATIONS_DOCUMENTS_DEFINITION,
+  EXPLOITATIONS_MODALITES_DEFINITION
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
 import {initSequence} from '../lib/util/sequences.js'
@@ -212,7 +216,7 @@ async function extractRegles(filePath) {
 
   const exploitationsRegles = await readDataFromCsvFile(
     `${filePath}/exploitation-regle.csv`,
-    null,
+    EXPLOITATIONS_REGLES_DEFINITION,
     false
   )
 
@@ -241,7 +245,7 @@ async function importDocumentsInExploitations(filePath) {
 
   const exploitationsDocuments = await readDataFromCsvFile(
     `${filePath}/exploitation-document.csv`,
-    null,
+    EXPLOITATIONS_DOCUMENTS_DEFINITION,
     false
   )
 
@@ -280,7 +284,7 @@ async function extractModalites(filePath) {
 
   const exploitationsModalites = await readDataFromCsvFile(
     `${filePath}/exploitation-modalite-suivi.csv`,
-    null,
+    EXPLOITATIONS_MODALITES_DEFINITION,
     false
   )
 
@@ -299,7 +303,7 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
   const exploitationsUsages = await readDataFromCsvFile(
     folderPath + '/exploitation-usage.csv',
-    null,
+    EXPLOITATIONS_USAGES_DEFINITION,
     false
   )
   const exploitations = await readDataFromCsvFile(
