@@ -67,15 +67,6 @@ _(Il faut préciser le code du territoire ainsi que le chemin du dossier contena
 yarn import-territoire-data DEP-974 /chemin/du/dossier
 ```
 
- - Importer les données historiques (optionnel) :
-
-Importe les anciens volumes journaliers prélevés à partir de fichiers CSV (`serie-donnees.csv`, `resultat-suivi.csv`, `exploitation-serie.csv`) en les enregistrant dans la base MongoDB. Ce script doit être utilisé pour migrer des données historiques non présentes sur Démarches Simplifiées.
-_(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
-
- ```bash
- yarn import-territoire-historical-data /chemin/du/dossier
- ```
-
 ### Autres scripts utiles
 
 - **download-csv** : télécharge l'ensemble des fichiers CSV depuis la source indiquée par `CSV_SOURCE_URL`.
