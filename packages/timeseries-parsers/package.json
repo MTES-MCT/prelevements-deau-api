@@ -1,6 +1,6 @@
 {
   "name": "@fabnum/prelevements-deau-timeseries-parsers",
-  "version": "0.0.3",
+  "version": "0.0.8",
   "license": "MIT",
   "main": "index.js",
   "type": "module",

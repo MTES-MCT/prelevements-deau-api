@@ -2,7 +2,7 @@
 
 Ce projet vise à collecter, organiser et analyser les données de prélèvement d'eau provenant de Démarche Simplifiée. Il fournit divers scripts pour récupérer les dossiers de prélèvements, extraire des données précises et générer des rapports.
 
-Consultez la [documentation de validation](docs/validation.md) pour les erreurs et avertissements possibles.
+Consultez la [documentation de validation](packages/timeseries-parsers/docs/validation.md) pour les erreurs et avertissements possibles.
 
 ## Installation
 
@@ -38,6 +38,12 @@ yarn resync-all-dossiers
 
 ```mongo
 db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974'})
+```
+
+- Exemple (Démarches Simplifiées) :
+
+```mongo
+db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974', demarcheNumber: 1234})
 ```
 
 - Ajouter un jeton d'accès dans la collection `tokens` :
@@ -84,6 +90,10 @@ _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
   ```bash
   node scripts/read-multi-params.js <fichier.csv>
   ```
+- **validate-declaration-file** : valide un fichier de déclaration (camion citerne ou multi-paramètres).
+  ```bash
+  node scripts/validate-declaration-file.js <filePath> [camion-citerne|multi-params]
+  ```
 
 ### Lancer l'application :
 ```bash
@@ -123,6 +133,7 @@ yarn lint
 | `/territoires/:codeTerritoire/points-prelevement` | **GET** * | *Retourne les points à partir du code territoire* |
 | `/territoires/:codeTerritoire/preleveurs` | **GET** * | *Retourne les préleveurs à partir du code territoire* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
+| `/dossiers/stats` | **GET** * | *Retourne le nombre de dossiers par `status`* |
 
 > [!NOTE]
 > *Les routes avec une `*` sont protégées par un jeton*
@@ -159,8 +170,8 @@ yarn lint
 | `statut` | string | oui |
 | `raison_abandon` | string | non |
 | `remarque` | string | non |
-| `id_point` | string | oui |
-| `id_preleveur` | string | oui |
+| `point` | ObjectId | oui |
+| `preleveur` | ObjectId | oui |
 | `usages` | array | oui |
 | `regles` | array | non |
 | `documents` | array | non |

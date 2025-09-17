@@ -108,8 +108,9 @@ function consolidateData(rawData) {
     throw new Error('Le fichier ne contient pas de données de volume prélevé')
   }
 
+  const dailyRowsWithDates = filter(dailyDataTab.rows, row => row.date)
   const sortedDailyRows = sortBy(
-    filter(dailyDataTab.rows, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
+    filter(dailyRowsWithDates, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
     'date'
   )
 
@@ -126,15 +127,15 @@ function consolidateData(rawData) {
 
 function parsePointPrelevement(value) {
   if (/^\d+\s\|\s(.+)$/.test(value)) {
-    return value.split(' | ')[0].trim()
+    return Number(value.split(' | ')[0].trim())
   }
 
   if (/^\d+\s-\s(.+)$/.test(value)) {
-    return value.split(' - ')[0].trim()
+    return Number(value.split(' - ')[0].trim())
   }
 
   if (/^\d+\s(.+)$/.test(value)) {
-    return value.split(' ')[0].trim()
+    return Number(value.split(' ')[0].trim())
   }
 
   throw new Error(`Point de prélèvement invalide : ${value}`)
@@ -142,7 +143,11 @@ function parsePointPrelevement(value) {
 
 function extractDataSheetNames(workbook) {
   return workbook.SheetNames
-    .filter(name => name.toLowerCase().startsWith('data | t='))
+    .filter(name => name
+      .trim()
+      .replaceAll(/\s+/g, ' ')
+      .toLowerCase()
+      .startsWith('data | t='))
 }
 
 function validateStructure(workbook) {

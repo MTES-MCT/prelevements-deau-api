@@ -54,7 +54,7 @@ async function downloadFile(url, filename) {
 }
 
 try {
-  Promise.all(
+  await Promise.all(
     filenames.map(filename => downloadFile(`${CSV_SOURCE_URL}/${filename}`, filename))
   )
 } catch (error) {

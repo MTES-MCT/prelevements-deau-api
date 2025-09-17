@@ -11,6 +11,12 @@ import {
 
 import {ErrorCollector} from '../error-collector.js'
 
+/**
+ * Valide et extrait les données d'un onglet "data".
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul, avec les propriétés `name` et `sheet`.
+ * @returns {{errors: Array, data: object}} Un objet contenant les données extraites et une liste d'erreurs.
+ */
 export function validateAndExtract(dataSheet) {
   const data = {}
   const errors = []
@@ -56,6 +62,12 @@ const NORMALIZED_PERIODS = {
   autres: 'autre'
 }
 
+/**
+ * Extrait la période à partir du nom de l'onglet.
+ *
+ * @param {string} sheetName Le nom de l'onglet.
+ * @returns {string|undefined} La chaîne de période normalisée, ou undefined si non trouvée.
+ */
 function extractPeriod(sheetName) {
   const sanitized = sheetName.replaceAll('\u00A0', ' ')
   // Allow optional spaces and more word chars
@@ -69,6 +81,12 @@ function extractPeriod(sheetName) {
   return NORMALIZED_PERIODS[period] || period
 }
 
+/**
+ * Valide la structure des en-têtes de l'onglet de données.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @returns {{errors: Array}} Un objet contenant une liste d'erreurs de structure.
+ */
 function validateStructure(dataSheet) {
   const errors = []
 
@@ -106,68 +124,136 @@ function validateStructure(dataSheet) {
   return {errors}
 }
 
+/**
+ * Valide et extrait tous les paramètres de l'onglet de données.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @param {Array<object>} dataRows Les lignes de données extraites de l'onglet.
+ * @param {{errorCollector: ErrorCollector}} param2 L'instance du collecteur d'erreurs.
+ * @returns {Array<object>} Un tableau d'objets de paramètres extraits.
+ */
 function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
   const allowedFrequenceValues = getAllowedFrequenceValuesFromSheetName(dataSheet.name)
   const parameters = []
-
   // Pour chaque paramètre utilisé, valider les entrées de données
   for (const paramIndex of [2, 3, 4, 5, 6, 7, 8]) {
     const fields = validateAndExtractParamFields(dataSheet, paramIndex, {errorCollector})
-
     if (!fields) {
       continue
     }
 
-    const {frequence} = fields
-    const paramName = fields.nom_parametre
+    const {frequence, nom_parametre: paramName, date_debut, date_fin} = fields
 
-    if (!frequence) {
-      errorCollector.addSingleError({
-        message: `Fréquence non renseignée pour le paramètre ${paramName}`
-      })
-    }
+    validateParameterFrequency({frequence, paramName, allowedFrequenceValues, paramIndex, errorCollector})
 
-    if (frequence && allowedFrequenceValues && !allowedFrequenceValues.includes(frequence)) {
-      errorCollector.addSingleError({
-        message: `Le champ 'frequence' (cellule ${String.fromCodePoint(65 + paramIndex)}4 a été modifié pour le paramètre '${paramName}'. Attendu : '${allowedFrequenceValues.join(',')}', trouvé : '${frequence}'`
-      })
-    }
-
-    // Valider les entrées de données pour ce paramètre
     const isHeureMandatory = isFrequencyLessThanOneDay(frequence)
     validateParameterData(dataRows, {paramIndex, paramName, isHeureMandatory, errorCollector})
     validateTimeStepConsistency(dataRows, {frequence, paramName, errorCollector})
 
-    // Extraction des données du paramètre
-    const paramDefinition = PARAM_TYPE_DEFINITIONS[paramName]
-    const validate = paramDefinition?.validate
+    validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin, errorCollector})
 
-    const rows = []
-
-    for (const row of dataRows) {
-      const valeur = row.values[paramIndex]
-
-      if (valeur === undefined) {
-        continue
-      }
-
-      if (validate && !validate(valeur)) {
-        errorCollector.addSingleError({
-          message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}`
-        })
-      } else {
-        rows.push({
-          date: row.date,
-          heure: row.heure,
-          valeur
-        })
-      }
-    }
+    const rows = extractParameterRows(dataRows, paramIndex, paramName, errorCollector)
 
     parameters.push({paramIndex, ...fields, rows})
   }
 
   return parameters
+}
+
+/**
+ * Valide la fréquence d'un seul paramètre.
+ *
+ * @param {object} options L'objet des options.
+ * @param {string} options.frequence La valeur de la fréquence.
+ * @param {string} options.paramName Le nom du paramètre.
+ * @param {Array<string>|null} options.allowedFrequenceValues Les valeurs de fréquence autorisées depuis le nom de l'onglet.
+ * @param {number} options.paramIndex L'index de colonne du paramètre.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
+function validateParameterFrequency({frequence, paramName, allowedFrequenceValues, paramIndex, errorCollector}) {
+  if (!frequence) {
+    errorCollector.addSingleError({
+      message: `Fréquence non renseignée pour le paramètre ${paramName}`
+    })
+  }
+
+  if (frequence && allowedFrequenceValues && !allowedFrequenceValues.includes(frequence)) {
+    errorCollector.addSingleError({
+      message: `Le champ 'frequence' (cellule ${String.fromCodePoint(65 + paramIndex)}4 a été modifié pour le paramètre '${paramName}'. Attendu : '${allowedFrequenceValues.join(',')}', trouvé : '${frequence}'`
+    })
+  }
+}
+
+/**
+ * Valide que les points de données pour un paramètre se situent dans la plage de dates spécifiée.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {object} options L'objet des options.
+ * @param {number} options.paramIndex L'index de colonne du paramètre.
+ * @param {string} options.date_debut La date de début.
+ * @param {string} options.date_fin La date de fin.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
+function validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin, errorCollector}) {
+  if (!date_debut && !date_fin) {
+    return
+  }
+
+  const startDate = date_debut ? new Date(`${date_debut}T00:00:00Z`) : null
+  const endDate = date_fin ? new Date(`${date_fin}T00:00:00Z`) : null
+
+  for (const row of dataRows) {
+    if (row.values[paramIndex] === undefined || !row.date) {
+      continue
+    }
+
+    const rowDate = new Date(`${row.date}T00:00:00Z`)
+
+    if ((startDate && rowDate < startDate) || (endDate && rowDate > endDate)) {
+      const cellAddress = XLSX.utils.encode_cell({r: row.rowNum, c: 0})
+      errorCollector.addError('invalidDateRange', cellAddress, {
+        startDate: date_debut,
+        endDate: date_fin
+      })
+    }
+  }
+}
+
+/**
+ * Extrait et valide les lignes de données pour un seul paramètre.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {number} paramIndex L'index de colonne du paramètre.
+ * @param {string} paramName Le nom du paramètre.
+ * @param {ErrorCollector} errorCollector L'instance du collecteur d'erreurs.
+ * @returns {Array<object>} Les lignes extraites pour le paramètre.
+ */
+function extractParameterRows(dataRows, paramIndex, paramName, errorCollector) {
+  const paramDefinition = PARAM_TYPE_DEFINITIONS[paramName]
+  const validate = paramDefinition?.validate
+  const rows = []
+
+  for (const row of dataRows) {
+    const valeur = row.values[paramIndex]
+
+    if (valeur === undefined) {
+      continue
+    }
+
+    if (validate && !validate(valeur)) {
+      errorCollector.addSingleError({
+        message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}`
+      })
+    } else {
+      rows.push({
+        date: row.date,
+        heure: row.heure,
+        valeur
+      })
+    }
+  }
+
+  return rows
 }
 
 const UNITE_ALLOWED_VALUES = [
@@ -181,6 +267,12 @@ const UNITE_ALLOWED_VALUES = [
   'autre'
 ]
 
+/**
+ * Normalise une chaîne d'unité pour la comparaison.
+ *
+ * @param {string} value La chaîne d'unité.
+ * @returns {string} La chaîne d'unité normalisée.
+ */
 function degradeUniteValue(value) {
   return value
     .toLowerCase()
@@ -193,6 +285,14 @@ function degradeUniteValue(value) {
 const UNITE_DEGRADED_ALLOWED_VALUES = UNITE_ALLOWED_VALUES
   .map(value => degradeUniteValue(value))
 
+/**
+ * Valide et extrait les champs de métadonnées pour une seule colonne de paramètre.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @param {number} colIndex L'index de colonne du paramètre.
+ * @param {{errorCollector: ErrorCollector}} param2 L'instance du collecteur d'erreurs.
+ * @returns {object|undefined} Les champs extraits, ou undefined si la colonne de paramètre est vide.
+ */
 function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
   const {sheet} = dataSheet
 
@@ -301,8 +401,23 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
   }
 
   for (const {fieldName, type, enum: enumValues, row, required, parse} of definitions) {
-    const value = readAsGivenType(sheet, row, colIndex, type)
+    let value
     const cellAddress = XLSX.utils.encode_cell({c: colIndex, r: row})
+
+    try {
+      value = readAsGivenType(sheet, row, colIndex, type)
+    } catch (error) {
+      if (error.message.includes('not supported')) {
+        throw error // Re-throw code errors
+      }
+
+      // Treat as a validation error
+      errorCollector.addSingleError({
+        message: `Le champ '${fieldName}' (cellule ${cellAddress}) n'est pas valide pour le paramètre '${paramName}'`,
+        explanation: error.message
+      })
+      continue // Skip further validation for this field
+    }
 
     fields[fieldName] = value
 
@@ -324,37 +439,28 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       } catch (error) {
         errorCollector.addSingleError({
           message: `Le champ '${fieldName}' (cellule ${cellAddress}) n'est pas valide pour le paramètre '${paramName}'`,
-          explaination: error.message
-        })
-      }
-    }
-
-    if (fieldName === 'date_debut' && value !== undefined) {
-      // Valider que 'date_debut' est une date valide
-      const date = readAsDateString(sheet, row, colIndex)
-
-      if (!date) {
-        errorCollector.addSingleError({
-          message: `Le champ 'date_debut' (cellule ${cellAddress}) doit être une date valide pour le paramètre '${paramName}'`
-        })
-      }
-    }
-
-    if (fieldName === 'date_fin' && value) {
-      // Valider que 'date_fin' est une date valide
-      const date = readAsDateString(sheet, row, colIndex)
-
-      if (!date) {
-        errorCollector.addSingleError({
-          message: `Le champ 'date_fin' (cellule ${cellAddress}) doit être une date valide pour le paramètre '${paramName}'`
+          explanation: error.message
         })
       }
     }
   }
 
+  // Check for date consistency after processing all fields
+  if (fields.date_debut && fields.date_fin && fields.date_debut > fields.date_fin) {
+    errorCollector.addSingleError({
+      message: `La date de début pour le paramètre '${paramName}' ne peut pas être postérieure à la date de fin.`
+    })
+  }
+
   return fields
 }
 
+/**
+ * Vérifie s'il y a des données dans la section des lignes de données d'un onglet.
+ *
+ * @param {object} sheet L'objet de la feuille de calcul de xlsx.
+ * @returns {boolean} Vrai si des données sont trouvées, sinon faux.
+ */
 function checkIfSheetHasData(sheet) {
   // Définir la plage de la feuille
   const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1')
@@ -376,6 +482,13 @@ function checkIfSheetHasData(sheet) {
   return false // Aucune donnée trouvée
 }
 
+/**
+ * Combine une chaîne de date et une chaîne d'heure en une chaîne de type ISO.
+ *
+ * @param {string} date La chaîne de date (YYYY-MM-DD).
+ * @param {string} [time] La chaîne d'heure (HH:mm:ss). Par défaut '00:00:00'.
+ * @returns {string|undefined} La chaîne combinée, ou undefined si la date est manquante.
+ */
 function combineDateAndTime(date, time) {
   if (!date) {
     return
@@ -384,12 +497,22 @@ function combineDateAndTime(date, time) {
   return `${date}T${time || '00:00:00'}Z`
 }
 
+/**
+ * Valide les données pour un seul paramètre sur toutes les lignes.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {object} options L'objet des options.
+ * @param {number} options.paramIndex L'index de colonne du paramètre.
+ * @param {string} options.paramName Le nom du paramètre.
+ * @param {boolean} options.isHeureMandatory Indique si la partie heure est obligatoire.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
 function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandatory, errorCollector}) {
   for (const row of dataRows) {
     const {rowNum} = row
     const valeur = row.values[paramIndex]
 
-    if (valeur === null) {
+    if (valeur === undefined && dataRows.length > 1) {
       // Si 'Valeur' est manquante, 'Remarque' doit être renseignée
       const {remarque} = row
       if (!remarque) {
@@ -401,11 +524,11 @@ function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandator
     }
 
     // Vérifier si 'date' et 'heure' sont présents comme requis
-    if (!row.date || (isHeureMandatory && !row.heure)) {
+    if (!row.dateCellValue || (isHeureMandatory && !row.heure)) {
       const dateCellAddress = XLSX.utils.encode_cell({c: 0, r: rowNum})
       const heureCellAddress = XLSX.utils.encode_cell({c: 1, r: rowNum})
 
-      if (!row.date) {
+      if (!row.dateCellValue) {
         errorCollector.addError('missingDate', dateCellAddress)
       }
 
@@ -416,6 +539,15 @@ function validateParameterData(dataRows, {paramIndex, paramName, isHeureMandator
   }
 }
 
+/**
+ * Valide que le pas de temps entre les points de données est cohérent avec la fréquence spécifiée.
+ *
+ * @param {Array<object>} dataRows Les lignes de données.
+ * @param {object} options L'objet des options.
+ * @param {string} options.frequence La fréquence.
+ * @param {string} options.paramName Le nom du paramètre.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
+ */
 function validateTimeStepConsistency(dataRows, {frequence, paramName, errorCollector}) {
   const dateTimes = dataRows.map(row => {
     const {date, heure} = row
@@ -428,8 +560,9 @@ function validateTimeStepConsistency(dataRows, {frequence, paramName, errorColle
       return null
     }
 
-    return date
-  }).filter(dateTime => dateTime && dateTime instanceof Date && !Number.isNaN(dateTime))
+    // Pour les fréquences journalières, on s'assure que la date est bien interprétée en UTC
+    return date ? new Date(`${date}T00:00:00Z`) : null
+  }).filter(dateTime => dateTime instanceof Date && !Number.isNaN(dateTime))
 
   if (dateTimes.length < 2) {
     // Pas assez de données pour vérifier la cohérence
@@ -451,17 +584,25 @@ function validateTimeStepConsistency(dataRows, {frequence, paramName, errorColle
   const toleranceMs = 1000
 
   // Calculer les différences de temps entre les entrées consécutives
-
   for (let i = 1; i < dateTimes.length; i++) {
-    const diffMs = dateTimes[i] - dateTimes[i - 1]
+    const diffMs = dateTimes[i].getTime() - dateTimes[i - 1].getTime()
 
     if (Math.abs(diffMs - expectedDiffMs) > toleranceMs) {
-      const dateCellAddress = XLSX.utils.encode_cell({r: dataRows[i].rowNum, c: 0})
-      errorCollector.addError('invalidInterval', dateCellAddress)
+      const prevCellAddress = XLSX.utils.encode_cell({r: dataRows[i - 1].rowNum, c: 0})
+      const currentCellAddress = XLSX.utils.encode_cell({r: dataRows[i].rowNum, c: 0})
+      errorCollector.addError('invalidInterval', prevCellAddress)
+      errorCollector.addError('invalidInterval', currentCellAddress)
     }
   }
 }
 
+/**
+ * Extrait toutes les lignes de données de l'onglet.
+ *
+ * @param {object} dataSheet L'objet de la feuille de calcul.
+ * @param {{errorCollector: ErrorCollector}} param1 L'instance du collecteur d'erreurs.
+ * @returns {{dataRows: Array<object>, usedParameterColumns: Array<number>}} Les lignes extraites et les index des colonnes qui contiennent des données.
+ */
 function getDataRows(dataSheet, {errorCollector}) {
   const {sheet} = dataSheet
 
@@ -532,7 +673,8 @@ function getDataRows(dataSheet, {errorCollector}) {
         date,
         heure,
         values,
-        remarque
+        remarque,
+        dateCellValue
       })
     }
   }
@@ -543,6 +685,12 @@ function getDataRows(dataSheet, {errorCollector}) {
   }
 }
 
+/**
+ * Récupère le nom et l'index de colonne de toutes les colonnes de paramètres.
+ *
+ * @param {object} sheet L'objet de la feuille de calcul de xlsx.
+ * @returns {Array<{paramName: string, colIndex: number}>} Un tableau de définitions de colonnes de paramètres.
+ */
 function getParameterColumns(sheet) {
   // Retourne un tableau d'objets avec les noms des paramètres et les index de colonnes
   const parameterColumns = []
@@ -561,6 +709,12 @@ function getParameterColumns(sheet) {
   return parameterColumns
 }
 
+/**
+ * Détermine les valeurs de fréquence autorisées en fonction du nom de l'onglet.
+ *
+ * @param {string} sheetName Le nom de l'onglet.
+ * @returns {Array<string>|null} Un tableau de chaînes de fréquence autorisées, ou null si non contraint par le nom de l'onglet.
+ */
 function getAllowedFrequenceValuesFromSheetName(sheetName) {
   if (sheetName.includes('15 minutes')) {
     return ['15 minutes']
@@ -581,12 +735,24 @@ function getAllowedFrequenceValuesFromSheetName(sheetName) {
   return null
 }
 
+/**
+ * Vérifie si une fréquence est inférieure à un jour.
+ *
+ * @param {string} frequency La chaîne de fréquence.
+ * @returns {boolean} Vrai si la fréquence est inférieure à un jour.
+ */
 // Fonction pour déterminer si la fréquence est inférieure à un jour
 function isFrequencyLessThanOneDay(frequency) {
   const frequenciesLessThanOneDay = ['15 minutes', 'heure', 'minute', 'seconde']
   return frequenciesLessThanOneDay.includes(frequency) || false
 }
 
+/**
+ * Calcule la différence de temps attendue en millisecondes pour une fréquence donnée.
+ *
+ * @param {string} frequency La chaîne de fréquence.
+ * @returns {number|null} La différence attendue en millisecondes, ou null si inconnue.
+ */
 function getExpectedTimeDifference(frequency) {
   const msPerMinute = 60 * 1000
   const msPerHour = 60 * msPerMinute

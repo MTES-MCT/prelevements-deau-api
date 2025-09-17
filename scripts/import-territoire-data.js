@@ -1,8 +1,12 @@
 /* eslint-disable n/prefer-global/process */
 /* eslint-disable unicorn/no-process-exit */
 import 'dotenv/config'
+
 import {argv} from 'node:process'
-import mongo from '../lib/util/mongo.js'
+
+import {chain, keyBy} from 'lodash-es'
+
+import mongo, {ObjectId} from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {getCommune} from '../lib/util/cog.js'
 import {parseNomenclature} from '../lib/import/generic.js'
@@ -12,9 +16,30 @@ import {
   MODALITES_DEFINITION,
   POINTS_PRELEVEMENT_DEFINITION,
   EXPLOITATIONS_DEFINITION,
-  PRELEVEURS_DEFINITION
+  PRELEVEURS_DEFINITION,
+  EXPLOITATIONS_USAGES_DEFINITION,
+  EXPLOITATIONS_REGLES_DEFINITION,
+  EXPLOITATIONS_DOCUMENTS_DEFINITION,
+  EXPLOITATIONS_MODALITES_DEFINITION
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
+import {initSequence} from '../lib/util/sequences.js'
+
+import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
+import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
+import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/exploitation.js'
+
+const pointsIds = new Map()
+const preleveursIds = new Map()
+const exploitationsIds = new Map()
+
+function getPointId(id_point) {
+  return pointsIds.get(id_point)
+}
+
+function getPreleveurId(id_preleveur) {
+  return preleveursIds.get(id_preleveur)
+}
 
 function parseAutresNoms(autresNoms) {
   if (!autresNoms) {
@@ -27,7 +52,7 @@ function parseAutresNoms(autresNoms) {
   return result
 }
 
-async function preparePoint(point, codeTerritoire) {
+async function preparePoint(point) {
   const pointToInsert = point
 
   pointToInsert.autresNoms = parseAutresNoms(point.autres_noms)
@@ -107,18 +132,23 @@ async function preparePoint(point, codeTerritoire) {
 
   delete pointToInsert.insee_com
 
-  pointToInsert.territoire = codeTerritoire
-  pointToInsert.createdAt = new Date()
-  pointToInsert.updatedAt = new Date()
+  pointToInsert._id = new ObjectId()
+
+  pointsIds.set(pointToInsert.id_point, pointToInsert._id)
 
   return pointToInsert
 }
 
-async function prepareExploitation(exploitation, codeTerritoire, exploitationsUsages) {
+async function prepareExploitation(exploitation, exploitationsUsages, {regles, modalites}) {
   const exploitationToInsert = exploitation
 
+  if (exploitation.id_point) {
+    exploitationToInsert.point = getPointId(exploitation.id_point)
+    delete exploitationToInsert.id_point
+  }
+
   if (exploitation.id_beneficiaire) {
-    exploitationToInsert.id_preleveur = exploitation.id_beneficiaire
+    exploitationToInsert.preleveur = getPreleveurId(exploitation.id_beneficiaire)
     delete exploitationToInsert.id_beneficiaire
   }
 
@@ -128,17 +158,17 @@ async function prepareExploitation(exploitation, codeTerritoire, exploitationsUs
     .filter(u => u.id_exploitation === exploitation.id_exploitation)
     .map(u => parseNomenclature(u.id_usage, usages))
 
-  exploitationToInsert.modalites = []
+  exploitationToInsert.modalites = modalites[exploitation.id_exploitation] || []
   exploitationToInsert.documents = []
-  exploitationToInsert.regles = []
-  exploitationToInsert.territoire = codeTerritoire
-  exploitationToInsert.createdAt = new Date()
-  exploitationToInsert.updatedAt = new Date()
+  exploitationToInsert.regles = regles[exploitation.id_exploitation] || []
+  exploitationToInsert._id = new ObjectId()
+
+  exploitationsIds.set(exploitationToInsert.id_exploitation, exploitationToInsert._id)
 
   return exploitationToInsert
 }
 
-async function preparePreleveur(preleveur, codeTerritoire) {
+function preparePreleveur(preleveur) {
   const preleveurToInsert = preleveur
 
   if (preleveur.id_beneficiaire) {
@@ -146,9 +176,9 @@ async function preparePreleveur(preleveur, codeTerritoire) {
     delete preleveurToInsert.id_beneficiaire
   }
 
-  preleveurToInsert.territoire = codeTerritoire
-  preleveurToInsert.createdAt = new Date()
-  preleveurToInsert.updatedAt = new Date()
+  preleveurToInsert._id = new ObjectId()
+
+  preleveursIds.set(preleveurToInsert.id_preleveur, preleveurToInsert._id)
 
   return preleveurToInsert
 }
@@ -161,20 +191,22 @@ async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
   )
 
   console.log('\n=> Nettoyage de la collection points_prelevement...')
-  await mongo.db.collection('points_prelevement').deleteMany({territoire: codeTerritoire})
+  await bulkDeletePointsPrelevement(codeTerritoire)
   console.log('...Ok !')
 
-  const pointsToInsert = await Promise.all(points.map(point => preparePoint(point, codeTerritoire)))
-  const result = await mongo.db.collection('points_prelevement').insertMany(pointsToInsert)
-
+  const pointsToInsert = await Promise.all(points.map(point => preparePoint(point)))
+  const {insertedCount} = await bulkInsertPointsPrelevement(
+    codeTerritoire,
+    pointsToInsert
+  )
   console.log(
     '\u001B[32;1m%s\u001B[0m',
-    '\n=> ' + result.insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
+    '\n=> ' + insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
   )
 }
 
-async function importReglesInExploitations(filePath) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Insertion des règles dans les exploitations')
+async function extractRegles(filePath) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Extraction des règles')
 
   const regles = await readDataFromCsvFile(
     `${filePath}/regle.csv`,
@@ -184,30 +216,19 @@ async function importReglesInExploitations(filePath) {
 
   const exploitationsRegles = await readDataFromCsvFile(
     `${filePath}/exploitation-regle.csv`,
-    null,
+    EXPLOITATIONS_REGLES_DEFINITION,
     false
   )
 
-  if (regles.length > 0) {
-    const updatePromises = exploitationsRegles.map(async er => {
-      const {id_exploitation, id_regle} = er
-      const regle = regles.find(r => r.id_regle === id_regle)
+  const reglesIndex = keyBy(regles, 'id_regle')
 
-      if (regle) {
-        await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation},
-          {$push: {regles: regle}}
-        )
-      }
-    })
-
-    await Promise.all(updatePromises)
-
-    console.log(
-      '\u001B[34;1m%s\u001B[0m',
-      '\n=> Les règles ont été ajoutées aux exploitations\n\n'
-    )
-  }
+  return chain(exploitationsRegles)
+    .groupBy('id_exploitation')
+    .mapValues(items => items.map(item => {
+      const {id_regle, ...regle} = reglesIndex[item.id_regle]
+      return regle
+    }))
+    .value()
 }
 
 async function importDocumentsInExploitations(filePath) {
@@ -224,7 +245,7 @@ async function importDocumentsInExploitations(filePath) {
 
   const exploitationsDocuments = await readDataFromCsvFile(
     `${filePath}/exploitation-document.csv`,
-    null,
+    EXPLOITATIONS_DOCUMENTS_DEFINITION,
     false
   )
 
@@ -250,10 +271,10 @@ async function importDocumentsInExploitations(filePath) {
   }
 }
 
-async function importModalitesInExploitations(filePath) {
+async function extractModalites(filePath) {
   console.log(
     '\n\u001B[35;1;4m%s\u001B[0m',
-    '=> Insertion des modalités de suivi dans les exploitations')
+    '=> Extraction des modalités')
 
   const modalites = await readDataFromCsvFile(
     `${filePath}/modalite-suivi.csv`,
@@ -263,37 +284,26 @@ async function importModalitesInExploitations(filePath) {
 
   const exploitationsModalites = await readDataFromCsvFile(
     `${filePath}/exploitation-modalite-suivi.csv`,
-    null,
+    EXPLOITATIONS_MODALITES_DEFINITION,
     false
   )
 
-  if (modalites.length > 0) {
-    const updatePromises = exploitationsModalites.map(async em => {
-      const {id_exploitation, id_modalite} = em
-      const modalite = modalites.find(r => r.id_modalite === id_modalite)
+  const modalitesIndex = keyBy(modalites, 'id_modalite')
 
-      if (modalite) {
-        await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation},
-          {$push: {modalites: modalite}}
-        )
-      }
-    })
-
-    await Promise.all(updatePromises)
-
-    console.log(
-      '\u001B[34;1m%s\u001B[0m',
-      '\n=> Les modalités de suivi ont été ajoutées aux exploitations\n\n'
-    )
-  }
+  return chain(exploitationsModalites)
+    .groupBy('id_exploitation')
+    .mapValues(items => items.map(item => {
+      const {id_modalite, ...modalite} = modalitesIndex[item.id_modalite]
+      return modalite
+    }))
+    .value()
 }
 
 async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
   const exploitationsUsages = await readDataFromCsvFile(
     folderPath + '/exploitation-usage.csv',
-    null,
+    EXPLOITATIONS_USAGES_DEFINITION,
     false
   )
   const exploitations = await readDataFromCsvFile(
@@ -302,22 +312,27 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
     false
   )
 
-  const exploitationsToInsert = await Promise.all(exploitations.map(exploitation => prepareExploitation(exploitation, codeTerritoire, exploitationsUsages)))
+  const regles = await extractRegles(folderPath)
+  const modalites = await extractModalites(folderPath)
+
+  const exploitationsToInsert = await Promise.all(
+    exploitations.map(
+      exploitation => prepareExploitation(exploitation, exploitationsUsages, {regles, modalites})
+    )
+  )
 
   if (exploitationsToInsert) {
     console.log('\n=> Nettoyage de la collection exploitations...')
-    await mongo.db.collection('exploitations').deleteMany({territoire: codeTerritoire})
+    await bulkDeleteExploitations(codeTerritoire)
     console.log('...Ok !')
 
-    const result = await mongo.db.collection('exploitations').insertMany(exploitationsToInsert)
+    const {insertedCount} = await bulkInsertExploitations(codeTerritoire, exploitationsToInsert)
     console.log(
       '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + result.insertedCount + ' documents insérés dans la collection exploitations\n\n'
+      '\n=> ' + insertedCount + ' documents insérés dans la collection exploitations\n\n'
     )
   }
 
-  await importReglesInExploitations(folderPath)
-  await importModalitesInExploitations(folderPath)
   await importDocumentsInExploitations(folderPath)
 }
 
@@ -329,16 +344,27 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
     false
   )
 
+  // Temporary fix for multiple emails in the same field
+  for (const preleveur of preleveurs) {
+    if (preleveur.email) {
+      const emails = preleveur.email.split('|').map(email => email.trim().toLowerCase())
+      preleveur.email = emails[0] // Keep only the first email
+      preleveur.autresEmails = emails.slice(1) // Store the rest in a separate field
+    }
+  }
+
   if (preleveurs.length > 0) {
     console.log('\n=> Nettoyage de la collection preleveurs...')
-    await mongo.db.collection('preleveurs').deleteMany({territoire: codeTerritoire})
+    await bulkDeletePreleveurs(codeTerritoire)
     console.log('...Ok !')
 
-    const preleveursToInsert = await Promise.all(preleveurs.map(preleveur => preparePreleveur(preleveur, codeTerritoire)))
-    const result = await mongo.db.collection('preleveurs').insertMany(preleveursToInsert)
+    const {insertedCount} = await bulkInsertPreleveurs(
+      codeTerritoire,
+      preleveurs.map(preleveur => preparePreleveur(preleveur))
+    )
     console.log(
       '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + result.insertedCount + ' documents insérés dans la collection preleveurs\n\n'
+      '\n=> ' + insertedCount + ' documents insérés dans la collection preleveurs\n\n'
     )
   }
 }
@@ -374,7 +400,7 @@ async function importData(folderPath, codeTerritoire) {
   if (!codeTerritoire) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner l’id du territoire à importer. \nExemple : yarn data-import DEP-974 /data/reunion'
+      'Vous devez renseigner l’id du territoire à importer. \nExemple : yarn import-territoire-data DEP-974 /data/reunion'
     )
 
     process.exit(1)
@@ -383,7 +409,7 @@ async function importData(folderPath, codeTerritoire) {
   if (!folderPath) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn data-import DEP-974 /data/reunion'
+      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn import-territoire-data DEP-974 /data/reunion'
     )
 
     process.exit(1)
@@ -406,8 +432,23 @@ async function importData(folderPath, codeTerritoire) {
 
   await importDocuments(folderPath, codeTerritoire, validTerritoire.nom)
   await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
-  await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
+  await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
+
+  if (pointsIds.size > 0) {
+    const latestPointId = Math.max(...pointsIds.keys())
+    await initSequence(`territoire-${codeTerritoire}-points`, latestPointId)
+  }
+
+  if (preleveursIds.size > 0) {
+    const latestPreleveurId = Math.max(...preleveursIds.keys())
+    await initSequence(`territoire-${codeTerritoire}-preleveurs`, latestPreleveurId)
+  }
+
+  if (exploitationsIds.size > 0) {
+    const latestExploitationId = Math.max(...exploitationsIds.keys())
+    await initSequence(`territoire-${codeTerritoire}-exploitations`, latestExploitationId)
+  }
 
   await mongo.disconnect()
 }
