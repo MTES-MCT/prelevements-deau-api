@@ -133,7 +133,6 @@ yarn lint
 | `/preleveurs/:id/documents`| **GET** * | *Retourne les documents associés à un préleveur* |
 | `/preleveurs/:id/documents`| **POST** * | *Associe un document à un préleveur* |
 | `/preleveurs/:id/documents/:documentId`| **DELETE** * | *Supprime un document* |
-| `/preleveurs/:id/documents/upload`| **POST** * | *Upload le document sur le S3* |
 | `/territoires/:codeTerritoire/points-prelevement` | **GET** * | *Retourne les points à partir du code territoire* |
 | `/territoires/:codeTerritoire/preleveurs` | **GET** * | *Retourne les préleveurs à partir du code territoire* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
