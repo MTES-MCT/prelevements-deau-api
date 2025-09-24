@@ -11,15 +11,14 @@
     "resync-all-dossiers": "node scripts/resync-all-dossiers.js",
     "import-territoire-data": "node scripts/import-territoire-data.js",
     "import-reference-data": "node scripts/import-reference-data.js",
-    "import-territoire-historical-data": "node scripts/import-territoire-historical-data.js",
     "download-csv": "node scripts/download-csv.js",
     "validate-declaration-file": "node scripts/validate-declaration-file.js",
     "lint": "xo",
     "test": "ava"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.873.0",
-    "@aws-sdk/lib-storage": "^3.873.0",
+    "@aws-sdk/client-s3": "^3.895.0",
+    "@aws-sdk/lib-storage": "^3.895.0",
     "@etalab/decoupage-administratif": "^5.2.0",
     "@fabnum/demarches-simplifiees": "workspace:*",
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*",
@@ -27,7 +26,7 @@
     "cors": "^2.8.5",
     "cron": "^4.3.3",
     "date-fns": "^4.1.0",
-    "dotenv": "^17.2.1",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "hash-object": "^5.0.1",
     "http-errors": "^2.0.0",
@@ -43,7 +42,7 @@
   },
   "devDependencies": {
     "ava": "^6.4.1",
-    "mongodb-memory-server": "^10.2.0",
+    "mongodb-memory-server": "^10.2.1",
     "xo": "^0.60.0"
   },
   "xo": {
