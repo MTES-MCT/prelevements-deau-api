@@ -6,6 +6,6 @@
   "dependencies": {
     "got": "^14.4.9",
     "hash-object": "^5.0.1",
-    "hasha": "^6.0.0"
+    "hasha": "^7.0.0"
   }
 }

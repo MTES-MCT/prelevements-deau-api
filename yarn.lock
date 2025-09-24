@@ -776,7 +776,7 @@ __metadata:
   dependencies:
     got: "npm:^14.4.9"
     hash-object: "npm:^5.0.1"
-    hasha: "npm:^6.0.0"
+    hasha: "npm:^7.0.0"
   languageName: unknown
   linkType: soft
 
@@ -4459,13 +4459,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hasha@npm:^6.0.0":
-  version: 6.0.0
-  resolution: "hasha@npm:6.0.0"
+"hasha@npm:^7.0.0":
+  version: 7.0.0
+  resolution: "hasha@npm:7.0.0"
   dependencies:
-    is-stream: "npm:^3.0.0"
-    type-fest: "npm:^4.7.1"
-  checksum: 10c0/af6f324c60b65bc3b293ac27e2719a29d0c996b0f443a202e6fadf0497e7e28c30b5a61740b9e40af6d386cdd9660ee2b242090954506c3abd140476abf890d0
+    is-stream: "npm:^4.0.1"
+    type-fest: "npm:^4.41.0"
+  checksum: 10c0/323d10814327609aee660027071cbc4e0ac46d13e9241994e7540e3c7ae4c58df005e718c63993946340cff4db73b05d9c7edd06beb7bba144728fabb30643a1
   languageName: node
   linkType: hard
 
@@ -4953,13 +4953,6 @@ __metadata:
   dependencies:
     call-bind: "npm:^1.0.7"
   checksum: 10c0/adc11ab0acbc934a7b9e5e9d6c588d4ec6682f6fea8cda5180721704fa32927582ede5b123349e32517fdadd07958973d24716c80e7ab198970c47acc09e59c7
-  languageName: node
-  linkType: hard
-
-"is-stream@npm:^3.0.0":
-  version: 3.0.0
-  resolution: "is-stream@npm:3.0.0"
-  checksum: 10c0/eb2f7127af02ee9aa2a0237b730e47ac2de0d4e76a4a905a50a11557f2339df5765eaea4ceb8029f1efa978586abe776908720bfcb1900c20c6ec5145f6f29d8
   languageName: node
   linkType: hard
 
@@ -7336,17 +7329,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"type-fest@npm:^4.6.0":
+"type-fest@npm:^4.41.0, type-fest@npm:^4.6.0":
   version: 4.41.0
   resolution: "type-fest@npm:4.41.0"
   checksum: 10c0/f5ca697797ed5e88d33ac8f1fec21921839871f808dc59345c9cf67345bfb958ce41bd821165dbf3ae591cedec2bf6fe8882098dfdd8dc54320b859711a2c1e4
-  languageName: node
-  linkType: hard
-
-"type-fest@npm:^4.7.1":
-  version: 4.35.0
-  resolution: "type-fest@npm:4.35.0"
-  checksum: 10c0/7032a8a940c33d45947a4ff0f74e3aa43b6fd8bb4745b32bba8e61ee47c0dd088cacd102f8377e9e889362e1ae8e0292b64a4c0698c1e42fd297bf6f8899d220
   languageName: node
   linkType: hard
 
