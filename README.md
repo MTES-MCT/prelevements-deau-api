@@ -121,6 +121,9 @@ yarn lint
 | `/preleveurs`| **GET** * | *Retourne la liste des préleveurs* |
 | `/preleveurs/:id`| **GET** * | *Retourne le préleveur* |
 | `/preleveurs/:id/points-prelevement`| **GET** * | *Retourne les points exploités par le préleveur* |
+| `/preleveurs/:id/documents`| **GET** * | *Retourne les documents associés à un préleveur* |
+| `/preleveurs/:id/documents`| **POST** * | *Associe un document à un préleveur* |
+| `/preleveurs/:id/documents/:documentId`| **DELETE** * | *Supprime un document* |
 | `/territoires/:codeTerritoire/points-prelevement` | **GET** * | *Retourne les points à partir du code territoire* |
 | `/territoires/:codeTerritoire/preleveurs` | **GET** * | *Retourne les préleveurs à partir du code territoire* |
 | `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
