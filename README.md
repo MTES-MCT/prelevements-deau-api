@@ -117,7 +117,6 @@ yarn lint
 | `/exploitations:id`| **GET** * | *Retourne l'exploitation* |
 | `/exploitations:id`| **PUT** * | *Modifie l'exploitation* |
 | `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
-| `/exploitations/:id/volumes-preleves`| **GET** * | *Retourne les volumes prélevés de l'exploitations* |
 | `/preleveurs`| **GET** * | *Retourne la liste des préleveurs* |
 | `/preleveurs/:id`| **GET** * | *Retourne le préleveur* |
 | `/preleveurs/:id/points-prelevement`| **GET** * | *Retourne les points exploités par le préleveur* |
