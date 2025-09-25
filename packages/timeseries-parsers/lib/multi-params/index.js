@@ -1,4 +1,5 @@
 import {pick, minBy, maxBy} from 'lodash-es'
+import {normalizeOutputFrequency, isSubDailyFrequency} from './frequency.js'
 
 import {readSheet} from '../xlsx.js'
 
@@ -61,6 +62,7 @@ function consolidateData(rawData) {
   const pointPrelevement = safeParsePointPrelevement(rawData.metadata.pointPrelevement)
   const dailyDataTab = rawData.dataTabs.find(tab => tab.period === '1 jour' && tab.hasData)
   const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
+  const otherDataTabs = rawData.dataTabs.filter(tab => tab.period === 'autre' && tab.hasData)
 
   if (!dailyDataTab) {
     throw new Error('Le fichier ne contient pas de données à la maille journalière')
@@ -91,6 +93,30 @@ function consolidateData(rawData) {
     }
   }
 
+  // Onglets "autre" : la fréquence réelle vient du champ param.frequence
+  if (otherDataTabs.length > 0) {
+    for (const tab of otherDataTabs) {
+      for (const param of tab.parameters) {
+        // Déterminer la fréquence normalisée
+        const normalized = normalizeOutputFrequency(param.frequence)
+        if (!normalized) {
+          // Fréquence inconnue / non supportée : ignorer silencieusement
+          continue
+        }
+
+        const expectsTime = isSubDailyFrequency(normalized)
+        buildSeriesForParam({
+          param,
+          rowsSource: tab.rows,
+          pointPrelevement,
+          frequency: normalized,
+          series,
+          expectsTime
+        })
+      }
+    }
+  }
+
   const hasVolumeDaily = series.some(s => s.parameter === 'volume prélevé' && s.frequency === '1 day')
   if (!hasVolumeDaily) {
     throw new Error('Le fichier ne contient pas de données de volume prélevé')
@@ -98,6 +124,8 @@ function consolidateData(rawData) {
 
   return {series}
 }
+
+// Frequency helpers moved to frequency.js
 
 function mapTypeToValueType(type) {
   switch (type) {

@@ -30,7 +30,7 @@ test('validateMultiParamFile - structure des séries', async t => {
   const {series} = data
   // Chaque série doit avoir l'ensemble minimal de clés.
   for (const s of series) {
-    t.true(['1 day', '15 minutes'].includes(s.frequency))
+    t.true(['1 day', '15 minutes', '1 hour', '1 minute', '1 second'].includes(s.frequency))
     t.truthy(s.parameter)
     t.truthy(s.unit)
     t.truthy(s.minDate)
