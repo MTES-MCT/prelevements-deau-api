@@ -14,31 +14,22 @@ test('validateCamionCiterneFile - valid file', async t => {
   const fileContent = await fs.readFile(filePath)
   const {errors, data} = await validateCamionCiterneFile(fileContent)
   t.deepEqual(errors, [])
-  t.deepEqual(data, [
-    {
-      pointPrelevement: 412,
-      pointPrelevementNom: 'Riv. St Denis La Colline',
-      minDate: '2025-01-01',
-      maxDate: '2025-01-01',
-      dailyParameters: [
-        {
-          paramIndex: 0,
-          nom_parametre: 'volume prélevé',
-          type: 'valeur brute',
-          unite: 'm3'
-        }
-      ],
-      dailyValues: [
-        {
-          date: '2025-01-01',
-          values: [
-            42
-          ]
-        }
-      ],
-      volumePreleveTotal: 42
-    }
-  ])
+  t.deepEqual(data, {
+    series: [
+      {
+        pointPrelevement: 412,
+        parameter: 'volume prélevé',
+        unit: 'm3',
+        frequency: '1 day',
+        valueType: 'cumulative',
+        minDate: '2025-01-01',
+        maxDate: '2025-01-01',
+        data: [
+          {date: '2025-01-01', value: 42}
+        ]
+      }
+    ]
+  })
 })
 
 test('validateCamionCiterneFile - multi points valid file', async t => {
@@ -47,102 +38,42 @@ test('validateCamionCiterneFile - multi points valid file', async t => {
   const {errors, data} = await validateCamionCiterneFile(fileContent)
 
   t.deepEqual(errors, [])
-  t.deepEqual(data, [
-    {
-      pointPrelevement: 412,
-      pointPrelevementNom: 'Riv. St Denis La Colline',
-      minDate: '2025-01-01',
-      maxDate: '2025-01-04',
-      dailyParameters: [
-        {
-          paramIndex: 0,
-          nom_parametre: 'volume prélevé',
-          type: 'valeur brute',
-          unite: 'm3'
-        }
-      ],
-      dailyValues: [
-        {
-          date: '2025-01-01',
-          values: [
-            42
-          ]
-        },
-        {
-          date: '2025-01-02',
-          values: [
-            30
-          ]
-        },
-        {
-          date: '2025-01-03',
-          values: [
-            42
-          ]
-        },
-        {
-          date: '2025-01-04',
-          values: [
-            10
-          ]
-        }
-      ],
-      volumePreleveTotal: 124
-    },
-    {
-      pointPrelevement: 413,
-      pointPrelevementNom: 'Rav. à Jacques (La Montagne)',
-      minDate: '2025-01-01',
-      maxDate: '2025-01-06',
-      dailyParameters: [
-        {
-          paramIndex: 0,
-          nom_parametre: 'volume prélevé',
-          type: 'valeur brute',
-          unite: 'm3'
-        }
-      ],
-      dailyValues: [
-        {
-          date: '2025-01-01',
-          values: [
-            1
-          ]
-        },
-        {
-          date: '2025-01-02',
-          values: [
-            2
-          ]
-        },
-        {
-          date: '2025-01-03',
-          values: [
-            3
-          ]
-        },
-        {
-          date: '2025-01-04',
-          values: [
-            4
-          ]
-        },
-        {
-          date: '2025-01-05',
-          values: [
-            5
-          ]
-        },
-        {
-          date: '2025-01-06',
-          values: [
-            5
-          ]
-        }
-      ],
-      volumePreleveTotal: 20
-    }
-  ])
+  t.deepEqual(data, {
+    series: [
+      {
+        pointPrelevement: 412,
+        parameter: 'volume prélevé',
+        unit: 'm3',
+        frequency: '1 day',
+        valueType: 'cumulative',
+        minDate: '2025-01-01',
+        maxDate: '2025-01-04',
+        data: [
+          {date: '2025-01-01', value: 42},
+          {date: '2025-01-02', value: 30},
+          {date: '2025-01-03', value: 42},
+          {date: '2025-01-04', value: 10}
+        ]
+      },
+      {
+        pointPrelevement: 413,
+        parameter: 'volume prélevé',
+        unit: 'm3',
+        frequency: '1 day',
+        valueType: 'cumulative',
+        minDate: '2025-01-01',
+        maxDate: '2025-01-06',
+        data: [
+          {date: '2025-01-01', value: 1},
+          {date: '2025-01-02', value: 2},
+          {date: '2025-01-03', value: 3},
+          {date: '2025-01-04', value: 4},
+          {date: '2025-01-05', value: 5},
+          {date: '2025-01-06', value: 5}
+        ]
+      }
+    ]
+  })
 })
 
 test('validateCamionCiterneFile - incorrect file format', async t => {
