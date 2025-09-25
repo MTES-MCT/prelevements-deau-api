@@ -12,8 +12,52 @@ const testFilesPath = path.join(__dirname, 'test-files')
 test('validateMultiParamFile - valid file', async t => {
   const filePath = path.join(testFilesPath, 'valid.xlsx')
   const fileContent = await fs.readFile(filePath)
-  const {errors} = await validateMultiParamFile(fileContent)
+  const {errors, data} = await validateMultiParamFile(fileContent)
   t.deepEqual(errors, [])
+  t.truthy(data)
+  t.true(Array.isArray(data.series))
+  t.true(data.series.length > 0)
+  const volumeDaily = data.series.find(s => s.parameter === 'volume prélevé' && s.frequency === '1 day')
+  t.truthy(volumeDaily)
+  t.is(volumeDaily.valueType, 'cumulative')
+})
+
+test('validateMultiParamFile - structure des séries', async t => {
+  const filePath = path.join(testFilesPath, 'valid.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors, data} = await validateMultiParamFile(fileContent)
+  t.deepEqual(errors, [])
+  const {series} = data
+  // Chaque série doit avoir l'ensemble minimal de clés.
+  for (const s of series) {
+    t.true(['1 day', '15 minutes'].includes(s.frequency))
+    t.truthy(s.parameter)
+    t.truthy(s.unit)
+    t.truthy(s.minDate)
+    t.truthy(s.maxDate)
+    t.true(Array.isArray(s.data))
+    t.true(['instantaneous', 'average', 'minimum', 'maximum', 'median', 'delta-index', 'cumulative', 'raw'].includes(s.valueType))
+
+    for (const point of s.data) {
+      t.truthy(point.date)
+      if (s.frequency === '15 minutes') {
+        t.regex(point.time, /^\d{2}:\d{2}$/)
+      } else {
+        t.is(point.time, undefined)
+      }
+
+      t.true(typeof point.value === 'number')
+      if (point.remark !== undefined) {
+        t.true(typeof point.remark === 'string')
+      }
+    }
+  }
+  // Vérifie qu'au moins une série 15 minutes contient un champ time.
+
+  const any15 = series.find(s => s.frequency === '15 minutes')
+  if (any15) {
+    t.truthy(any15.data[0].time)
+  }
 })
 
 test('validateMultiParamFile - incorrect file format', async t => {
@@ -205,5 +249,7 @@ test('validateMultiParamFile - rows with no date are ignored', async t => {
   const fileContent = await fs.readFile(filePath)
   const {data, errors} = await validateMultiParamFile(fileContent)
   t.truthy(errors.some(e => e.message.includes('Le champ \'date\' est obligatoire')))
-  t.is(data.volumePreleveTotal, 3)
+  const volumeSeries = data.series.find(s => s.parameter === 'volume prélevé' && s.frequency === '1 day')
+  const total = volumeSeries.data.reduce((sum, d) => sum + (typeof d.value === 'number' ? d.value : 0), 0)
+  t.is(total, 3)
 })
