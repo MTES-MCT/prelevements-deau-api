@@ -382,7 +382,7 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   }
 }
 
-async function importDocuments(filePath) {
+async function importDocuments(filePath, codeTerritoire) {
   console.log(
     '\n\u001B[35;1;4m%s\u001B[0m',
     '=> Import des documents dans la collection documents'
@@ -510,7 +510,7 @@ async function importData(folderPath, codeTerritoire) {
   }
 
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
-  await importDocuments(folderPath, codeTerritoire, validTerritoire.nom)
+  await importDocuments(folderPath, codeTerritoire)
   await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
 
