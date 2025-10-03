@@ -8,8 +8,9 @@ import {
 } from '../xlsx.js'
 
 import {validateNumericValue} from '../validate.js'
+import {dedupe} from '../dedupe.js'
 
-export async function validateCamionCiterneFile(buffer) {
+export async function extractCamionCiterne(buffer) {
   const errors = []
   const data = {
     dailyValues: []
@@ -52,7 +53,7 @@ export async function validateCamionCiterneFile(buffer) {
     }
   }
 
-  return {
+  const result = {
     rawData: data,
     data: consolidatedData,
     errors: errors.map(e => pick(e, [
@@ -62,6 +63,8 @@ export async function validateCamionCiterneFile(buffer) {
       'severity'
     ]))
   }
+
+  return dedupe(result)
 }
 
 // Sous-fonctions

@@ -5,8 +5,9 @@ import {readSheet} from '../xlsx.js'
 
 import {validateAndExtract as validateAndExtractMetadata} from './tabs/metadata.js'
 import {validateAndExtract as validateAndExtractData} from './tabs/data.js'
+import {dedupe} from '../dedupe.js'
 
-export async function validateMultiParamFile(buffer) {
+export async function extractMultiParamFile(buffer) {
   let workbook
 
   try {
@@ -49,11 +50,13 @@ export async function validateMultiParamFile(buffer) {
     errors.push({message: error.message, severity: 'error'})
   }
 
-  return {
+  const result = {
     rawData: data,
     data: consolidatedData,
     errors: errors.map(e => formatError(e))
   }
+
+  return dedupe(result)
 }
 
 /* Helpers */

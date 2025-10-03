@@ -15,13 +15,13 @@ npm install @fabnum/prelevements-deau-timeseries-parsers
 ## Utilisation
 
 ```javascript
-import {validateMultiParamFile} from '@fabnum/prelevements-deau-timeseries-parsers'
+import {extractMultiParamFile} from '@fabnum/prelevements-deau-timeseries-parsers'
 
 // Exemple avec un fichier multi-paramètres
 const fileBuffer = // ... votre buffer de fichier
 
 async function main() {
-  const {data, errors} = await validateMultiParamFile(fileBuffer)
+  const {data, errors} = await extractMultiParamFile(fileBuffer)
 
   if (data) {
     console.log('Le fichier est valide.')

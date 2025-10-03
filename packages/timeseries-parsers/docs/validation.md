@@ -2,12 +2,12 @@
 
 Ce dépôt fournit deux fonctions principales pour valider les fichiers provenant de Démarches Simplifiées :
 
-- `validateCamionCiterneFile`
-- `validateMultiParamFile`
+- `extractCamionCiterne`
+- `extractMultiParamFile`
 
 Ces fonctions sont exposées par le package `@fabnum/prelevements-deau-timeseries-parsers`. Elles renvoient une liste d'objets contenant au moins la propriété `message` (et éventuellement `explanation`, `internalMessage` et `severity`). La sévérité est `error` par défaut et vaut `warning` lorsque le problème n'empêche pas l'import.
 
-## Fonction `validateCamionCiterneFile`
+## Fonction `extractCamionCiterne`
 
 Cette fonction vérifie la structure et le contenu d'un fichier « Camion citerne ». Les contrôles portent notamment sur :
 
@@ -32,13 +32,13 @@ Cette fonction vérifie la structure et le contenu d'un fichier « Camion citer
 - « Ligne N : Format de date invalide : ... »
 - « Ligne N : La date ... est déjà présente dans le fichier. » (avec une explication sur la manière de gérer les doublons)
 - « Ligne N : La date est renseignée, mais aucune valeur n'est indiquée dans les colonnes des points de prélèvement. » (avec une explication sur la manière de gérer les valeurs manquantes)
-- « Ligne N - colonne X: Valeur numérique invalide » (avec une explication sur la valeur attendue) 
+- « Ligne N - colonne X: Valeur numérique invalide » (avec une explication sur la valeur attendue)
 
 ### Avertissements
 
 Aucun avertissement n'est émis pour ce type de fichier.
 
-## Fonction `validateMultiParamFile`
+## Fonction `extractMultiParamFile`
 
 Cette fonction valide les fichiers « multiparamètres » composés d'un onglet « A LIRE » et d'au moins un onglet de données « Data | T=… ». Les vérifications portent sur la structure du classeur, les métadonnées de chaque paramètre et la cohérence des données.
 
