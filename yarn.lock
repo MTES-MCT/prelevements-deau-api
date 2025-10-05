@@ -567,6 +567,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aws-sdk/s3-request-presigner@npm:^3.895.0":
+  version: 3.895.0
+  resolution: "@aws-sdk/s3-request-presigner@npm:3.895.0"
+  dependencies:
+    "@aws-sdk/signature-v4-multi-region": "npm:3.894.0"
+    "@aws-sdk/types": "npm:3.893.0"
+    "@aws-sdk/util-format-url": "npm:3.893.0"
+    "@smithy/middleware-endpoint": "npm:^4.2.3"
+    "@smithy/protocol-http": "npm:^5.2.1"
+    "@smithy/smithy-client": "npm:^4.6.3"
+    "@smithy/types": "npm:^4.5.0"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/8ff423a060ce8168619b85b733bdb44492ed0f886db7619420cf70c8ff067228b1c899fb339bdf0923834a0de10eec3d22da5a2c4f85451c8316835a30b85c93
+  languageName: node
+  linkType: hard
+
 "@aws-sdk/signature-v4-multi-region@npm:3.894.0":
   version: 3.894.0
   resolution: "@aws-sdk/signature-v4-multi-region@npm:3.894.0"
@@ -635,6 +651,18 @@ __metadata:
     "@smithy/util-endpoints": "npm:^3.1.2"
     tslib: "npm:^2.6.2"
   checksum: 10c0/3aa234e007f2a137982390b05e6d4f692780b4d9f1039191285daa0726590d122614840d73975f0a29a3084a12687b16bda116b850e1a31c02b293e8a6dab48a
+  languageName: node
+  linkType: hard
+
+"@aws-sdk/util-format-url@npm:3.893.0":
+  version: 3.893.0
+  resolution: "@aws-sdk/util-format-url@npm:3.893.0"
+  dependencies:
+    "@aws-sdk/types": "npm:3.893.0"
+    "@smithy/querystring-builder": "npm:^4.1.1"
+    "@smithy/types": "npm:^4.5.0"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/28d10e11fd02f2ac61e6627b85bd0b13f361496741c7b13b24d15feae70acd1a1391b2df572b5a52db5a3f7bb9155d39615fc1b552ff4651cf02152bcc31e3c1
   languageName: node
   linkType: hard
 
@@ -7802,6 +7830,7 @@ __metadata:
   dependencies:
     "@aws-sdk/client-s3": "npm:^3.895.0"
     "@aws-sdk/lib-storage": "npm:^3.895.0"
+    "@aws-sdk/s3-request-presigner": "npm:^3.895.0"
     "@etalab/decoupage-administratif": "npm:^5.2.0"
     "@fabnum/demarches-simplifiees": "workspace:*"
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*"
