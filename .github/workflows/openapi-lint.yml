@@ -1,0 +1,30 @@
+name: OpenAPI Lint
+
+on:
+  pull_request:
+    paths:
+      - 'docs/openapi.yaml'
+      - '.spectral.yaml'
+      - 'package.json'
+  push:
+    branches: [ main, improve-timeseries ]
+    paths:
+      - 'docs/openapi.yaml'
+      - '.spectral.yaml'
+      - 'package.json'
+
+jobs:
+  spectral:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+      - name: Install dependencies
+        run: yarn install --immutable
+      - name: Lint OpenAPI spec
+        run: yarn lint:openapi

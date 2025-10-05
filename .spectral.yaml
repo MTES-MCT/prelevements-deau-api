@@ -1,0 +1,10 @@
+extends: spectral:oas
+
+rules:
+  # Autoriser OpenAPI 3.1 tout en vérifiant références
+  openapi-tags: off
+  operation-tags: off
+  no-unused-components: warn
+  info-contact: off
+  info-description: warn
+  operation-description: warn

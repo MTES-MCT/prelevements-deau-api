@@ -104,32 +104,28 @@ yarn lint
 - Node.js version 22 LTS (22.11+)
 - MongoDB version 4.4.29
 
-## Routes de l'API :
-| Route | Type | Description |
-|-------|------|-------------|
-| `/points-prelevement`| **GET** * | *Retourne la liste des points de prélèvement* |
-| `/points-prelevement`| **POST** * | *Permet d'ajouter un point de prélèvement* |
-| `/points-prelevement/:id`| **GET** * | *Retourne le point de prélèvement* |
-| `/points-prelevement/:id`| **PUT** * | *Modifie le point de prélèvement* |
-| `/points-prelevement/:id`| **DELETE** * | *Supprime le point de prélèvement* |
-| `/points-prelevement/:id/exploitations`| **GET** * | *Retourne la liste des exploitations du point* |
-| `/exploitations`| **POST** * | *Crée une exploitation* |
-| `/exploitations:id`| **GET** * | *Retourne l'exploitation* |
-| `/exploitations:id`| **PUT** * | *Modifie l'exploitation* |
-| `/exploitations:id`| **DELETE** * | *Supprime l'exploitation* |
-| `/preleveurs`| **GET** * | *Retourne la liste des préleveurs* |
-| `/preleveurs/:id`| **GET** * | *Retourne le préleveur* |
-| `/preleveurs/:id/points-prelevement`| **GET** * | *Retourne les points exploités par le préleveur* |
-| `/preleveurs/:id/documents`| **GET** * | *Retourne les documents associés à un préleveur* |
-| `/preleveurs/:id/documents`| **POST** * | *Associe un document à un préleveur* |
-| `/preleveurs/:id/documents/:documentId`| **DELETE** * | *Supprime un document* |
-| `/territoires/:codeTerritoire/points-prelevement` | **GET** * | *Retourne les points à partir du code territoire* |
-| `/territoires/:codeTerritoire/preleveurs` | **GET** * | *Retourne les préleveurs à partir du code territoire* |
-| `/stats`| **GET** | *Retourne les données pour la page `/statistiques`* |
-| `/dossiers/stats` | **GET** * | *Retourne le nombre de dossiers par `status`* |
+## Documentation de l'API
 
-> [!NOTE]
-> *Les routes avec une `*` sont protégées par un jeton*
+La documentation complète et à jour des endpoints est maintenant centralisée dans un fichier OpenAPI :
+
+`docs/openapi.yaml`
+
+Vous pouvez :
+- la visualiser dans un outil comme Swagger UI / Redoc ;
+- générer des clients (TypeScript, Python, etc.) ;
+- valider les modifications de contrats lors des PR.
+
+### Lint de la spécification OpenAPI
+
+Le lint est automatisé via [Spectral](https://github.com/stoplightio/spectral). Pour lancer une vérification locale :
+
+```bash
+yarn lint:openapi
+```
+
+Une action GitHub (`.github/workflows/openapi-lint.yml`) exécute ce lint sur chaque PR modifiant le fichier `docs/openapi.yaml`.
+
+> Note : L’ancien tableau statique des routes a été retiré pour éviter les divergences.
 
 ### Objet `point_prelevement` :
 
