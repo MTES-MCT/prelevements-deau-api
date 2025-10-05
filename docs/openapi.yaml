@@ -105,6 +105,7 @@ components:
         minDate: { type: string, format: date }
         maxDate: { type: string, format: date }
         hasSubDaily: { type: boolean, nullable: true }
+        numberOfValues: { type: integer, nullable: true }
         pointPrelevement: { $ref: '#/components/schemas/ObjectId', nullable: true }
         pointInfo:
           type: object
