@@ -3,7 +3,7 @@ import process from 'node:process'
 import path from 'node:path'
 import {readFile} from 'node:fs/promises'
 
-import {validateMultiParamFile, validateCamionCiterneFile} from '@fabnum/prelevements-deau-timeseries-parsers'
+import {extractMultiParamFile, extractCamionCiterne} from '@fabnum/prelevements-deau-timeseries-parsers'
 
 const filePath = process.argv[2]
 
@@ -21,7 +21,7 @@ if (!['multi-params', 'camion-citerne'].includes(fileType)) {
 
 const file = await readFile(path.resolve(filePath))
 
-const validationMethod = fileType === 'multi-params' ? validateMultiParamFile : validateCamionCiterneFile
+const validationMethod = fileType === 'multi-params' ? extractMultiParamFile : extractCamionCiterne
 
 const result = await validationMethod(file)
 
