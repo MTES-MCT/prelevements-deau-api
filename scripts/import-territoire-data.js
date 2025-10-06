@@ -259,7 +259,7 @@ async function importDocumentsInExploitations(filePath) {
   if (documents.length > 0) {
     const updatePromises = exploitationsDocuments.map(async ed => {
       const {id_exploitation, id_document} = ed
-      const document = documents.find(d => d.id_document === id_document)
+      const document = await mongo.db.collection('documents').findOne({id_document})
       const exploitation = exploitations.find(e => e.id_exploitation === id_exploitation)
 
       if (document && exploitation) {
@@ -447,7 +447,7 @@ async function importDocuments(filePath, codeTerritoire) {
           ...document,
           nom_fichier: filename
         }
-        delete documentData.id_document
+
         delete documentData.territoire
         delete documentData.id_preleveur
 
