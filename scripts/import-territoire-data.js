@@ -439,7 +439,7 @@ async function importDocuments(filePath, codeTerritoire) {
     })
 
     for (const document of documentsWithBeneficiaire) {
-      const {nom_fichier, id_preleveur, territoire, id_document} = document
+      const {nom_fichier, id_preleveur} = document
 
       if (!nom_fichier) {
         continue
@@ -457,7 +457,7 @@ async function importDocuments(filePath, codeTerritoire) {
         continue
       }
 
-      const filename = nom_fichier || 'fichier-sans-nom-' + id_document
+      const filename = nom_fichier
 
       for (const currentPreleveurId of id_preleveur) {
         // eslint-disable-next-line no-await-in-loop
@@ -487,7 +487,7 @@ async function importDocuments(filePath, codeTerritoire) {
         }
 
         // eslint-disable-next-line no-await-in-loop
-        const insertedDocument = await createDocument(documentData, file, preleveur?._id || currentPreleveurId, territoire)
+        const insertedDocument = await createDocument(documentData, file, preleveur?._id || currentPreleveurId, codeTerritoire)
 
         documentsIds.set(originalDocumentId, insertedDocument._id)
       }
