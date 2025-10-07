@@ -6,6 +6,7 @@ import {argv} from 'node:process'
 
 import {chain, keyBy} from 'lodash-es'
 
+import got from 'got'
 import mongo, {ObjectId} from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {getCommune} from '../lib/util/cog.js'
@@ -28,11 +29,12 @@ import {initSequence} from '../lib/util/sequences.js'
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
 import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
 import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/exploitation.js'
-import {createDocument} from '../lib/models/document.js'
+import {createDocument, decorateDocument, getDocument} from '../lib/models/document.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
 const exploitationsIds = new Map()
+const documentsIds = new Map()
 
 function getPointId(id_point) {
   return pointsIds.get(id_point)
@@ -40,6 +42,10 @@ function getPointId(id_point) {
 
 function getPreleveurId(id_preleveur) {
   return preleveursIds.get(id_preleveur)
+}
+
+function getDocumentId(idDocument) {
+  return documentsIds.get(idDocument)
 }
 
 function parseAutresNoms(autresNoms) {
@@ -259,7 +265,8 @@ async function importDocumentsInExploitations(filePath) {
   if (documents.length > 0) {
     const updatePromises = exploitationsDocuments.map(async ed => {
       const {id_exploitation, id_document} = ed
-      const document = await mongo.db.collection('documents').findOne({id_document})
+      const idDocument = getDocumentId(id_document)
+      const document = await getDocument(idDocument)
       const exploitation = exploitations.find(e => e.id_exploitation === id_exploitation)
 
       if (document && exploitation) {
@@ -268,9 +275,11 @@ async function importDocumentsInExploitations(filePath) {
           id_preleveur: exploitation.id_beneficiaire
         }
 
+        const decoratedDocumentWithPreleveur = await decorateDocument(documentWithPreleveur)
+
         await mongo.db.collection('exploitations').updateOne(
           {id_exploitation},
-          {$push: {documents: documentWithPreleveur}}
+          {$push: {documents: decoratedDocumentWithPreleveur}}
         )
       }
     })
@@ -388,6 +397,8 @@ async function importDocuments(filePath, codeTerritoire) {
     '=> Import des documents dans la collection documents'
   )
 
+  const fichiersIntrouvables = []
+
   const documents = await readDataFromCsvFile(
     `${filePath}/document.csv`,
     DOCUMENTS_DEFINITION,
@@ -430,12 +441,21 @@ async function importDocuments(filePath, codeTerritoire) {
     for (const document of documentsWithBeneficiaire) {
       const {nom_fichier, id_preleveur, territoire, id_document} = document
 
-      const url = `https://prelevementdeau-public.s3.fr-par.scw.cloud/document/${nom_fichier}`
-      // eslint-disable-next-line no-await-in-loop
-      const response = await fetch(url)
-      // eslint-disable-next-line no-await-in-loop
-      const arrayBuffer = await response.arrayBuffer()
-      const buffer = Buffer.from(arrayBuffer)
+      if (!nom_fichier) {
+        continue
+      }
+
+      const url = `${process.env.S3_PUBLIC_URL}/document/${nom_fichier}`
+
+      let buffer
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        buffer = await got(url).buffer()
+      } catch (error) {
+        console.error(`Erreur avec le document ${nom_fichier} : ${error.message}`)
+        fichiersIntrouvables.push(nom_fichier)
+        continue
+      }
 
       const filename = nom_fichier || 'fichier-sans-nom-' + id_document
 
@@ -448,6 +468,9 @@ async function importDocuments(filePath, codeTerritoire) {
           nom_fichier: filename
         }
 
+        const originalDocumentId = documentData.id_document
+
+        delete documentData.id_document
         delete documentData.territoire
         delete documentData.id_preleveur
 
@@ -464,9 +487,14 @@ async function importDocuments(filePath, codeTerritoire) {
         }
 
         // eslint-disable-next-line no-await-in-loop
-        await createDocument(documentData, file, preleveur?._id || currentPreleveurId, territoire)
+        const insertedDocument = await createDocument(documentData, file, preleveur?._id || currentPreleveurId, territoire)
+
+        documentsIds.set(originalDocumentId, insertedDocument._id)
       }
     }
+
+    // eslint-disable-next-line unicorn/no-console-spaces
+    console.log('Fichiers introuvables : ', fichiersIntrouvables)
 
     console.log(
       '\u001B[34;1m%s\u001B[0m',
