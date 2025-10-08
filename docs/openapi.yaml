@@ -7,6 +7,29 @@ info:
     Les objets renvoyés correspondent à l'état courant de l'API Express.
   contact:
     name: Équipe Prélèvements d'Eau
+tags:
+  - name: Meta
+    description: Informations générales et de contexte
+  - name: Dossiers
+    description: Gestion des dossiers issus de démarches simplifiées
+  - name: Attachments
+    description: Pièces jointes des dossiers (fichiers importés)
+  - name: Intégrations
+    description: Journées / lignes intégrées issues des pièces jointes
+  - name: Séries
+    description: Séries temporelles de prélèvements (métadonnées et valeurs)
+  - name: Points
+    description: Points de prélèvements (captages / stations)
+  - name: Exploitations
+    description: Exploitations liées à des points et préleveurs
+  - name: Préleveurs
+    description: Acteurs réalisant les prélèvements
+  - name: Territoires
+    description: Accès par territoire administratif
+  - name: Référentiels
+    description: Données de référence externes (BNPE, BSS, etc.)
+  - name: Stats
+    description: Statistiques agrégées
 servers:
   - url: https://api.example.test
     description: Environnement de test
@@ -136,6 +159,8 @@ paths:
     get:
       tags: [Meta]
       summary: Informations sur le contexte utilisateur
+      description: Retourne les informations de base concernant l'utilisateur courant (rôle, territoire, etc.)
+      operationId: getUserContextInfo
       security:
         - bearerAuth: []
       responses:
@@ -152,6 +177,8 @@ paths:
     get:
       tags: [Dossiers]
       summary: Lister les dossiers
+      description: Liste paginée (future) ou simple des dossiers filtrables par statut, préleveur, type de prélèvement et mois de déclaration.
+      operationId: listDossiers
       parameters:
         - in: query
           name: status
@@ -177,6 +204,8 @@ paths:
     get:
       tags: [Dossiers]
       summary: Statistiques agrégées par statut de dossier
+      description: Compte le nombre de dossiers pour chaque statut.
+      operationId: getDossiersStats
       responses:
         '200':
           description: Statistiques
@@ -187,6 +216,8 @@ paths:
     get:
       tags: [Dossiers]
       summary: Obtenir un dossier avec résumé des pièces jointes
+      description: Retourne le dossier ciblé et les métadonnées de ses pièces jointes.
+      operationId: getDossier
       parameters:
         - in: path
           name: dossierId
@@ -203,6 +234,8 @@ paths:
     get:
       tags: [Attachments]
       summary: Obtenir le détail d'une pièce jointe
+      description: Retourne les métadonnées calculées pour une pièce jointe d'un dossier.
+      operationId: getDossierAttachment
       parameters:
         - in: path
           name: dossierId
@@ -223,6 +256,8 @@ paths:
     get:
       tags: [Intégrations]
       summary: Jours intégrés pour une pièce jointe
+      description: Liste les entrées d'intégration (journées) produites depuis la pièce jointe.
+      operationId: listAttachmentIntegrations
       parameters:
         - in: path
           name: dossierId
@@ -250,6 +285,8 @@ paths:
     get:
       tags: [Séries]
       summary: Lister les séries d'une pièce jointe
+      description: Retourne les métadonnées des séries détectées dans une pièce jointe.
+      operationId: listAttachmentSeries
       parameters:
         - in: path
           name: dossierId
@@ -282,6 +319,7 @@ paths:
         Retourne uniquement les métadonnées des séries ayant au moins une date intégrée (computed.integratedDays)
         dans l'intervalle fourni (from/to). Si from et to sont absents, toutes les séries du couple
         préleveur/point sont retournées sans filtrage sur integratedDays.
+      operationId: searchSeries
       parameters:
         - in: query
           name: preleveurId
@@ -320,6 +358,8 @@ paths:
     get:
       tags: [Séries]
       summary: Valeurs d'une série (filtrage par date)
+      description: Retourne les valeurs quotidiennes ou infra-quotidiennes d'une série, éventuellement filtrées par intervalle de dates.
+      operationId: getSeriesValues
       parameters:
         - in: path
           name: seriesId
@@ -357,6 +397,8 @@ paths:
     get:
       tags: [Séries]
       summary: Métadonnées d'une série
+      description: Retourne uniquement les métadonnées d'une série identifiée par son ID.
+      operationId: getSeries
       parameters:
         - in: path
           name: seriesId
@@ -379,6 +421,8 @@ paths:
     get:
       tags: [Points]
       summary: Lister les points de prélèvement
+      description: Retourne la liste des points de prélèvement disponibles.
+      operationId: listPoints
       responses:
         '200':
           description: Liste de points
@@ -390,6 +434,8 @@ paths:
     post:
       tags: [Points]
       summary: Créer un point de prélèvement
+      description: Crée un nouveau point de prélèvement avec les propriétés fournies.
+      operationId: createPoint
       requestBody:
         required: true
         content:
@@ -403,6 +449,8 @@ paths:
     get:
       tags: [Points]
       summary: Obtenir un point
+      description: Retourne les métadonnées d'un point de prélèvement.
+      operationId: getPoint
       parameters:
         - in: path
           name: pointId
@@ -418,6 +466,8 @@ paths:
     put:
       tags: [Points]
       summary: Mettre à jour un point
+      description: Met à jour les propriétés d'un point de prélèvement existant.
+      operationId: updatePoint
       parameters:
         - in: path
           name: pointId
@@ -435,6 +485,8 @@ paths:
     delete:
       tags: [Points]
       summary: Supprimer un point
+      description: Supprime un point de prélèvement et ses dépendances éventuelles.
+      operationId: deletePoint
       parameters:
         - in: path
           name: pointId
@@ -446,6 +498,8 @@ paths:
     get:
       tags: [Points]
       summary: Lister les exploitations d'un point
+      description: Liste les exploitations associées au point.
+      operationId: listPointExploitations
       parameters:
         - in: path
           name: pointId
@@ -463,6 +517,8 @@ paths:
     post:
       tags: [Exploitations]
       summary: Créer une exploitation
+      description: Crée une nouvelle exploitation liée à un point et un préleveur.
+      operationId: createExploitation
       requestBody:
         required: true
         content:
@@ -476,6 +532,8 @@ paths:
     get:
       tags: [Exploitations]
       summary: Obtenir une exploitation
+      description: Retourne les détails d'une exploitation.
+      operationId: getExploitation
       parameters:
         - in: path
           name: exploitationId
@@ -490,6 +548,8 @@ paths:
     put:
       tags: [Exploitations]
       summary: Mettre à jour une exploitation
+      description: Met à jour les propriétés d'une exploitation existante.
+      operationId: updateExploitation
       parameters:
         - in: path
           name: exploitationId
@@ -507,6 +567,8 @@ paths:
     delete:
       tags: [Exploitations]
       summary: Supprimer une exploitation
+      description: Supprime une exploitation.
+      operationId: deleteExploitation
       parameters:
         - in: path
           name: exploitationId
@@ -518,6 +580,8 @@ paths:
     get:
       tags: [Préleveurs]
       summary: Lister les préleveurs
+      description: Retourne la liste des préleveurs.
+      operationId: listPreleveurs
       responses:
         '200':
           description: Liste de préleveurs
@@ -529,6 +593,8 @@ paths:
     post:
       tags: [Préleveurs]
       summary: Créer un préleveur
+      description: Crée un nouveau préleveur.
+      operationId: createPreleveur
       requestBody:
         required: true
         content:
@@ -542,6 +608,8 @@ paths:
     get:
       tags: [Préleveurs]
       summary: Obtenir un préleveur
+      description: Retourne les métadonnées d'un préleveur.
+      operationId: getPreleveur
       parameters:
         - in: path
           name: preleveurId
@@ -556,6 +624,8 @@ paths:
     put:
       tags: [Préleveurs]
       summary: Mettre à jour un préleveur
+      description: Met à jour les propriétés d'un préleveur existant.
+      operationId: updatePreleveur
       parameters:
         - in: path
           name: preleveurId
@@ -573,6 +643,8 @@ paths:
     delete:
       tags: [Préleveurs]
       summary: Supprimer un préleveur
+      description: Supprime un préleveur.
+      operationId: deletePreleveur
       parameters:
         - in: path
           name: preleveurId
@@ -584,6 +656,8 @@ paths:
     get:
       tags: [Préleveurs]
       summary: Lister les points d'un préleveur
+      description: Liste les points rattachés à un préleveur.
+      operationId: listPreleveurPoints
       parameters:
         - in: path
           name: preleveurId
@@ -601,6 +675,8 @@ paths:
     get:
       tags: [Préleveurs]
       summary: Lister les exploitations d'un préleveur
+      description: Liste les exploitations associées à un préleveur.
+      operationId: listPreleveurExploitations
       parameters:
         - in: path
           name: preleveurId
@@ -618,6 +694,8 @@ paths:
     get:
       tags: [Préleveurs]
       summary: Lister les documents d'un préleveur
+      description: Liste les documents liés à un préleveur.
+      operationId: listPreleveurDocuments
       parameters:
         - in: path
           name: preleveurId
@@ -636,6 +714,13 @@ paths:
     post:
       tags: [Préleveurs]
       summary: Ajouter un document à un préleveur
+      description: Ajoute (upload) un document pour un préleveur donné.
+      operationId: addPreleveurDocument
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
       requestBody:
         required: true
         content:
@@ -652,6 +737,8 @@ paths:
     delete:
       tags: [Préleveurs]
       summary: Supprimer un document
+      description: Supprime un document précédemment téléversé.
+      operationId: deletePreleveurDocument
       parameters:
         - in: path
           name: preleveurId
@@ -667,6 +754,8 @@ paths:
     get:
       tags: [Territoires]
       summary: Points d'un territoire
+      description: Liste les points de prélèvement appartenant à un territoire.
+      operationId: listTerritoirePoints
       parameters:
         - in: path
           name: codeTerritoire
@@ -684,6 +773,8 @@ paths:
     get:
       tags: [Territoires]
       summary: Préleveurs d'un territoire
+      description: Liste les préleveurs associés à un territoire.
+      operationId: listTerritoirePreleveurs
       parameters:
         - in: path
           name: codeTerritoire
@@ -701,12 +792,16 @@ paths:
     get:
       tags: [Référentiels]
       summary: Liste BSS
+      description: Liste des entités BSS (sélection simple).
+      operationId: listReferentielBss
       responses:
         '200': { description: OK }
   /referentiels/bss/{idBss}:
     get:
       tags: [Référentiels]
       summary: Détail BSS
+      description: Détails d'une entrée BSS identifiée.
+      operationId: getReferentielBss
       parameters:
         - in: path
           name: idBss
@@ -718,12 +813,16 @@ paths:
     get:
       tags: [Référentiels]
       summary: Liste BNPE
+      description: Liste des ressources BNPE.
+      operationId: listReferentielBnpe
       responses:
         '200': { description: OK }
   /referentiels/bnpe/{idBnpe}:
     get:
       tags: [Référentiels]
       summary: Détail BNPE
+      description: Détails d'une ressource BNPE.
+      operationId: getReferentielBnpe
       parameters:
         - in: path
           name: idBnpe
@@ -735,12 +834,16 @@ paths:
     get:
       tags: [Référentiels]
       summary: Liste ME Continentales BV
+      description: Liste des masses d'eau continentales (BV).
+      operationId: listReferentielMeContinentalesBv
       responses:
         '200': { description: OK }
   /referentiels/me-continentales-bv/{idMeContinentalesBv}:
     get:
       tags: [Référentiels]
       summary: Détail ME Continentales BV
+      description: Détails d'une masse d'eau continentale (BV).
+      operationId: getReferentielMeContinentalesBv
       parameters:
         - in: path
           name: idMeContinentalesBv
@@ -752,12 +855,16 @@ paths:
     get:
       tags: [Référentiels]
       summary: Liste BV BdCarthage
+      description: Liste des bassins versants BdCarthage.
+      operationId: listReferentielBvBdCarthage
       responses:
         '200': { description: OK }
   /referentiels/bv-bdcarthage/{idBvBdcarthage}:
     get:
       tags: [Référentiels]
       summary: Détail BV BdCarthage
+      description: Détails d'un bassin versant BdCarthage.
+      operationId: getReferentielBvBdCarthage
       parameters:
         - in: path
           name: idBvBdcarthage
@@ -769,12 +876,16 @@ paths:
     get:
       tags: [Référentiels]
       summary: Liste MESO
+      description: Liste des entités MESO.
+      operationId: listReferentielMeso
       responses:
         '200': { description: OK }
   /referentiels/meso/{idMeso}:
     get:
       tags: [Référentiels]
       summary: Détail MESO
+      description: Détails d'une entité MESO.
+      operationId: getReferentielMeso
       parameters:
         - in: path
           name: idMeso
@@ -782,16 +893,20 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: OK }
-  /stats/:
+  /stats:
     get:
       tags: [Stats]
       summary: Statistiques globales
+      description: Retourne des agrégations globales (volumes, compteurs...).
+      operationId: getGlobalStats
       responses:
         '200': { description: OK }
   /stats/{territoire}:
     get:
       tags: [Stats]
       summary: Statistiques par territoire
+      description: Retourne des agrégations limitées à un territoire.
+      operationId: getStatsByTerritoire
       parameters:
         - in: path
           name: territoire
