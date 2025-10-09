@@ -434,12 +434,12 @@ async function importDocuments(filePath, codeTerritoire) {
       return {
         ...document,
         territoire: codeTerritoire,
-        id_preleveur: beneficiaireIds
+        id_preleveurs: beneficiaireIds
       }
     })
 
     for (const document of documentsWithBeneficiaire) {
-      const {nom_fichier, id_preleveur} = document
+      const {nom_fichier, id_preleveurs} = document
 
       if (!nom_fichier) {
         continue
@@ -459,7 +459,7 @@ async function importDocuments(filePath, codeTerritoire) {
 
       const filename = nom_fichier
 
-      for (const currentPreleveurId of id_preleveur) {
+      for (const currentPreleveurId of id_preleveurs) {
         // eslint-disable-next-line no-await-in-loop
         const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur: currentPreleveurId})
 
@@ -472,7 +472,7 @@ async function importDocuments(filePath, codeTerritoire) {
 
         delete documentData.id_document
         delete documentData.territoire
-        delete documentData.id_preleveur
+        delete documentData.id_preleveurs
 
         const file = {
           buffer,
@@ -480,8 +480,8 @@ async function importDocuments(filePath, codeTerritoire) {
           size: buffer.length
         }
 
-        if (id_preleveur.length > 1) {
-          console.log(`Création du document ${filename} pour le préleveur ${currentPreleveurId} (${id_preleveur.indexOf(currentPreleveurId) + 1}/${id_preleveur.length})`)
+        if (id_preleveurs.length > 1) {
+          console.log(`Création du document ${filename} pour le préleveur ${currentPreleveurId} (${id_preleveurs.indexOf(currentPreleveurId) + 1}/${id_preleveurs.length})`)
         } else {
           console.log(`Création du document ${filename}`)
         }
