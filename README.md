@@ -4,6 +4,11 @@ Ce projet vise à collecter, organiser et analyser les données de prélèvement
 
 Consultez la [documentation de validation](packages/timeseries-parsers/docs/validation.md) pour les erreurs et avertissements possibles.
 
+## Prérequis
+
+- Node.js version 22 LTS (22.11+)
+- MongoDB version 4.4.29
+
 ## Installation
 
 Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 22.11) installé avant de commencer.
@@ -18,9 +23,42 @@ Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Nod
 
 ## Initialisation
 
-**Initialiser la base de donneés** :
+- Les données initiales doivent être ajoutées à la base MongoDB _("à la main" pour l'instant).
 
-Ce script lancera la récupération des dossiers déposés sur Démarches Simplifiées. Ces dossiers seront traités :
+```mongo
+db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974', demarcheNumber: <number>})
+```
+
+Remplacez <number> par le demarcheNumber correspondant à l’identifiant sur démarches simplifiées. 
+
+- Ajoutez un jeton d'accès dans la collection `tokens` :
+
+```mongo
+db.tokens.insertOne({token: '<votre_token>', territoire: 'DEP-974'})
+```
+
+Ce jeton sera utilisé en tant que mot de passe pour se connecter à l'application.
+
+- Téléchargez les CSV de référence. Assurez-vous d'avoir rempli la variable d'environnement `CSV_SOURCE_URL` avant.
+
+```bash
+yarn download-csv
+```
+
+- Importez ensuite ces fichiers en base, le dernier paramètre correspond à l'emplacement des CSV.
+
+```bash
+yarn import-reference-data ./data
+```
+
+- Importez les points / préleveurs / exploitations / règles / documents / modalités :
+  _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
+
+```bash
+yarn import-territoire-data DEP-974 ./data
+```
+
+- Enfin, récupérez les dossiers déposés sur Démarches Simplifiées. Ces dossiers seront traités :
 1. Validation des données
 2. Stockage en ligne des fichiers en pièce jointe
 3. Enregistrement en base de donnée des dossiers
@@ -29,50 +67,8 @@ Ce script lancera la récupération des dossiers déposés sur Démarches Simpli
 yarn resync-all-dossiers
 ```
 
-## Scripts
-
-### Préparation du territoire
-
-- Ajouter une entrée dans la base MongoDB _("à la main" pour l'instant)_
-- Exemple :
-
-```mongo
-db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974'})
-```
-
-- Exemple (Démarches Simplifiées) :
-
-```mongo
-db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974', demarcheNumber: 1234})
-```
-
-- Ajouter un jeton d'accès dans la collection `tokens` :
-- Exemple :
-
-```mongo
-db.tokens.insertOne({token: '<votre_token>', territoire: 'DEP-974'})
-```
-
- - Importe les données de référence :
- _(Il faut préciser le chemin du dossier contenant les fichiers CSV)_
-
- ```bash
- yarn import-reference-data /chemin/du/dossier
- ```
-
-- Importer les points / préleveurs / exploitations / règles / documents / modalités :
-_(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
-
-```bash
-yarn import-territoire-data DEP-974 /chemin/du/dossier
-```
-
 ### Autres scripts utiles
 
-- **download-csv** : télécharge l'ensemble des fichiers CSV depuis la source indiquée par `CSV_SOURCE_URL`.
-  ```bash
-  yarn download-csv
-  ```
 - **sync-updated-dossiers** : synchronise uniquement les dossiers modifiés sur Démarches Simplifiées.
   ```bash
   yarn sync-updated-dossiers
@@ -86,7 +82,7 @@ yarn import-territoire-data DEP-974 /chemin/du/dossier
   node scripts/validate-declaration-file.js <filePath> [camion-citerne|multi-params]
   ```
 
-### Lancer l'application :
+## Lancer l'application :
 ```bash
 yarn start
 ```
@@ -98,11 +94,6 @@ Le projet utilise **xo** comme linter pour assurer la qualité du code. Exécute
 ```bash
 yarn lint
 ```
-
-## Prérequis
-
-- Node.js version 22 LTS (22.11+)
-- MongoDB version 4.4.29
 
 ## Routes de l'API :
 | Route | Type | Description |
