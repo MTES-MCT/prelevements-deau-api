@@ -68,6 +68,17 @@ Cette fonction valide les fichiers « multiparamètres » composés d'un ongle
 - « Le fichier ne contient pas de données à la maille journalière »
 - « Le fichier ne contient pas de données de volume prélevé »
 
+### Données consolidées retournées (`validateMultiParamFile`)
+
+L'objet `data` du résultat contient toujours les propriétés suivantes, même en l'absence de données journalières :
+
+- `dailyParameters`: tableau (éventuellement vide) des paramètres journaliers.
+- `dailyValues`: tableau (éventuellement vide) des valeurs quotidiennes (date + tableau de valeurs alignées sur `dailyParameters`).
+- `fifteenMinutesParameters`: tableau (éventuellement vide) des paramètres à 15 minutes.
+- `fifteenMinutesValues`: tableau (éventuellement vide) d'objets `{date, rows}` où `rows` est la liste des enregistrements {`heure`, `values`} pour cette date.
+- `minDate` / `maxDate`: définies à partir des données journalières si elles existent, sinon à partir des données 15 minutes.
+- `volumePreleveTotal`: présent uniquement si une colonne « volume prélevé » a été trouvée dans les données journalières (actuellement aucune agrégation automatique à partir de pas de temps infra‑journaliers).
+
 ### Avertissements
 
 - « Le champ 'Remarque' doit être renseigné si la valeur est manquante pour le paramètre '{NomParamètre}' pour {intervalles} de l'onglet '{NomOnglet}'. »
