@@ -29,7 +29,7 @@ import {initSequence} from '../lib/util/sequences.js'
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
 import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
 import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/exploitation.js'
-import {createDocument, decorateDocument, getDocument} from '../lib/models/document.js'
+import {createDocument} from '../lib/models/document.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
