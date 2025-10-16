@@ -43,7 +43,7 @@ export async function validateMultiParamFile(buffer) {
   let consolidatedData
 
   try {
-    consolidatedData = consolidateData(data)
+    consolidatedData = consolidateData(data, errors)
   } catch (error) {
     errors.push({message: error.message, severity: 'error'})
   }
@@ -57,7 +57,7 @@ export async function validateMultiParamFile(buffer) {
 
 /* Helpers */
 
-function consolidateData(rawData) {
+function consolidateData(rawData, errors) {
   const data = {}
 
   try {
@@ -67,22 +67,46 @@ function consolidateData(rawData) {
   const dailyDataTab = rawData.dataTabs.find(tab => tab.period === '1 jour' && tab.hasData)
   const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
 
-  if (!dailyDataTab) {
-    throw new Error('Le fichier ne contient pas de données à la maille journalière')
+  // Paramètres et valeurs journalières si présents, sinon listes vides
+  if (dailyDataTab) {
+    data.dailyParameters = dailyDataTab.parameters.map(p => pick(p, [
+      'paramIndex',
+      'nom_parametre',
+      'type',
+      'unite'
+    ]))
+
+    const dailyRowsWithDates = filter(dailyDataTab.rows, row => row.date)
+    if (dailyRowsWithDates.length > 0) {
+      data.minDate = minBy(dailyRowsWithDates, 'date').date
+      data.maxDate = maxBy(dailyRowsWithDates, 'date').date
+    }
+
+    const volumePreleveParam = dailyDataTab.parameters.find(p => p.nom_parametre === 'volume prélevé')
+    let sortedDailyRows = []
+    if (volumePreleveParam) {
+      sortedDailyRows = sortBy(
+        filter(dailyRowsWithDates, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
+        'date'
+      )
+      data.volumePreleveTotal = sumBy(sortedDailyRows, row => row.values[volumePreleveParam.paramIndex])
+    } else {
+      sortedDailyRows = sortBy(dailyRowsWithDates, 'date')
+      // Erreur non bloquante : volume manquant alors que des données journalières existent
+      errors.push({message: 'Le fichier ne contient pas de données de volume prélevé', severity: 'error'})
+    }
+
+    data.dailyValues = sortedDailyRows.map(row => ({
+      date: row.date,
+      values: Object.values(pick(row.values, dailyDataTab.parameters.map(p => p.paramIndex)))
+    }))
+  } else {
+    errors.push({message: 'Le fichier ne contient pas de données à la maille journalière', severity: 'error'})
+    data.dailyParameters = []
+    data.dailyValues = []
   }
 
-  data.minDate = minBy(dailyDataTab.rows, 'date').date
-  data.maxDate = maxBy(dailyDataTab.rows, 'date').date
-
-  data.dailyParameters = dailyDataTab.parameters.map(p => pick(p, [
-    'paramIndex',
-    'nom_parametre',
-    'type',
-    'unite'
-  ]))
-
-  let fifteenMinutesDataByDate
-
+  // Paramètres et valeurs 15 minutes indépendamment de la présence journalière
   if (fifteenMinutesDataTab) {
     data.fifteenMinutesParameters = fifteenMinutesDataTab.parameters.map(p => pick(p, [
       'paramIndex',
@@ -90,9 +114,9 @@ function consolidateData(rawData) {
       'type',
       'unite'
     ]))
-    const groupedByDate = groupBy(fifteenMinutesDataTab.rows, 'date')
 
-    fifteenMinutesDataByDate = mapValues(groupedByDate, rows =>
+    const groupedByDate = groupBy(fifteenMinutesDataTab.rows, 'date')
+    const fifteenMinutesDataByDate = mapValues(groupedByDate, rows =>
       rows.map(({heure, values}) => ({
         heure,
         values: Object.values(
@@ -100,27 +124,21 @@ function consolidateData(rawData) {
         )
       }))
     )
+
+    // Définir min/max si absent et données 15m présentes
+    if (!data.minDate || !data.maxDate) {
+      const rowsWithDates = filter(fifteenMinutesDataTab.rows, r => r.date)
+      if (rowsWithDates.length > 0) {
+        data.minDate ||= minBy(rowsWithDates, 'date').date
+        data.maxDate ||= maxBy(rowsWithDates, 'date').date
+      }
+    }
+
+    data.fifteenMinutesValues = Object.entries(fifteenMinutesDataByDate).map(([date, rows]) => ({date, rows}))
+  } else {
+    data.fifteenMinutesParameters = []
+    data.fifteenMinutesValues = []
   }
-
-  const volumePreleveParam = dailyDataTab.parameters.find(p => p.nom_parametre === 'volume prélevé')
-
-  if (!volumePreleveParam) {
-    throw new Error('Le fichier ne contient pas de données de volume prélevé')
-  }
-
-  const dailyRowsWithDates = filter(dailyDataTab.rows, row => row.date)
-  const sortedDailyRows = sortBy(
-    filter(dailyRowsWithDates, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
-    'date'
-  )
-
-  data.dailyValues = sortedDailyRows.map(row => ({
-    date: row.date,
-    values: Object.values(pick(row.values, dailyDataTab.parameters.map(p => p.paramIndex))),
-    fifteenMinutesValues: fifteenMinutesDataByDate?.[row.date]
-  }))
-
-  data.volumePreleveTotal = sumBy(sortedDailyRows, row => row.values[volumePreleveParam.paramIndex])
 
   return data
 }
