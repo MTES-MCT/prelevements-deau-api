@@ -179,8 +179,14 @@ test('validateMultiParamFile - too many errors', async t => {
 test('validateMultiParamFile - no daily data', async t => {
   const filePath = path.join(testFilesPath, 'no-daily-data.xlsx')
   const fileContent = await fs.readFile(filePath)
-  const {errors} = await validateMultiParamFile(fileContent)
-  t.is(errors[0].message, 'Le fichier ne contient pas de données à la maille journalière')
+  const {errors, data} = await validateMultiParamFile(fileContent)
+  t.true(errors.some(e => e.message === 'Le fichier ne contient pas de données à la maille journalière'))
+  // Vérifie que l'absence de maille journalière n'empêche pas l'extraction des autres granularités
+  t.true(Array.isArray(data.fifteenMinutesParameters))
+  t.true(Array.isArray(data.fifteenMinutesValues))
+  // Les paramètres journaliers doivent être vides
+  t.deepEqual(data.dailyParameters, [])
+  t.deepEqual(data.dailyValues, [])
 })
 
 test('validateMultiParamFile - no volume data', async t => {
