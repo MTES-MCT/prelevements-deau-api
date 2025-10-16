@@ -14,8 +14,9 @@
     "download-csv": "node scripts/download-csv.js",
     "validate-declaration-file": "node scripts/validate-declaration-file.js",
     "lint": "xo",
+    "lint:openapi": "spectral lint docs/openapi.yaml",
     "test": "ava",
-    "lint:openapi": "spectral lint docs/openapi.yaml"
+    "coverage": "c8 ava"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.895.0",
@@ -45,8 +46,23 @@
   "devDependencies": {
     "@stoplight/spectral-cli": "^6.11.0",
     "ava": "^6.4.1",
+    "c8": "^9.1.0",
     "mongodb-memory-server": "^10.2.1",
     "xo": "^0.60.0"
+  },
+  "c8": {
+    "all": true,
+    "include": [
+      "lib/**/*.js",
+      "packages/**/*.js"
+    ],
+    "exclude": [
+      "**/migrations/**",
+      "**/scripts/**",
+      "**/data/**",
+      "packages/**/docs/**",
+      "**/__tests__/**"
+    ]
   },
   "xo": {
     "semicolon": false,

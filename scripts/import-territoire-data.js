@@ -6,6 +6,7 @@ import {argv} from 'node:process'
 
 import {chain, keyBy} from 'lodash-es'
 
+import got from 'got'
 import mongo, {ObjectId} from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {getCommune} from '../lib/util/cog.js'
@@ -28,10 +29,12 @@ import {initSequence} from '../lib/util/sequences.js'
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
 import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
 import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/exploitation.js'
+import {createDocument, decorateDocument, getDocument} from '../lib/models/document.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
 const exploitationsIds = new Map()
+const documentsIds = new Map()
 
 function getPointId(id_point) {
   return pointsIds.get(id_point)
@@ -39,6 +42,10 @@ function getPointId(id_point) {
 
 function getPreleveurId(id_preleveur) {
   return preleveursIds.get(id_preleveur)
+}
+
+function getDocumentId(idDocument) {
+  return documentsIds.get(idDocument)
 }
 
 function parseAutresNoms(autresNoms) {
@@ -243,6 +250,12 @@ async function importDocumentsInExploitations(filePath) {
     false
   )
 
+  const exploitations = await readDataFromCsvFile(
+    `${filePath}/exploitation.csv`,
+    EXPLOITATIONS_DEFINITION,
+    false
+  )
+
   const exploitationsDocuments = await readDataFromCsvFile(
     `${filePath}/exploitation-document.csv`,
     EXPLOITATIONS_DOCUMENTS_DEFINITION,
@@ -252,12 +265,21 @@ async function importDocumentsInExploitations(filePath) {
   if (documents.length > 0) {
     const updatePromises = exploitationsDocuments.map(async ed => {
       const {id_exploitation, id_document} = ed
-      const document = documents.find(d => d.id_document === id_document)
+      const idDocument = getDocumentId(id_document)
+      const document = await getDocument(idDocument)
+      const exploitation = exploitations.find(e => e.id_exploitation === id_exploitation)
 
-      if (document) {
+      if (document && exploitation) {
+        const documentWithPreleveur = {
+          ...document,
+          id_preleveur: exploitation.id_beneficiaire
+        }
+
+        const decoratedDocumentWithPreleveur = await decorateDocument(documentWithPreleveur)
+
         await mongo.db.collection('exploitations').updateOne(
           {id_exploitation},
-          {$push: {documents: document}}
+          {$push: {documents: decoratedDocumentWithPreleveur}}
         )
       }
     })
@@ -369,12 +391,29 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   }
 }
 
-async function importDocuments(filePath, codeTerritoire, nomTerritoire) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des documents pour : ' + nomTerritoire)
+async function importDocuments(filePath, codeTerritoire) {
+  console.log(
+    '\n\u001B[35;1;4m%s\u001B[0m',
+    '=> Import des documents dans la collection documents'
+  )
+
+  const fichiersIntrouvables = []
 
   const documents = await readDataFromCsvFile(
     `${filePath}/document.csv`,
     DOCUMENTS_DEFINITION,
+    false
+  )
+
+  const exploitations = await readDataFromCsvFile(
+    `${filePath}/exploitation.csv`,
+    EXPLOITATIONS_DEFINITION,
+    false
+  )
+
+  const exploitationsDocuments = await readDataFromCsvFile(
+    `${filePath}/exploitation-document.csv`,
+    EXPLOITATIONS_DOCUMENTS_DEFINITION,
     false
   )
 
@@ -383,15 +422,83 @@ async function importDocuments(filePath, codeTerritoire, nomTerritoire) {
     await mongo.db.collection('documents').deleteMany({territoire: codeTerritoire})
     console.log('...Ok !')
 
-    for (const document of documents) {
-      document.territoire = codeTerritoire
+    const documentsWithBeneficiaire = documents.map(document => {
+      const relatedExploitationIds = new Set(exploitationsDocuments
+        .filter(ed => ed.id_document === document.id_document)
+        .map(ed => ed.id_exploitation))
+
+      const beneficiaireIds = [...new Set(exploitations
+        .filter(exploitation => relatedExploitationIds.has(exploitation.id_exploitation))
+        .map(exploitation => exploitation.id_beneficiaire))]
+
+      return {
+        ...document,
+        territoire: codeTerritoire,
+        id_preleveurs: beneficiaireIds
+      }
+    })
+
+    for (const document of documentsWithBeneficiaire) {
+      const {nom_fichier, id_preleveurs} = document
+
+      if (!nom_fichier) {
+        continue
+      }
+
+      const url = `${process.env.S3_PUBLIC_URL}/document/${nom_fichier}`
+
+      let buffer
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        buffer = await got(url).buffer()
+      } catch (error) {
+        console.error(`Erreur avec le document ${nom_fichier} : ${error.message}`)
+        fichiersIntrouvables.push(nom_fichier)
+        continue
+      }
+
+      const filename = nom_fichier
+
+      for (const currentPreleveurId of id_preleveurs) {
+        // eslint-disable-next-line no-await-in-loop
+        const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur: currentPreleveurId})
+
+        const documentData = {
+          ...document,
+          nom_fichier: filename
+        }
+
+        const originalDocumentId = documentData.id_document
+
+        delete documentData.id_document
+        delete documentData.territoire
+        delete documentData.id_preleveurs
+
+        const file = {
+          buffer,
+          originalname: filename,
+          size: buffer.length
+        }
+
+        if (id_preleveurs.length > 1) {
+          console.log(`Création du document ${filename} pour le préleveur ${currentPreleveurId} (${id_preleveurs.indexOf(currentPreleveurId) + 1}/${id_preleveurs.length})`)
+        } else {
+          console.log(`Création du document ${filename}`)
+        }
+
+        // eslint-disable-next-line no-await-in-loop
+        const insertedDocument = await createDocument(documentData, file, preleveur?._id || currentPreleveurId, codeTerritoire)
+
+        documentsIds.set(originalDocumentId, insertedDocument._id)
+      }
     }
 
-    const result = await mongo.db.collection('documents').insertMany(documents)
+    // eslint-disable-next-line unicorn/no-console-spaces
+    console.log('Fichiers introuvables : ', fichiersIntrouvables)
 
     console.log(
-      '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + result.insertedCount + ' documents insérés dans la collection documents\n\n'
+      '\u001B[34;1m%s\u001B[0m',
+      '\n=> Les documents ont été importés dans la collection documents\n\n'
     )
   }
 }
@@ -430,9 +537,9 @@ async function importData(folderPath, codeTerritoire) {
     process.exit(1)
   }
 
-  await importDocuments(folderPath, codeTerritoire, validTerritoire.nom)
-  await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
   await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
+  await importDocuments(folderPath, codeTerritoire)
+  await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
   await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
 
   if (pointsIds.size > 0) {
