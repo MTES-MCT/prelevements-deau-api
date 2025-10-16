@@ -223,15 +223,23 @@ test('extractMultiParamFile - too many errors', async t => {
 test('extractMultiParamFile - no daily data', async t => {
   const filePath = path.join(testFilesPath, 'no-daily-data.xlsx')
   const fileContent = await fs.readFile(filePath)
-  const {errors} = await extractMultiParamFile(fileContent)
-  t.is(errors[0].message, 'Le fichier ne contient pas de données à la maille journalière')
+  const {data} = await extractMultiParamFile(fileContent)
+  t.truthy(data)
+  t.true(Array.isArray(data.series))
+  // Vérifie qu'il n'y a pas de série avec une fréquence journalière
+  const dailySeries = data.series.filter(s => s.frequency === '1 day')
+  t.is(dailySeries.length, 0)
 })
 
 test('extractMultiParamFile - no volume data', async t => {
   const filePath = path.join(testFilesPath, 'no-volume-data.xlsx')
   const fileContent = await fs.readFile(filePath)
-  const {errors} = await extractMultiParamFile(fileContent)
-  t.is(errors[0].message, 'Le fichier ne contient pas de données de volume prélevé')
+  const {data} = await extractMultiParamFile(fileContent)
+  t.truthy(data)
+  t.true(Array.isArray(data.series))
+  // Vérifie qu'il n'y a pas de série de volume prélevé
+  const volumeSeries = data.series.filter(s => s.parameter === 'volume prélevé')
+  t.is(volumeSeries.length, 0)
 })
 
 // Warning test

@@ -67,20 +67,18 @@ function consolidateData(rawData) {
   const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
   const otherDataTabs = rawData.dataTabs.filter(tab => tab.period === 'autre' && tab.hasData)
 
-  if (!dailyDataTab) {
-    throw new Error('Le fichier ne contient pas de données à la maille journalière')
-  }
-
   const series = []
 
-  for (const param of dailyDataTab.parameters) {
-    buildSeriesForParam({
-      param,
-      rowsSource: dailyDataTab.rows,
-      pointPrelevement,
-      frequency: '1 day',
-      series
-    })
+  if (dailyDataTab) {
+    for (const param of dailyDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: dailyDataTab.rows,
+        pointPrelevement,
+        frequency: '1 day',
+        series
+      })
+    }
   }
 
   if (fifteenMinutesDataTab) {
@@ -118,11 +116,6 @@ function consolidateData(rawData) {
         })
       }
     }
-  }
-
-  const hasVolumeDaily = series.some(s => s.parameter === 'volume prélevé' && s.frequency === '1 day')
-  if (!hasVolumeDaily) {
-    throw new Error('Le fichier ne contient pas de données de volume prélevé')
   }
 
   return {series}
