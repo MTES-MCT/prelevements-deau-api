@@ -28,7 +28,7 @@ import {initSequence} from '../lib/util/sequences.js'
 
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
 import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
-import {bulkInsertExploitations, bulkDeleteExploitations, addDocumentToExploitation} from '../lib/models/exploitation.js'
+import {bulkInsertExploitations, bulkDeleteExploitations, addDocumentsToExploitation} from '../lib/models/exploitation.js'
 import {createDocument} from '../lib/models/document.js'
 
 const pointsIds = new Map()
@@ -266,7 +266,7 @@ async function importDocumentsInExploitations(filePath) {
       const idDocument = getDocumentId(id_document)
       const idExploitation = getExploitationId(id_exploitation)
 
-      await addDocumentToExploitation(idExploitation, [idDocument])
+      await addDocumentsToExploitation(idExploitation, [idDocument])
     })
 
     await Promise.all(updatePromises)
