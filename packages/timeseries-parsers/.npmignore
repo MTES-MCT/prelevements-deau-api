@@ -1,0 +1,16 @@
+# Documentation
+docs/
+
+# Tests
+**/__tests__/
+**/test-files/
+*.test.js
+*.spec.js
+
+# Development files
+.git
+.gitignore
+.vscode/
+.DS_Store
+*.log
+node_modules/
