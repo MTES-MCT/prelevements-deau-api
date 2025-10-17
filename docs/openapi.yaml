@@ -360,14 +360,18 @@ paths:
       parameters:
         - in: query
           name: preleveurId
-          required: true
+          required: false
           schema: { $ref: '#/components/schemas/ObjectId' }
-          description: Identifiant du préleveur (ObjectId)
+          description: |
+            Identifiant du préleveur (ObjectId).
+            Au moins un des paramètres `preleveurId` ou `pointId` doit être fourni.
         - in: query
           name: pointId
-          required: true
+          required: false
           schema: { $ref: '#/components/schemas/ObjectId' }
-          description: Identifiant du point de prélèvement (ObjectId)
+          description: |
+            Identifiant du point de prélèvement (ObjectId).
+            Au moins un des paramètres `preleveurId` ou `pointId` doit être fourni.
         - in: query
           name: from
           required: false
