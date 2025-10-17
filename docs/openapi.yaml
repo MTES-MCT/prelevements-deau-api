@@ -1,0 +1,957 @@
+openapi: 3.1.0
+info:
+  title: API Prélèvements d'Eau
+  version: 0.1.0
+  description: |
+    Première ébauche de la définition OpenAPI. Certaines propriétés sont simplifiées ou notées TBD.
+    Les objets renvoyés correspondent à l'état courant de l'API Express.
+  contact:
+    name: Équipe Prélèvements d'Eau
+tags:
+  - name: Meta
+    description: Informations générales et de contexte
+  - name: Dossiers
+    description: Gestion des dossiers issus de démarches simplifiées
+  - name: Attachments
+    description: Pièces jointes des dossiers (fichiers importés)
+  - name: Intégrations
+    description: Journées / lignes intégrées issues des pièces jointes
+  - name: Séries
+    description: Séries temporelles de prélèvements (métadonnées et valeurs)
+  - name: Points
+    description: Points de prélèvements (captages / stations)
+  - name: Exploitations
+    description: Exploitations liées à des points et préleveurs
+  - name: Préleveurs
+    description: Acteurs réalisant les prélèvements
+  - name: Territoires
+    description: Accès par territoire administratif
+  - name: Référentiels
+    description: Données de référence externes (BNPE, BSS, etc.)
+  - name: Stats
+    description: Statistiques agrégées
+servers:
+  - url: https://api.example.test
+    description: Environnement de test
+  - url: https://api.example.prod
+    description: Production (placeholder)
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    ObjectId:
+      type: string
+      pattern: '^[0-9a-fA-F]{24}$'
+      description: Identifiant MongoDB
+    Dossier:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        territoire: { type: string }
+        ds:
+          type: object
+          properties:
+            demarcheNumber: { type: integer }
+            dossierNumber: { type: integer }
+        status: { type: string }
+        result:
+          type: object
+          description: Résumé de consolidation (structure partielle)
+        files:
+          type: array
+          items: { $ref: '#/components/schemas/AttachmentSummary' }
+    AttachmentSummary:
+      type: object
+      properties:
+        storageKey: { type: string }
+        storageHash: { type: string }
+        validationStatus: { type: string, enum: [success, warning, error], nullable: true }
+        result:
+          type: object
+          properties:
+            seriesCount: { type: integer }
+            valueRowCount: { type: integer }
+            rawErrorsSize: { type: integer }
+            errorSummary:
+              type: object
+              additionalProperties: { type: integer }
+    IntegrationEntry:
+      type: object
+      properties:
+        point: { $ref: '#/components/schemas/ObjectId' }
+        date: { type: string, format: date }
+        pointInfo:
+          type: object
+          nullable: true
+          properties:
+            id_point: { type: integer }
+            nom: { type: string }
+    PointPrelevementLight:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        id_point: { type: integer }
+        nom: { type: string, nullable: true }
+        bnpe:
+          type: object
+          nullable: true
+          properties:
+            nom: { type: string, nullable: true }
+    PreleveurLight:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        nom: { type: string, nullable: true }
+        raison_sociale: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+    Exploitation:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        point: { $ref: '#/components/schemas/ObjectId' }
+        preleveur: { $ref: '#/components/schemas/ObjectId' }
+        date_debut: { type: string, format: date }
+        date_fin: { type: string, format: date, nullable: true }
+        statut: { type: string }
+        usages: { type: array, items: { type: string } }
+    Statistiques:
+      type: object
+      additionalProperties: true
+    SeriesSummary:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        parameter: { type: string }
+        unit: { type: string, nullable: true }
+        frequency: { type: string }
+        valueType: { type: string }
+        minDate: { type: string, format: date }
+        maxDate: { type: string, format: date }
+        hasSubDaily: { type: boolean, nullable: true }
+        numberOfValues: { type: integer, nullable: true }
+        pointPrelevement: { $ref: '#/components/schemas/ObjectId', nullable: true }
+        pointInfo:
+          type: object
+          nullable: true
+          properties:
+            id_point: { type: integer }
+            nom: { type: string }
+    SeriesValueDaily:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        value: { type: number, nullable: true }
+        remark: { type: string, nullable: true }
+    SeriesValueSubDaily:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        values:
+          type: array
+          items:
+            type: object
+            properties:
+              time: { type: string, pattern: '^\\d{2}:\\d{2}:\\d{2}$' }
+              value: { type: number, nullable: true }
+              remark: { type: string, nullable: true }
+paths:
+  /info:
+    get:
+      tags: [Meta]
+      summary: Informations sur le contexte utilisateur
+      description: Retourne les informations de base concernant l'utilisateur courant (rôle, territoire, etc.)
+      operationId: getUserContextInfo
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Informations de base
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isAdmin: { type: boolean }
+                  territoire: { type: string }
+  /dossiers:
+    get:
+      tags: [Dossiers]
+      summary: Lister les dossiers
+      description: Liste paginée (future) ou simple des dossiers filtrables par statut, préleveur, type de prélèvement et mois de déclaration.
+      operationId: listDossiers
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: preleveur
+          schema: { type: string, description: ObjectId ou 'unknown' }
+        - in: query
+          name: typePrelevement
+          schema: { type: string }
+        - in: query
+          name: moisDeclaration
+          schema: { type: string }
+      responses:
+        '200':
+          description: Liste de dossiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Dossier' }
+  /dossiers/stats:
+    get:
+      tags: [Dossiers]
+      summary: Statistiques agrégées par statut de dossier
+      description: Compte le nombre de dossiers pour chaque statut.
+      operationId: getDossiersStats
+      responses:
+        '200':
+          description: Statistiques
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Statistiques' }
+  /dossiers/{dossierId}:
+    get:
+      tags: [Dossiers]
+      summary: Obtenir un dossier avec résumé des pièces jointes
+      description: Retourne le dossier ciblé et les métadonnées de ses pièces jointes.
+      operationId: getDossier
+      parameters:
+        - in: path
+          name: dossierId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Dossier complet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dossier' }
+        '404': { description: Introuvable }
+  /dossiers/{dossierId}/reconsolidate:
+    post:
+      tags: [Dossiers]
+      summary: Marquer un dossier pour reconsolidation manuelle
+      description: |
+        Marque un dossier pour reconsolidation en supprimant son champ `consolidatedAt`.
+        Le dossier sera retraité lors du prochain passage du cron de consolidation.
+
+        **Cas d'usage** : Après la suppression d'un dossier concurrent, permet de récupérer
+        les jours libérés qui étaient en conflit (règle "premier arrivé, premier servi").
+      operationId: reconsolidateDossier
+      parameters:
+        - in: path
+          name: dossierId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Dossier marqué avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  dossierId:
+                    $ref: '#/components/schemas/ObjectId'
+                  message:
+                    type: string
+                    example: "Dossier marqué pour reconsolidation. Il sera retraité lors du prochain cron."
+        '404': { description: Dossier non trouvé }
+  /dossiers/{dossierId}/files/{attachmentId}:
+    get:
+      tags: [Attachments]
+      summary: Obtenir le détail d'une pièce jointe
+      description: Retourne les métadonnées calculées pour une pièce jointe d'un dossier.
+      operationId: getDossierAttachment
+      parameters:
+        - in: path
+          name: dossierId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: path
+          name: attachmentId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Pièce jointe
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachmentSummary' }
+        '404': { description: Introuvable }
+  /dossiers/{dossierId}/files/{attachmentId}/integrations:
+    get:
+      tags: [Intégrations]
+      summary: Jours intégrés pour une pièce jointe
+      description: Liste les entrées d'intégration (journées) produites depuis la pièce jointe.
+      operationId: listAttachmentIntegrations
+      parameters:
+        - in: path
+          name: dossierId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: path
+          name: attachmentId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: withPoint
+          schema: { type: string, enum: ['0','1'], default: '0' }
+      responses:
+        '200':
+          description: Liste des intégrations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations:
+                    type: array
+                    items: { $ref: '#/components/schemas/IntegrationEntry' }
+  /dossiers/{dossierId}/files/{attachmentId}/series:
+    get:
+      tags: [Séries]
+      summary: Lister les séries d'une pièce jointe
+      description: Retourne les métadonnées des séries détectées dans une pièce jointe.
+      operationId: listAttachmentSeries
+      parameters:
+        - in: path
+          name: dossierId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: path
+          name: attachmentId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: withPoint
+          schema: { type: string, enum: ['0','1'], default: '0' }
+      responses:
+        '200':
+          description: Séries associées
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  series:
+                    type: array
+                    items: { $ref: '#/components/schemas/SeriesSummary' }
+        '404': { description: Introuvable }
+  /series:
+    get:
+      tags: [Séries]
+      summary: Rechercher des séries par préleveur, point et plage de dates intégrées
+      description: >-
+        Retourne uniquement les métadonnées des séries ayant au moins une date intégrée (computed.integratedDays)
+        dans l'intervalle fourni (from/to). Si from et to sont absents, toutes les séries du couple
+        préleveur/point sont retournées sans filtrage sur integratedDays.
+      operationId: searchSeries
+      parameters:
+        - in: query
+          name: preleveurId
+          required: false
+          schema: { $ref: '#/components/schemas/ObjectId' }
+          description: |
+            Identifiant du préleveur (ObjectId).
+            Au moins un des paramètres `preleveurId` ou `pointId` doit être fourni.
+        - in: query
+          name: pointId
+          required: false
+          schema: { $ref: '#/components/schemas/ObjectId' }
+          description: |
+            Identifiant du point de prélèvement (ObjectId).
+            Au moins un des paramètres `preleveurId` ou `pointId` doit être fourni.
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+          description: Date de début (incluse) pour filtrer les dates intégrées
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+          description: Date de fin (incluse) pour filtrer les dates intégrées
+      responses:
+        '200':
+          description: Liste des séries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  series:
+                    type: array
+                    items: { $ref: '#/components/schemas/SeriesSummary' }
+        '400': { description: Paramètres invalides }
+        '403': { description: Accès non autorisé }
+  /series/{seriesId}/values:
+    get:
+      tags: [Séries]
+      summary: Valeurs d'une série (filtrage par date)
+      description: Retourne les valeurs quotidiennes ou infra-quotidiennes d'une série, éventuellement filtrées par intervalle de dates.
+      operationId: getSeriesValues
+      parameters:
+        - in: path
+          name: seriesId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: query
+          name: start
+          description: Date de début (incluse) YYYY-MM-DD
+          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+        - in: query
+          name: end
+          description: Date de fin (incluse) YYYY-MM-DD
+          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+        - in: query
+          name: withPoint
+          schema: { type: string, enum: ['0','1'], default: '0' }
+      responses:
+        '200':
+          description: Valeurs de la série
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  series: { $ref: '#/components/schemas/SeriesSummary' }
+                  values:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: '#/components/schemas/SeriesValueDaily'
+                        - $ref: '#/components/schemas/SeriesValueSubDaily'
+        '400': { description: Paramètres invalides }
+        '404': { description: Introuvable }
+  /series/{seriesId}:
+    get:
+      tags: [Séries]
+      summary: Métadonnées d'une série
+      description: Retourne uniquement les métadonnées d'une série identifiée par son ID.
+      operationId: getSeries
+      parameters:
+        - in: path
+          name: seriesId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: query
+          name: withPoint
+          schema: { type: string, enum: ['0','1'], default: '0' }
+      responses:
+        '200':
+          description: Métadonnées
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  series: { $ref: '#/components/schemas/SeriesSummary' }
+        '404': { description: Introuvable }
+  /points-prelevement:
+    get:
+      tags: [Points]
+      summary: Lister les points de prélèvement
+      description: Retourne la liste des points de prélèvement disponibles.
+      operationId: listPoints
+      responses:
+        '200':
+          description: Liste de points
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PointPrelevementLight' }
+    post:
+      tags: [Points]
+      summary: Créer un point de prélèvement
+      description: Crée un nouveau point de prélèvement avec les propriétés fournies.
+      operationId: createPoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Créé }
+  /points-prelevement/{pointId}:
+    get:
+      tags: [Points]
+      summary: Obtenir un point
+      description: Retourne les métadonnées d'un point de prélèvement.
+      operationId: getPoint
+      parameters:
+        - in: path
+          name: pointId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Point
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PointPrelevementLight' }
+        '404': { description: Introuvable }
+    put:
+      tags: [Points]
+      summary: Mettre à jour un point
+      description: Met à jour les propriétés d'un point de prélèvement existant.
+      operationId: updatePoint
+      parameters:
+        - in: path
+          name: pointId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Mis à jour }
+    delete:
+      tags: [Points]
+      summary: Supprimer un point
+      description: Supprime un point de prélèvement et ses dépendances éventuelles.
+      operationId: deletePoint
+      parameters:
+        - in: path
+          name: pointId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200': { description: Supprimé }
+  /points-prelevement/{pointId}/exploitations:
+    get:
+      tags: [Points]
+      summary: Lister les exploitations d'un point
+      description: Liste les exploitations associées au point.
+      operationId: listPointExploitations
+      parameters:
+        - in: path
+          name: pointId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Liste d'exploitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Exploitation' }
+  /exploitations:
+    post:
+      tags: [Exploitations]
+      summary: Créer une exploitation
+      description: Crée une nouvelle exploitation liée à un point et un préleveur.
+      operationId: createExploitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Créé }
+  /exploitations/{exploitationId}:
+    get:
+      tags: [Exploitations]
+      summary: Obtenir une exploitation
+      description: Retourne les détails d'une exploitation.
+      operationId: getExploitation
+      parameters:
+        - in: path
+          name: exploitationId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Exploitation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exploitation' }
+    put:
+      tags: [Exploitations]
+      summary: Mettre à jour une exploitation
+      description: Met à jour les propriétés d'une exploitation existante.
+      operationId: updateExploitation
+      parameters:
+        - in: path
+          name: exploitationId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Mis à jour }
+    delete:
+      tags: [Exploitations]
+      summary: Supprimer une exploitation
+      description: Supprime une exploitation.
+      operationId: deleteExploitation
+      parameters:
+        - in: path
+          name: exploitationId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200': { description: Supprimée }
+  /preleveurs:
+    get:
+      tags: [Préleveurs]
+      summary: Lister les préleveurs
+      description: Retourne la liste des préleveurs.
+      operationId: listPreleveurs
+      responses:
+        '200':
+          description: Liste de préleveurs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PreleveurLight' }
+    post:
+      tags: [Préleveurs]
+      summary: Créer un préleveur
+      description: Crée un nouveau préleveur.
+      operationId: createPreleveur
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Créé }
+  /preleveurs/{preleveurId}:
+    get:
+      tags: [Préleveurs]
+      summary: Obtenir un préleveur
+      description: Retourne les métadonnées d'un préleveur.
+      operationId: getPreleveur
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Préleveur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreleveurLight' }
+    put:
+      tags: [Préleveurs]
+      summary: Mettre à jour un préleveur
+      description: Met à jour les propriétés d'un préleveur existant.
+      operationId: updatePreleveur
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': { description: Mis à jour }
+    delete:
+      tags: [Préleveurs]
+      summary: Supprimer un préleveur
+      description: Supprime un préleveur.
+      operationId: deletePreleveur
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200': { description: Supprimé }
+  /preleveurs/{preleveurId}/points-prelevement:
+    get:
+      tags: [Préleveurs]
+      summary: Lister les points d'un préleveur
+      description: Liste les points rattachés à un préleveur.
+      operationId: listPreleveurPoints
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Liste de points
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PointPrelevementLight' }
+  /preleveurs/{preleveurId}/exploitations:
+    get:
+      tags: [Préleveurs]
+      summary: Lister les exploitations d'un préleveur
+      description: Liste les exploitations associées à un préleveur.
+      operationId: listPreleveurExploitations
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Liste d'exploitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Exploitation' }
+  /preleveurs/{preleveurId}/documents:
+    get:
+      tags: [Préleveurs]
+      summary: Lister les documents d'un préleveur
+      description: Liste les documents liés à un préleveur.
+      operationId: listPreleveurDocuments
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Liste de documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      tags: [Préleveurs]
+      summary: Ajouter un document à un préleveur
+      description: Ajoute (upload) un document pour un préleveur donné.
+      operationId: addPreleveurDocument
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                document:
+                  type: string
+                  format: binary
+      responses:
+        '200': { description: Ajouté }
+  /preleveurs/{preleveurId}/documents/{documentId}:
+    delete:
+      tags: [Préleveurs]
+      summary: Supprimer un document
+      description: Supprime un document précédemment téléversé.
+      operationId: deletePreleveurDocument
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: path
+          name: documentId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200': { description: Supprimé }
+  /territoires/{codeTerritoire}/points-prelevement:
+    get:
+      tags: [Territoires]
+      summary: Points d'un territoire
+      description: Liste les points de prélèvement appartenant à un territoire.
+      operationId: listTerritoirePoints
+      parameters:
+        - in: path
+          name: codeTerritoire
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Liste de points
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PointPrelevementLight' }
+  /territoires/{codeTerritoire}/preleveurs:
+    get:
+      tags: [Territoires]
+      summary: Préleveurs d'un territoire
+      description: Liste les préleveurs associés à un territoire.
+      operationId: listTerritoirePreleveurs
+      parameters:
+        - in: path
+          name: codeTerritoire
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Liste de préleveurs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PreleveurLight' }
+  /referentiels/bss:
+    get:
+      tags: [Référentiels]
+      summary: Liste BSS
+      description: Liste des entités BSS (sélection simple).
+      operationId: listReferentielBss
+      responses:
+        '200': { description: OK }
+  /referentiels/bss/{idBss}:
+    get:
+      tags: [Référentiels]
+      summary: Détail BSS
+      description: Détails d'une entrée BSS identifiée.
+      operationId: getReferentielBss
+      parameters:
+        - in: path
+          name: idBss
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /referentiels/bnpe:
+    get:
+      tags: [Référentiels]
+      summary: Liste BNPE
+      description: Liste des ressources BNPE.
+      operationId: listReferentielBnpe
+      responses:
+        '200': { description: OK }
+  /referentiels/bnpe/{idBnpe}:
+    get:
+      tags: [Référentiels]
+      summary: Détail BNPE
+      description: Détails d'une ressource BNPE.
+      operationId: getReferentielBnpe
+      parameters:
+        - in: path
+          name: idBnpe
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /referentiels/me-continentales-bv:
+    get:
+      tags: [Référentiels]
+      summary: Liste ME Continentales BV
+      description: Liste des masses d'eau continentales (BV).
+      operationId: listReferentielMeContinentalesBv
+      responses:
+        '200': { description: OK }
+  /referentiels/me-continentales-bv/{idMeContinentalesBv}:
+    get:
+      tags: [Référentiels]
+      summary: Détail ME Continentales BV
+      description: Détails d'une masse d'eau continentale (BV).
+      operationId: getReferentielMeContinentalesBv
+      parameters:
+        - in: path
+          name: idMeContinentalesBv
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /referentiels/bv-bdcarthage:
+    get:
+      tags: [Référentiels]
+      summary: Liste BV BdCarthage
+      description: Liste des bassins versants BdCarthage.
+      operationId: listReferentielBvBdCarthage
+      responses:
+        '200': { description: OK }
+  /referentiels/bv-bdcarthage/{idBvBdcarthage}:
+    get:
+      tags: [Référentiels]
+      summary: Détail BV BdCarthage
+      description: Détails d'un bassin versant BdCarthage.
+      operationId: getReferentielBvBdCarthage
+      parameters:
+        - in: path
+          name: idBvBdcarthage
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /referentiels/meso:
+    get:
+      tags: [Référentiels]
+      summary: Liste MESO
+      description: Liste des entités MESO.
+      operationId: listReferentielMeso
+      responses:
+        '200': { description: OK }
+  /referentiels/meso/{idMeso}:
+    get:
+      tags: [Référentiels]
+      summary: Détail MESO
+      description: Détails d'une entité MESO.
+      operationId: getReferentielMeso
+      parameters:
+        - in: path
+          name: idMeso
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /stats:
+    get:
+      tags: [Stats]
+      summary: Statistiques globales
+      description: Retourne des agrégations globales (volumes, compteurs...).
+      operationId: getGlobalStats
+      responses:
+        '200': { description: OK }
+  /stats/{territoire}:
+    get:
+      tags: [Stats]
+      summary: Statistiques par territoire
+      description: Retourne des agrégations limitées à un territoire.
+      operationId: getStatsByTerritoire
+      parameters:
+        - in: path
+          name: territoire
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }

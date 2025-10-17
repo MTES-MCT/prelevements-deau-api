@@ -1,11 +1,13 @@
-import {pick, minBy, maxBy, sumBy, groupBy, mapValues, filter, sortBy} from 'lodash-es'
+import {pick, minBy, maxBy} from 'lodash-es'
+import {normalizeOutputFrequency, isSubDailyFrequency} from './frequency.js'
 
 import {readSheet} from '../xlsx.js'
 
 import {validateAndExtract as validateAndExtractMetadata} from './tabs/metadata.js'
 import {validateAndExtract as validateAndExtractData} from './tabs/data.js'
+import {dedupe} from '../dedupe.js'
 
-export async function validateMultiParamFile(buffer) {
+export async function extractMultiParamFile(buffer) {
   let workbook
 
   try {
@@ -48,81 +50,182 @@ export async function validateMultiParamFile(buffer) {
     errors.push({message: error.message, severity: 'error'})
   }
 
-  return {
+  const result = {
     rawData: data,
     data: consolidatedData,
     errors: errors.map(e => formatError(e))
   }
+
+  return dedupe(result)
 }
 
 /* Helpers */
 
 function consolidateData(rawData) {
-  const data = {}
-
-  try {
-    data.pointPrelevement = parsePointPrelevement(rawData.metadata.pointPrelevement)
-  } catch {}
-
+  const pointPrelevement = safeParsePointPrelevement(rawData.metadata.pointPrelevement)
   const dailyDataTab = rawData.dataTabs.find(tab => tab.period === '1 jour' && tab.hasData)
   const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
+  const otherDataTabs = rawData.dataTabs.filter(tab => tab.period === 'autre' && tab.hasData)
 
-  if (!dailyDataTab) {
-    throw new Error('Le fichier ne contient pas de données à la maille journalière')
+  const series = []
+
+  if (dailyDataTab) {
+    for (const param of dailyDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: dailyDataTab.rows,
+        pointPrelevement,
+        frequency: '1 day',
+        series
+      })
+    }
   }
-
-  data.minDate = minBy(dailyDataTab.rows, 'date').date
-  data.maxDate = maxBy(dailyDataTab.rows, 'date').date
-
-  data.dailyParameters = dailyDataTab.parameters.map(p => pick(p, [
-    'paramIndex',
-    'nom_parametre',
-    'type',
-    'unite'
-  ]))
-
-  let fifteenMinutesDataByDate
 
   if (fifteenMinutesDataTab) {
-    data.fifteenMinutesParameters = fifteenMinutesDataTab.parameters.map(p => pick(p, [
-      'paramIndex',
-      'nom_parametre',
-      'type',
-      'unite'
-    ]))
-    const groupedByDate = groupBy(fifteenMinutesDataTab.rows, 'date')
-
-    fifteenMinutesDataByDate = mapValues(groupedByDate, rows =>
-      rows.map(({heure, values}) => ({
-        heure,
-        values: Object.values(
-          pick(values, fifteenMinutesDataTab.parameters.map(p => p.paramIndex))
-        )
-      }))
-    )
+    for (const param of fifteenMinutesDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: fifteenMinutesDataTab.rows,
+        pointPrelevement,
+        frequency: '15 minutes',
+        series,
+        expectsTime: true
+      })
+    }
   }
 
-  const volumePreleveParam = dailyDataTab.parameters.find(p => p.nom_parametre === 'volume prélevé')
+  // Onglets "autre" : la fréquence réelle vient du champ param.frequence
+  if (otherDataTabs.length > 0) {
+    for (const tab of otherDataTabs) {
+      for (const param of tab.parameters) {
+        // Déterminer la fréquence normalisée
+        const normalized = normalizeOutputFrequency(param.frequence)
+        if (!normalized) {
+          // Fréquence inconnue / non supportée : ignorer silencieusement
+          continue
+        }
 
-  if (!volumePreleveParam) {
-    throw new Error('Le fichier ne contient pas de données de volume prélevé')
+        const expectsTime = isSubDailyFrequency(normalized)
+        buildSeriesForParam({
+          param,
+          rowsSource: tab.rows,
+          pointPrelevement,
+          frequency: normalized,
+          series,
+          expectsTime
+        })
+      }
+    }
   }
 
-  const dailyRowsWithDates = filter(dailyDataTab.rows, row => row.date)
-  const sortedDailyRows = sortBy(
-    filter(dailyRowsWithDates, row => typeof row.values[volumePreleveParam.paramIndex] === 'number'),
-    'date'
-  )
+  return {series}
+}
 
-  data.dailyValues = sortedDailyRows.map(row => ({
-    date: row.date,
-    values: Object.values(pick(row.values, dailyDataTab.parameters.map(p => p.paramIndex))),
-    fifteenMinutesValues: fifteenMinutesDataByDate?.[row.date]
-  }))
+// Frequency helpers moved to frequency.js
 
-  data.volumePreleveTotal = sumBy(sortedDailyRows, row => row.values[volumePreleveParam.paramIndex])
+function mapTypeToValueType(type) {
+  switch (type) {
+    case 'valeur brute': {
+      return 'instantaneous'
+    }
 
-  return data
+    case 'moyenne': {
+      return 'average'
+    }
+
+    case 'minimum': {
+      return 'minimum'
+    }
+
+    case 'maximum': {
+      return 'maximum'
+    }
+
+    case 'médiane': {
+      return 'median'
+    }
+
+    case 'différence d’index': {
+      return 'delta-index'
+    }
+
+    default: {
+      return 'raw'
+    }
+  }
+}
+
+function buildSeriesForParam({param, rowsSource, pointPrelevement, frequency, series, expectsTime = false}) {
+  const {paramIndex, nom_parametre, type, unite, detail_point_suivi, profondeur, remarque} = param
+  const rows = []
+  for (const row of rowsSource) {
+    if (!row.date) {
+      continue
+    }
+
+    if (expectsTime && !row.heure) {
+      continue
+    }
+
+    const value = row.values[paramIndex]
+    if (value === null || value === undefined) {
+      continue
+    }
+
+    const entry = {date: row.date, value}
+    if (expectsTime) {
+      const timeStr = row.heure.length === 5 ? row.heure : row.heure.slice(0, 5)
+      entry.time = timeStr
+    }
+
+    if (row.remarque) {
+      entry.remark = row.remarque
+    }
+
+    rows.push(entry)
+  }
+
+  if (rows.length === 0) {
+    return
+  }
+
+  const seriesObj = {
+    pointPrelevement,
+    parameter: nom_parametre,
+    unit: unite,
+    frequency,
+    valueType: nom_parametre === 'volume prélevé' ? 'cumulative' : mapTypeToValueType(type),
+    minDate: minBy(rows, 'date').date,
+    maxDate: maxBy(rows, 'date').date,
+    data: rows
+  }
+
+  const extras = {}
+  if (detail_point_suivi) {
+    extras.detailPointSuivi = detail_point_suivi
+  }
+
+  if (typeof profondeur === 'number') {
+    extras.profondeur = profondeur
+  }
+
+  if (remarque) {
+    extras.commentaire = remarque
+  }
+
+  if (Object.keys(extras).length > 0) {
+    seriesObj.extras = extras
+  }
+
+  series.push(seriesObj)
+}
+
+function safeParsePointPrelevement(value) {
+  try {
+    return parsePointPrelevement(value)
+  } catch {
+    return undefined
+  }
 }
 
 function parsePointPrelevement(value) {

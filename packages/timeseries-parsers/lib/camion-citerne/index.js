@@ -1,4 +1,4 @@
-import {pick, minBy, maxBy, sumBy} from 'lodash-es'
+import {pick, minBy, maxBy} from 'lodash-es'
 import * as XLSX from 'xlsx'
 
 import {
@@ -8,8 +8,9 @@ import {
 } from '../xlsx.js'
 
 import {validateNumericValue} from '../validate.js'
+import {dedupe} from '../dedupe.js'
 
-export async function validateCamionCiterneFile(buffer) {
+export async function extractCamionCiterne(buffer) {
   const errors = []
   const data = {
     dailyValues: []
@@ -52,7 +53,7 @@ export async function validateCamionCiterneFile(buffer) {
     }
   }
 
-  return {
+  const result = {
     rawData: data,
     data: consolidatedData,
     errors: errors.map(e => pick(e, [
@@ -62,6 +63,8 @@ export async function validateCamionCiterneFile(buffer) {
       'severity'
     ]))
   }
+
+  return dedupe(result)
 }
 
 // Sous-fonctions
@@ -320,31 +323,28 @@ function consolidateData(rawData) {
     throw new Error('Le fichier ne contient pas de données journalières')
   }
 
-  const data = rawData.headers.map((header, i) => {
-    const dailyValues = rawData.dailyValues.map(row => ({
+  // Construction des séries selon le nouveau format générique timeseries
+  const series = rawData.headers.map((header, i) => {
+    const rows = rawData.dailyValues.map(row => ({
       date: row.date,
-      values: row.values[i] ? [row.values[i]] : null
-    })).filter(v => v.values)
+      value: row.values[i] ?? null
+    })).filter(v => v.value !== null && v.value !== undefined)
 
-    if (dailyValues.length === 0) {
+    if (rows.length === 0) {
       return
     }
 
     return {
       pointPrelevement: header.code,
-      pointPrelevementNom: header.name,
-      minDate: minBy(dailyValues, 'date').date,
-      maxDate: maxBy(dailyValues, 'date').date,
-      dailyParameters: [{
-        paramIndex: 0,
-        nom_parametre: 'volume prélevé',
-        type: 'valeur brute',
-        unite: 'm3'
-      }],
-      dailyValues,
-      volumePreleveTotal: sumBy(dailyValues, row => row.values[0])
+      parameter: 'volume prélevé',
+      unit: 'm3',
+      frequency: '1 day',
+      valueType: 'cumulative',
+      minDate: minBy(rows, 'date').date,
+      maxDate: maxBy(rows, 'date').date,
+      data: rows
     }
-  })
+  }).filter(Boolean)
 
-  return data.filter(Boolean)
+  return {series}
 }
