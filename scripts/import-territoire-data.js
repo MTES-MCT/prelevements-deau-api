@@ -14,14 +14,12 @@ import {parseNomenclature} from '../lib/import/generic.js'
 import {
   REGLES_DEFINITION,
   DOCUMENTS_DEFINITION,
-  MODALITES_DEFINITION,
   POINTS_PRELEVEMENT_DEFINITION,
   EXPLOITATIONS_DEFINITION,
   PRELEVEURS_DEFINITION,
   EXPLOITATIONS_USAGES_DEFINITION,
   EXPLOITATIONS_REGLES_DEFINITION,
-  EXPLOITATIONS_DOCUMENTS_DEFINITION,
-  EXPLOITATIONS_MODALITES_DEFINITION
+  EXPLOITATIONS_DOCUMENTS_DEFINITION
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/nomenclature.js'
 import {initSequence} from '../lib/util/sequences.js'
@@ -146,7 +144,7 @@ async function preparePoint(point) {
   return pointToInsert
 }
 
-async function prepareExploitation(exploitation, exploitationsUsages, {regles, modalites}) {
+async function prepareExploitation(exploitation, exploitationsUsages, {regles}) {
   const exploitationToInsert = exploitation
 
   if (exploitation.id_point) {
@@ -165,7 +163,6 @@ async function prepareExploitation(exploitation, exploitationsUsages, {regles, m
     .filter(u => u.id_exploitation === exploitation.id_exploitation)
     .map(u => parseNomenclature(u.id_usage, usages))
 
-  exploitationToInsert.modalites = modalites[exploitation.id_exploitation] || []
   exploitationToInsert.documents = []
   exploitationToInsert.regles = regles[exploitation.id_exploitation] || []
   exploitationToInsert._id = new ObjectId()
@@ -293,34 +290,6 @@ async function importDocumentsInExploitations(filePath) {
   }
 }
 
-async function extractModalites(filePath) {
-  console.log(
-    '\n\u001B[35;1;4m%s\u001B[0m',
-    '=> Extraction des modalités')
-
-  const modalites = await readDataFromCsvFile(
-    `${filePath}/modalite-suivi.csv`,
-    MODALITES_DEFINITION,
-    false
-  )
-
-  const exploitationsModalites = await readDataFromCsvFile(
-    `${filePath}/exploitation-modalite-suivi.csv`,
-    EXPLOITATIONS_MODALITES_DEFINITION,
-    false
-  )
-
-  const modalitesIndex = keyBy(modalites, 'id_modalite')
-
-  return chain(exploitationsModalites)
-    .groupBy('id_exploitation')
-    .mapValues(items => items.map(item => {
-      const {id_modalite, ...modalite} = modalitesIndex[item.id_modalite]
-      return modalite
-    }))
-    .value()
-}
-
 async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
   const exploitationsUsages = await readDataFromCsvFile(
@@ -335,11 +304,10 @@ async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
   )
 
   const regles = await extractRegles(folderPath)
-  const modalites = await extractModalites(folderPath)
 
   const exploitationsToInsert = await Promise.all(
     exploitations.map(
-      exploitation => prepareExploitation(exploitation, exploitationsUsages, {regles, modalites})
+      exploitation => prepareExploitation(exploitation, exploitationsUsages, {regles})
     )
   )
 
