@@ -21,8 +21,6 @@ const filenames = [
   'point-prelevement.csv',
   'regle.csv',
   'exploitation-usage.csv',
-  'modalite-suivi.csv',
-  'exploitation-modalite-suivi.csv',
   'exploitation-serie.csv',
   'serie-donnees.csv',
   'resultat-suivi.csv',

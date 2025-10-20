@@ -51,7 +51,7 @@ yarn download-csv
 yarn import-reference-data ./data
 ```
 
-- Importez les points / préleveurs / exploitations / règles / documents / modalités :
+- Importez les points / préleveurs / exploitations / règles / documents :
   _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
 
 ```bash
@@ -159,7 +159,6 @@ yarn lint
 | `usages` | array | oui |
 | `regles` | array | non |
 | `documents` | array | non |
-| `modalites` | array | non |
 
 ### Objet `preleveur` :
 
