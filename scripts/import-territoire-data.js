@@ -26,8 +26,8 @@ import {initSequence} from '../lib/util/sequences.js'
 
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
 import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
-import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/exploitation.js'
-import {createDocument, decorateDocument, getDocument} from '../lib/models/document.js'
+import {bulkInsertExploitations, bulkDeleteExploitations, addDocumentsToExploitation} from '../lib/models/exploitation.js'
+import {createDocument} from '../lib/models/document.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
@@ -44,6 +44,10 @@ function getPreleveurId(id_preleveur) {
 
 function getDocumentId(idDocument) {
   return documentsIds.get(idDocument)
+}
+
+function getExploitationId(idExploitation) {
+  return exploitationsIds.get(idExploitation)
 }
 
 function parseAutresNoms(autresNoms) {
@@ -247,12 +251,6 @@ async function importDocumentsInExploitations(filePath) {
     false
   )
 
-  const exploitations = await readDataFromCsvFile(
-    `${filePath}/exploitation.csv`,
-    EXPLOITATIONS_DEFINITION,
-    false
-  )
-
   const exploitationsDocuments = await readDataFromCsvFile(
     `${filePath}/exploitation-document.csv`,
     EXPLOITATIONS_DOCUMENTS_DEFINITION,
@@ -263,22 +261,9 @@ async function importDocumentsInExploitations(filePath) {
     const updatePromises = exploitationsDocuments.map(async ed => {
       const {id_exploitation, id_document} = ed
       const idDocument = getDocumentId(id_document)
-      const document = await getDocument(idDocument)
-      const exploitation = exploitations.find(e => e.id_exploitation === id_exploitation)
+      const idExploitation = getExploitationId(id_exploitation)
 
-      if (document && exploitation) {
-        const documentWithPreleveur = {
-          ...document,
-          id_preleveur: exploitation.id_beneficiaire
-        }
-
-        const decoratedDocumentWithPreleveur = await decorateDocument(documentWithPreleveur)
-
-        await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation},
-          {$push: {documents: decoratedDocumentWithPreleveur}}
-        )
-      }
+      await addDocumentsToExploitation(idExploitation, [idDocument])
     })
 
     await Promise.all(updatePromises)
