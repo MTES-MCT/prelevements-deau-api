@@ -8,6 +8,7 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 
 - Node.js version 22 LTS (22.11+)
 - MongoDB version 4.4.29
+- Redis (pour les tâches planifiées via BullMQ)
 
 ## Installation
 
@@ -82,10 +83,43 @@ yarn resync-all-dossiers
   node scripts/validate-declaration-file.js <filePath> [camion-citerne|multi-params]
   ```
 
-## Lancer l'application :
+## Lancer l'application
+
+### 1. Démarrer Redis
+
+```bash
+# Option 1 : Homebrew
+brew install redis
+brew services start redis
+
+# Option 2 : Docker
+docker run -d -p 6379:6379 redis:alpine
+```
+
+### 2. Démarrer l'API HTTP
+
 ```bash
 yarn start
 ```
+
+### 3. Démarrer les workers BullMQ (dans un autre terminal)
+
+```bash
+yarn start:worker
+```
+
+Les workers gèrent les tâches planifiées :
+- **sync-updated-dossiers** : Synchronisation des dossiers depuis Démarches Simplifiées (toutes les heures)
+- **process-attachments** : Traitement des pièces jointes (chaque minute)
+- **consolidate-dossiers** : Consolidation des dossiers (chaque minute)
+
+### Architecture
+
+L'application est composée de deux processus séparés :
+- **api.js** : Serveur HTTP Express (port 5000)
+- **worker.js** : Workers BullMQ pour les tâches planifiées
+
+Les deux communiquent via Redis pour la gestion des files d'attente.
 
 ## Linter
 
@@ -94,11 +128,6 @@ Le projet utilise **xo** comme linter pour assurer la qualité du code. Exécute
 ```bash
 yarn lint
 ```
-
-## Prérequis
-
-- Node.js version 22 LTS (22.11+)
-- MongoDB version 4.4.29
 
 ## Documentation de l'API
 
