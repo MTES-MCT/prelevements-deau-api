@@ -24,7 +24,8 @@ Cette fonction vérifie la structure et le contenu d'un fichier « Camion citer
 - « Le fichier est vide ou ne contient pas de feuille. »
 - « La feuille de calcul est vide. »
 - « L'intitulé de la première colonne doit être 'Date'. Trouvé : '...' »
-- « L'en-tête de la colonne X n'est pas au format attendu. Trouvé : '...'. » (avec une explication e format attendu)
+- « L'en-tête de la colonne X n'est pas au format attendu. Trouvé : '...'. » (avec une explication sur le format attendu)
+- « L'en-tête de la colonne X ne correspond à aucun point de prélèvement connu. Trouvé : '...'. »
 - « Le point de prélèvement X est un doublon. »
 - « Le fichier ne contient pas de données à partir de la ligne 4. »
 - « Le fichier ne contient pas de données. »
@@ -44,30 +45,42 @@ Cette fonction valide les fichiers « multiparamètres » composés d'un ongle
 
 ### Erreurs possibles
 
-- « Format de fichier incorrect »
-- « Fichier illisible ou corrompu »
-- « L'onglet 'A LIRE' est manquant »
-- « Aucun onglet 'Data | T=…' n'a été trouvé »
-- « Le nom du point de prélèvement (cellule B3 de l'onglet 'A LIRE') est manquant »
-- « Point de prélèvement invalide : {valeur} »
-- « L'intitulé de la colonne {colonne}{ligne} dans l'onglet '{NomOnglet}' a été modifié. Attendu : '{attendu}', trouvé : '{trouvé}' »
-- « Fréquence non renseignée pour le paramètre {NomParamètre} »
-- « Le champ 'frequence' (cellule {colonne}{ligne}) a été modifié pour le paramètre '{NomParamètre}'. Attendu : '{valeursAttendues}', trouvé : '{valeurTrouvée}' »
-- « Le champ '{nomChamp}' (cellule {colonne}{ligne}) n'est pas valide pour le paramètre '{NomParamètre}' »
-- « Le champ '{nomChamp}' (cellule {colonne}{ligne}) est manquant pour le paramètre '{NomParamètre}' »
-- « Le champ '{nomChamp}' (cellule {colonne}{ligne}) doit être l'une des valeurs suivantes : {valeursAttendues} »
-- « La date de début pour le paramètre '{NomParamètre}' ne peut pas être postérieure à la date de fin. »
-- « Valeur incorrecte pour le paramètre '{NomParamètre}' à la date {date} et à l'heure {heure} : {valeur} »
-- « Les dates pour {intervalles} de l'onglet '{NomOnglet}' ne sont pas valides. »
-- « Les heures pour {intervalles} de l'onglet '{NomOnglet}' ne sont pas valides. »
-- « Le champ 'date' est obligatoire pour {intervalles} de l'onglet '{NomOnglet}'. »
-- « Le champ 'heure' est obligatoire pour {intervalles} de l'onglet '{NomOnglet}'. »
-- « Les dates pour {intervalles} de l'onglet '{NomOnglet}' doivent être comprises entre le {dateDebut} et le {dateFin}. »
-- « Le pas de temps est incorrect pour {intervalles} de l'onglet '{NomOnglet}'. »
-- « Impossible de déterminer le pas de temps attendu pour le paramètre {NomParamètre} »
-- « Le fichier ne contient pas de données à la maille journalière »
-- « Le fichier ne contient pas de données de volume prélevé »
+#### Structure du fichier
+
+- « Format de fichier incorrect »
+- « Fichier illisible ou corrompu »
+- « L'onglet 'A LIRE' est manquant »
+- « Aucun onglet 'Data | T=…' n'a été trouvé »
+
+#### Onglet « A LIRE »
+
+- « Le nom du point de prélèvement (cellule B3 de l'onglet 'A LIRE') est manquant »
+
+#### Structure des onglets de données
+
+- « L'intitulé de la colonne {colonne}{ligne} dans l'onglet '{NomOnglet}' a été modifié. Attendu : '{attendu}', trouvé : '{trouvé}' »
+
+#### Métadonnées des paramètres
+
+- « Fréquence non renseignée pour le paramètre {NomParamètre} »
+- « Le champ 'frequence' (cellule {colonne}{ligne} a été modifié pour le paramètre '{NomParamètre}'. Attendu : '{valeursAttendues}', trouvé : '{valeurTrouvée}' »
+- « Le champ '{nomChamp}' (cellule {colonne}{ligne}) n'est pas valide pour le paramètre '{NomParamètre}' » (l'explication précise la raison, par exemple « Format de date invalide: … » ou « La fréquence "…" n'est pas reconnue »)
+- « Le champ '{nomChamp}' (cellule {colonne}{ligne}) est manquant pour le paramètre '{NomParamètre}' »
+- « Le champ '{nomChamp}' (cellule {colonne}{ligne}) doit être l'une des valeurs suivantes : {valeursAttendues} »
+- « La date de début pour le paramètre '{NomParamètre}' ne peut pas être postérieure à la date de fin. »
+
+#### Données des paramètres
+
+- « Valeur incorrecte pour le paramètre '{NomParamètre}' à la date {date} et à l'heure {heure} : {valeur} »
+- « Les dates {préposition} {intervalles} de l'onglet '{NomOnglet}' ne sont pas valides. » (peut aussi apparaître sous la forme « Les dates de N lignes… » lorsque plusieurs lignes sont concernées)
+- « Les heures {préposition} {intervalles} de l'onglet '{NomOnglet}' ne sont pas valides. »
+- « Le champ 'date' est obligatoire {préposition} {intervalles} de l'onglet '{NomOnglet}'. »
+- « Le champ 'heure' est obligatoire {préposition} {intervalles} de l'onglet '{NomOnglet}'. »
+- « Les dates {préposition} {intervalles} de l'onglet '{NomOnglet}' doivent être comprises entre le {dateDebut} et le {dateFin}. »
+- « Le pas de temps est incorrect {préposition} {intervalles} de l'onglet '{NomOnglet}'. »
+- « Erreur inconnue de type '{type}' {préposition} {intervalles} de l'onglet '{NomOnglet}'. »
+- « Impossible de déterminer le pas de temps attendu pour le paramètre {NomParamètre} »
 
 ### Avertissements
 
-- « Le champ 'Remarque' doit être renseigné si la valeur est manquante pour le paramètre '{NomParamètre}' pour {intervalles} de l'onglet '{NomOnglet}'. »
+- « Le champ 'Remarque' doit être renseigné si la valeur est manquante pour le paramètre '{NomParamètre}' {préposition} {intervalles} de l'onglet '{NomOnglet}'. »
