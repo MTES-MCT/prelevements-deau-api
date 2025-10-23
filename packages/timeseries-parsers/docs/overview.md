@@ -17,6 +17,8 @@ Le validateur a été développé pour rapprocher les fichiers transmis via Dém
 4. **Consolidation** — normalisation des données valides en séries temporelles (`series[]`) et collecte des informations intermédiaires dans `rawData`.
 5. **Déduplication** — suppression des doublons temporels dans chaque série, accompagnée d’un avertissement global lorsqu’un nettoyage est effectué.
 
+Seules les valeurs dont la granularité est journalière ou plus fine (journalière, horaire, quart d’heure, etc.) sont versées dans les séries consolidées. Les fréquences plus larges comme `T = 1 trimestre` sont ignorées car elles nécessiteraient une désagrégation spécifique avant d’être intégrées.
+
 Chaque étape peut ajouter des messages de validation, toujours encapsulés dans la propriété `errors`.
 
 ## Structure du retour
