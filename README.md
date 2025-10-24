@@ -8,6 +8,7 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 
 - Node.js version 22 LTS (22.11+)
 - MongoDB version 4.4.29
+- Redis (pour les tâches planifiées via BullMQ)
 
 ## Installation
 
@@ -73,6 +74,11 @@ yarn resync-all-dossiers
   ```bash
   yarn sync-updated-dossiers
   ```
+- **drop-dossiers-collections** : supprime les collections liées aux dossiers (avec confirmation).
+  ```bash
+  yarn drop-dossiers-collections
+  ```
+  Supprime : `dossiers`, `dossier_attachments`, `series`, `series_values`, `integrations_journalieres`
 - **read-multi-params** : valide un fichier multi-paramètres avant import.
   ```bash
   node scripts/read-multi-params.js <fichier.csv>
@@ -82,10 +88,68 @@ yarn resync-all-dossiers
   node scripts/validate-declaration-file.js <filePath> [camion-citerne|multi-params]
   ```
 
-## Lancer l'application :
+## Lancer l'application
+
+### 1. Démarrer Redis
+
+```bash
+# Option 1 : Homebrew
+brew install redis
+brew services start redis
+
+# Option 2 : Docker
+docker run -d -p 6379:6379 redis:alpine
+```
+
+### 2. Démarrer l'API HTTP
+
 ```bash
 yarn start
 ```
+
+### 3. Démarrer les workers BullMQ (dans un autre terminal)
+
+```bash
+yarn start:worker
+```
+
+Les workers gèrent les tâches planifiées et à la demande :
+
+**Tâches planifiées (cron) :**
+- **sync-updated-dossiers** : Synchronisation des dossiers depuis Démarches Simplifiées (toutes les heures)
+- **process-attachments-maintenance** : Retraitement des pièces jointes en erreur (1x/jour à 3h)
+- **consolidate-dossiers-maintenance** : Reconsolidation des dossiers marqués (1x/jour à 4h)
+
+**Tâches à la demande (déclenchées par l'API) :**
+- **process-attachment** : Traite une pièce jointe spécifique
+- **consolidate-dossier** : Consolide un dossier spécifique
+
+Voir [lib/queues/README.md](lib/queues/README.md) pour plus de détails sur l'architecture BullMQ.
+
+### Architecture
+
+L'application est composée de deux processus séparés :
+- **api.js** : Serveur HTTP Express (port 5000)
+- **worker.js** : Workers BullMQ pour les tâches planifiées et à la demande
+
+Les deux communiquent via Redis pour la gestion des files d'attente. Chaque processus peut être scalé indépendamment.
+
+### 4. Monitoring avec BullBoard (optionnel)
+
+Si vous définissez la variable `BULLBOARD_PASSWORD` dans votre `.env`, un dashboard de monitoring sera disponible sur :
+
+```
+http://localhost:5000/admin/queues
+```
+
+**Authentification :** Basic Auth (n'importe quel username, mot de passe = valeur de `BULLBOARD_PASSWORD`)
+
+**Fonctionnalités :**
+- Visualiser l'état des queues en temps réel
+- Consulter les jobs en attente, actifs, réussis, échoués
+- Relancer manuellement des jobs échoués
+- Voir les détails et logs de chaque job
+- Nettoyer les jobs terminés
 
 ## Linter
 
@@ -94,11 +158,6 @@ Le projet utilise **xo** comme linter pour assurer la qualité du code. Exécute
 ```bash
 yarn lint
 ```
-
-## Prérequis
-
-- Node.js version 22 LTS (22.11+)
-- MongoDB version 4.4.29
 
 ## Documentation de l'API
 

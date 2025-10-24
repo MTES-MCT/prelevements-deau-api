@@ -240,7 +240,7 @@ paths:
       summary: Marquer un dossier pour reconsolidation manuelle
       description: |
         Marque un dossier pour reconsolidation en supprimant son champ `consolidatedAt`.
-        Le dossier sera retraité lors du prochain passage du cron de consolidation.
+        Un job de consolidation est créé immédiatement pour retraiter le dossier.
 
         **Cas d'usage** : Après la suppression d'un dossier concurrent, permet de récupérer
         les jours libérés qui étaient en conflit (règle "premier arrivé, premier servi").
@@ -251,8 +251,8 @@ paths:
           required: true
           schema: { $ref: '#/components/schemas/ObjectId' }
       responses:
-        '200':
-          description: Dossier marqué avec succès
+        '202':
+          description: Dossier marqué avec succès, job créé
           content:
             application/json:
               schema:
@@ -265,7 +265,7 @@ paths:
                     $ref: '#/components/schemas/ObjectId'
                   message:
                     type: string
-                    example: "Dossier marqué pour reconsolidation. Il sera retraité lors du prochain cron."
+                    example: "Dossier marqué pour reconsolidation. Il sera retraité dès que possible."
         '404': { description: Dossier non trouvé }
   /dossiers/{dossierId}/files/{attachmentId}:
     get:
@@ -288,6 +288,43 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AttachmentSummary' }
+        '404': { description: Introuvable }
+  /dossiers/{dossierId}/files/{attachmentId}/reprocess:
+    post:
+      tags: [Attachments]
+      summary: Retraiter une pièce jointe manuellement
+      description: |
+        Marque une pièce jointe pour retraitement en réinitialisant son état `processed` à `false`
+        et en supprimant ses données de traitement (`result`, `validationStatus`, `processingError`).
+        Un job de traitement est créé immédiatement pour retraiter le fichier.
+
+        **Cas d'usage** : Correction manuelle après une erreur de traitement ou mise à jour du parser.
+      operationId: reprocessAttachment
+      parameters:
+        - in: path
+          name: dossierId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+        - in: path
+          name: attachmentId
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Pièce jointe marquée avec succès, job créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  attachmentId:
+                    type: string
+                  message:
+                    type: string
+                    example: "Pièce jointe marquée pour retraitement. Elle sera retraitée dès que possible."
         '404': { description: Introuvable }
   /dossiers/{dossierId}/files/{attachmentId}/integrations:
     get:

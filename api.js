@@ -11,16 +11,13 @@ import mongo from './lib/util/mongo.js'
 import errorHandler from './lib/util/error-handler.js'
 
 import routes from './lib/routes.js'
+import {setupBullBoard} from './lib/queues/board.js'
 
-import {startCron} from './lib/cron.js'
 import {ensureSeriesIndexes} from './lib/models/series.js'
 
 // Connect to MongoDB
 await mongo.connect()
 await ensureSeriesIndexes()
-
-// Start cron jobs
-await startCron()
 
 const PORT = process.env.PORT || 5000
 const DEV = process.env.NODE_ENV !== 'production'
@@ -46,6 +43,13 @@ app.use((req, res, next) => {
 
 app.use('/', routes)
 app.use('/api', routes) // Deprecated
+
+// Setup BullBoard (monitoring des queues)
+const bullBoard = setupBullBoard()
+if (bullBoard) {
+  app.use(bullBoard.basePath, bullBoard.router)
+  console.log(`📊 BullBoard disponible sur ${bullBoard.basePath}`)
+}
 
 // Register error handler
 app.use(errorHandler)
