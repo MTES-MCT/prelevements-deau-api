@@ -1,5 +1,5 @@
 import {pick, minBy, maxBy} from 'lodash-es'
-import {normalizeOutputFrequency, isSubDailyFrequency} from './frequency.js'
+import {normalizeOutputFrequency, isSubDailyFrequency, isSuperDailyFrequency, isCumulativeParameter, expandToDaily} from './frequency.js'
 
 import {readSheet} from '../xlsx.js'
 
@@ -189,15 +189,42 @@ function buildSeriesForParam({param, rowsSource, pointPrelevement, frequency, se
     return
   }
 
+  // Déterminer si le paramètre est cumulatif
+  const isCumulative = isCumulativeParameter(nom_parametre)
+  const valueType = isCumulative ? 'cumulative' : mapTypeToValueType(type)
+
+  // Si fréquence > 1 jour ET paramètre cumulatif, expanser les données en valeurs journalières
+  let finalRows = rows
+  let finalFrequency = frequency
+  let originalFrequency
+
+  if (isSuperDailyFrequency(frequency) && isCumulative) {
+    // Expanser chaque ligne en plusieurs lignes journalières pour les volumes
+    const expandedRows = []
+    for (const row of rows) {
+      const dailyRows = expandToDaily(row, frequency)
+      expandedRows.push(...dailyRows)
+    }
+
+    finalRows = expandedRows
+    originalFrequency = frequency // Conserver la fréquence d'origine
+    finalFrequency = '1 day' // Les données sont maintenant journalières
+  }
+
   const seriesObj = {
     pointPrelevement,
     parameter: nom_parametre,
     unit: unite,
-    frequency,
-    valueType: nom_parametre === 'volume prélevé' ? 'cumulative' : mapTypeToValueType(type),
-    minDate: minBy(rows, 'date').date,
-    maxDate: maxBy(rows, 'date').date,
-    data: rows
+    frequency: finalFrequency,
+    valueType,
+    minDate: minBy(finalRows, 'date').date,
+    maxDate: maxBy(finalRows, 'date').date,
+    data: finalRows
+  }
+
+  // Ajouter la fréquence originale si les données ont été expansées
+  if (originalFrequency) {
+    seriesObj.originalFrequency = originalFrequency
   }
 
   const extras = {}
