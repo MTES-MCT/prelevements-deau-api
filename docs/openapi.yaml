@@ -127,8 +127,9 @@ components:
         _id: { $ref: '#/components/schemas/ObjectId' }
         parameter: { type: string }
         unit: { type: string, nullable: true }
-        frequency: { type: string }
+        frequency: { type: string, description: "Fréquence normalisée (1 day, 15 minutes, 1 hour, 1 month, 1 quarter, 1 year)" }
         valueType: { type: string }
+        originalFrequency: { type: string, nullable: true, description: "Fréquence d'origine avant expansion (volumes mensuels/trimestriels/annuels)" }
         minDate: { type: string, format: date }
         maxDate: { type: string, format: date }
         hasSubDaily: { type: boolean, nullable: true }
@@ -146,6 +147,10 @@ components:
         date: { type: string, format: date }
         value: { type: number, nullable: true }
         remark: { type: string, nullable: true }
+        originalValue: { type: number, nullable: true, description: "Valeur d'origine avant expansion (volumes mensuels/trimestriels/annuels)" }
+        originalDate: { type: string, format: date, nullable: true, description: "Date de début de période d'origine" }
+        originalFrequency: { type: string, nullable: true, description: "Fréquence d'origine (1 month, 1 quarter, 1 year)" }
+        daysCovered: { type: integer, nullable: true, description: "Nombre de jours couverts par la valeur d'origine" }
     SeriesValueSubDaily:
       type: object
       properties:
