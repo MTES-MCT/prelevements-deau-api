@@ -9,10 +9,8 @@ import cors from 'cors'
 
 import mongo from './lib/util/mongo.js'
 import errorHandler from './lib/util/error-handler.js'
-
 import routes from './lib/routes.js'
-import {setupBullBoard} from './lib/queues/board.js'
-
+import {createBullBoardRouter} from './lib/queues/board.js'
 import {ensureSeriesIndexes} from './lib/models/series.js'
 
 // Connect to MongoDB
@@ -41,15 +39,18 @@ app.use((req, res, next) => {
   next()
 })
 
+// Setup BullBoard (monitoring des queues)
+if (process.env.BULLBOARD_PASSWORD) {
+  const basePath = '/admin/queues'
+  const bullBoardRouter = createBullBoardRouter(basePath, process.env.BULLBOARD_PASSWORD)
+  app.use(basePath, bullBoardRouter)
+  console.log(`📊 BullBoard disponible sur ${basePath}`)
+} else if (process.env.NODE_ENV !== 'test') {
+  console.warn('⚠️  BullBoard désactivé : variable BULLBOARD_PASSWORD non définie')
+}
+
 app.use('/', routes)
 app.use('/api', routes) // Deprecated
-
-// Setup BullBoard (monitoring des queues)
-const bullBoard = setupBullBoard()
-if (bullBoard) {
-  app.use(bullBoard.basePath, bullBoard.router)
-  console.log(`📊 BullBoard disponible sur ${bullBoard.basePath}`)
-}
 
 // Register error handler
 app.use(errorHandler)
