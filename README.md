@@ -134,6 +134,23 @@ L'application est composée de deux processus séparés :
 
 Les deux communiquent via Redis pour la gestion des files d'attente. Chaque processus peut être scalé indépendamment.
 
+### 4. Monitoring avec BullBoard (optionnel)
+
+Si vous définissez la variable `BULLBOARD_PASSWORD` dans votre `.env`, un dashboard de monitoring sera disponible sur :
+
+```
+http://localhost:5000/admin/queues
+```
+
+**Authentification :** Basic Auth (n'importe quel username, mot de passe = valeur de `BULLBOARD_PASSWORD`)
+
+**Fonctionnalités :**
+- Visualiser l'état des queues en temps réel
+- Consulter les jobs en attente, actifs, réussis, échoués
+- Relancer manuellement des jobs échoués
+- Voir les détails et logs de chaque job
+- Nettoyer les jobs terminés
+
 ## Linter
 
 Le projet utilise **xo** comme linter pour assurer la qualité du code. Exécutez la commande suivante pour lancer le linter :

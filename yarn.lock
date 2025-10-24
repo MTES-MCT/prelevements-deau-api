@@ -748,6 +748,38 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@bull-board/api@npm:6.14.0, @bull-board/api@npm:^6.14.0":
+  version: 6.14.0
+  resolution: "@bull-board/api@npm:6.14.0"
+  dependencies:
+    redis-info: "npm:^3.1.0"
+  peerDependencies:
+    "@bull-board/ui": 6.14.0
+  checksum: 10c0/f23076806c0b325e2fbcf45a6559efa31f33e73f78968c88f01bc8e40665a960b1e14d7b0267cb80f8e89f36f5114ef58b66784e83eb83f21af23969542a2cf7
+  languageName: node
+  linkType: hard
+
+"@bull-board/express@npm:^6.14.0":
+  version: 6.14.0
+  resolution: "@bull-board/express@npm:6.14.0"
+  dependencies:
+    "@bull-board/api": "npm:6.14.0"
+    "@bull-board/ui": "npm:6.14.0"
+    ejs: "npm:^3.1.10"
+    express: "npm:^4.21.1 || ^5.0.0"
+  checksum: 10c0/54284f8f935aebce1be18e15427df1922cbeb5510c6264819f34d11ba6217cd4ef923cb1649c0b6d960c66641917c70884ede71a2d19c99eb98a39c6202beb75
+  languageName: node
+  linkType: hard
+
+"@bull-board/ui@npm:6.14.0, @bull-board/ui@npm:^6.14.0":
+  version: 6.14.0
+  resolution: "@bull-board/ui@npm:6.14.0"
+  dependencies:
+    "@bull-board/api": "npm:6.14.0"
+  checksum: 10c0/852dc8008a59bb9016536cc81d2a5bf5d2e054240f832d8ecac0c63ac7d1be21a8683246fcd5d2272f0c17311f6508f78a183120d461a464bf67144cf441f3c4
+  languageName: node
+  linkType: hard
+
 "@eslint-community/eslint-utils@npm:^4.1.2, @eslint-community/eslint-utils@npm:^4.2.0, @eslint-community/eslint-utils@npm:^4.4.0, @eslint-community/eslint-utils@npm:^4.4.1":
   version: 4.4.1
   resolution: "@eslint-community/eslint-utils@npm:4.4.1"
@@ -2880,6 +2912,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"async@npm:^3.2.6":
+  version: 3.2.6
+  resolution: "async@npm:3.2.6"
+  checksum: 10c0/36484bb15ceddf07078688d95e27076379cc2f87b10c03b6dd8a83e89475a3c8df5848859dd06a4c95af1e4c16fc973de0171a77f18ea00be899aca2a4f85e70
+  languageName: node
+  linkType: hard
+
 "ava@npm:^6.4.1":
   version: 6.4.1
   resolution: "ava@npm:6.4.1"
@@ -3934,6 +3973,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ejs@npm:^3.1.10":
+  version: 3.1.10
+  resolution: "ejs@npm:3.1.10"
+  dependencies:
+    jake: "npm:^10.8.5"
+  bin:
+    ejs: bin/cli.js
+  checksum: 10c0/52eade9e68416ed04f7f92c492183340582a36482836b11eab97b159fcdcfdedc62233a1bf0bf5e5e1851c501f2dca0e2e9afd111db2599e4e7f53ee29429ae1
+  languageName: node
+  linkType: hard
+
 "electron-to-chromium@npm:^1.5.73":
   version: 1.5.91
   resolution: "electron-to-chromium@npm:1.5.91"
@@ -4816,7 +4866,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"express@npm:^5.1.0":
+"express@npm:^4.21.1 || ^5.0.0, express@npm:^5.1.0":
   version: 5.1.0
   resolution: "express@npm:5.1.0"
   dependencies:
@@ -5012,6 +5062,15 @@ __metadata:
   version: 1.0.0
   resolution: "file-uri-to-path@npm:1.0.0"
   checksum: 10c0/3b545e3a341d322d368e880e1c204ef55f1d45cdea65f7efc6c6ce9e0c4d22d802d5629320eb779d006fe59624ac17b0e848d83cc5af7cd101f206cb704f5519
+  languageName: node
+  linkType: hard
+
+"filelist@npm:^1.0.4":
+  version: 1.0.4
+  resolution: "filelist@npm:1.0.4"
+  dependencies:
+    minimatch: "npm:^5.0.1"
+  checksum: 10c0/426b1de3944a3d153b053f1c0ebfd02dccd0308a4f9e832ad220707a6d1f1b3c9784d6cadf6b2f68f09a57565f63ebc7bcdc913ccf8012d834f472c46e596f41
   languageName: node
   linkType: hard
 
@@ -6578,6 +6637,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"jake@npm:^10.8.5":
+  version: 10.9.4
+  resolution: "jake@npm:10.9.4"
+  dependencies:
+    async: "npm:^3.2.6"
+    filelist: "npm:^1.0.4"
+    picocolors: "npm:^1.1.1"
+  bin:
+    jake: bin/cli.js
+  checksum: 10c0/bb52f000340d4a32f1a3893b9abe56ef2b77c25da4dbf2c0c874a8159d082dddda50a5ad10e26060198bd645b928ba8dba3b362710f46a247e335321188c5a9c
+  languageName: node
+  linkType: hard
+
 "joi@npm:^18.0.1":
   version: 18.0.1
   resolution: "joi@npm:18.0.1"
@@ -6860,7 +6932,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lodash@npm:^4.13.1, lodash@npm:^4.17.15, lodash@npm:^4.17.21, lodash@npm:~4.17.21":
+"lodash@npm:^4.13.1, lodash@npm:^4.17.11, lodash@npm:^4.17.15, lodash@npm:^4.17.21, lodash@npm:~4.17.21":
   version: 4.17.21
   resolution: "lodash@npm:4.17.21"
   checksum: 10c0/d8cbea072bb08655bb4c989da418994b073a608dffa608b09ac04b43a791b12aeae7cd7ad919aa4c925f33b48490b5cfe6c1f71d827956071dae2e7bb3a6b74c
@@ -7131,6 +7203,15 @@ __metadata:
   dependencies:
     brace-expansion: "npm:^1.1.7"
   checksum: 10c0/0262810a8fc2e72cca45d6fd86bd349eee435eb95ac6aa45c9ea2180e7ee875ef44c32b55b5973ceabe95ea12682f6e3725cbb63d7a2d1da3ae1163c8b210311
+  languageName: node
+  linkType: hard
+
+"minimatch@npm:^5.0.1":
+  version: 5.1.6
+  resolution: "minimatch@npm:5.1.6"
+  dependencies:
+    brace-expansion: "npm:^2.0.1"
+  checksum: 10c0/3defdfd230914f22a8da203747c42ee3c405c39d4d37ffda284dac5e45b7e1f6c49aa8be606509002898e73091ff2a3bbfc59c2c6c71d4660609f63aa92f98e3
   languageName: node
   linkType: hard
 
@@ -8027,7 +8108,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"picocolors@npm:^1.0.0, picocolors@npm:^1.1.0":
+"picocolors@npm:^1.0.0, picocolors@npm:^1.1.0, picocolors@npm:^1.1.1":
   version: 1.1.1
   resolution: "picocolors@npm:1.1.1"
   checksum: 10c0/e2e3e8170ab9d7c7421969adaa7e1b31434f789afb9b3f115f6b96d91945041ac3ceb02e9ec6fe6510ff036bcc0bf91e69a1772edc0b707e12b19c0f2d6bcf58
@@ -8119,6 +8200,9 @@ __metadata:
     "@aws-sdk/client-s3": "npm:^3.895.0"
     "@aws-sdk/lib-storage": "npm:^3.895.0"
     "@aws-sdk/s3-request-presigner": "npm:^3.895.0"
+    "@bull-board/api": "npm:^6.14.0"
+    "@bull-board/express": "npm:^6.14.0"
+    "@bull-board/ui": "npm:^6.14.0"
     "@etalab/decoupage-administratif": "npm:^5.2.0"
     "@fabnum/demarches-simplifiees": "workspace:*"
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*"
@@ -8327,6 +8411,15 @@ __metadata:
   version: 1.2.0
   resolution: "redis-errors@npm:1.2.0"
   checksum: 10c0/5b316736e9f532d91a35bff631335137a4f974927bb2fb42bf8c2f18879173a211787db8ac4c3fde8f75ed6233eb0888e55d52510b5620e30d69d7d719c8b8a7
+  languageName: node
+  linkType: hard
+
+"redis-info@npm:^3.1.0":
+  version: 3.1.0
+  resolution: "redis-info@npm:3.1.0"
+  dependencies:
+    lodash: "npm:^4.17.11"
+  checksum: 10c0/ec0f31d97893c5828cec7166486d74198c92160c60073b6f2fe805cdf575a10ddcccc7641737d44b8f451355f0ab5b6c7b0d79e8fc24742b75dd625f91ffee38
   languageName: node
   linkType: hard
 

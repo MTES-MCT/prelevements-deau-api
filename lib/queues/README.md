@@ -163,6 +163,60 @@ Les jobs échoués restent dans Redis jusqu'à suppression manuelle ou retraitem
 
 ## Monitoring
 
+### Via BullBoard (recommandé)
+
+BullBoard fournit une interface web pour monitorer les queues en temps réel.
+
+**Configuration :**
+```bash
+# .env
+BULLBOARD_PASSWORD=your-secure-password
+```
+
+**Accès :**
+```
+http://localhost:5000/admin/queues
+```
+
+Authentification Basic Auth requise (username libre, password = `BULLBOARD_PASSWORD`).
+
+**Fonctionnalités :**
+- Vue d'ensemble de toutes les queues
+- Statistiques en temps réel (waiting, active, completed, failed)
+- Détails de chaque job (données, résultat, stacktrace)
+- Actions manuelles :
+  - Retry de jobs échoués
+  - Nettoyage des jobs terminés
+  - Pause/reprise de queues
+  - Suppression de jobs
+
+**Exemple d'utilisation :**
+
+1. Configurer le mot de passe dans `.env` :
+   ```bash
+   BULLBOARD_PASSWORD=mon-mot-de-passe-secure
+   ```
+
+2. Démarrer l'API :
+   ```bash
+   yarn start
+   # Affiche : 📊 BullBoard disponible sur /admin/queues
+   ```
+
+3. Ouvrir dans le navigateur :
+   ```
+   http://localhost:5000/admin/queues
+   ```
+
+4. Se connecter avec Basic Auth :
+   - Username : (n'importe quoi)
+   - Password : `mon-mot-de-passe-secure`
+
+**Implémentation :**
+- Fichier : `lib/queues/board.js`
+- Intégration : `api.js` (monté sur `/admin/queues`)
+- Sécurité : Authentification Basic obligatoire
+
 ### Via CLI (bullmq-cli)
 
 ```bash
@@ -190,6 +244,9 @@ console.log(failedJobs)
 
 - **bullmq** v5.61.0+ : Librairie de gestion de queues
 - **ioredis** v5.8.1+ : Client Redis
+- **@bull-board/api** v6.14.0 : Dashboard de monitoring (API)
+- **@bull-board/express** v6.14.0 : Adaptateur Express pour BullBoard
+- **@bull-board/ui** v6.14.0 : Interface utilisateur de BullBoard
 - **redis-server** : Instance Redis locale ou distante
 
 ## Variables d'environnement
@@ -198,13 +255,16 @@ console.log(failedJobs)
 # URL de connexion Redis (optionnel)
 REDIS_URL=redis://localhost:6379
 
+# Mot de passe BullBoard (optionnel, active le monitoring)
+BULLBOARD_PASSWORD=your-secure-password
+
 # Mode test (désactive Redis)
 NODE_ENV=test
 ```
 
 ## Évolutions possibles
 
-- [ ] Dashboard de monitoring (BullBoard)
+- [x] Dashboard de monitoring (BullBoard) ✅
 - [ ] Métriques Prometheus/Grafana
 - [ ] Jobs prioritaires (via options `priority`)
 - [ ] Pause/reprise de queues dynamique
