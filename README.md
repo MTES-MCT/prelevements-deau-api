@@ -74,6 +74,11 @@ yarn resync-all-dossiers
   ```bash
   yarn sync-updated-dossiers
   ```
+- **drop-dossiers-collections** : supprime les collections liées aux dossiers (avec confirmation).
+  ```bash
+  yarn drop-dossiers-collections
+  ```
+  Supprime : `dossiers`, `dossier_attachments`, `series`, `series_values`, `integrations_journalieres`
 - **read-multi-params** : valide un fichier multi-paramètres avant import.
   ```bash
   node scripts/read-multi-params.js <fichier.csv>
@@ -108,18 +113,26 @@ yarn start
 yarn start:worker
 ```
 
-Les workers gèrent les tâches planifiées :
+Les workers gèrent les tâches planifiées et à la demande :
+
+**Tâches planifiées (cron) :**
 - **sync-updated-dossiers** : Synchronisation des dossiers depuis Démarches Simplifiées (toutes les heures)
-- **process-attachments** : Traitement des pièces jointes (chaque minute)
-- **consolidate-dossiers** : Consolidation des dossiers (chaque minute)
+- **process-attachments-maintenance** : Retraitement des pièces jointes en erreur (1x/jour à 3h)
+- **consolidate-dossiers-maintenance** : Reconsolidation des dossiers marqués (1x/jour à 4h)
+
+**Tâches à la demande (déclenchées par l'API) :**
+- **process-attachment** : Traite une pièce jointe spécifique
+- **consolidate-dossier** : Consolide un dossier spécifique
+
+Voir [lib/queues/README.md](lib/queues/README.md) pour plus de détails sur l'architecture BullMQ.
 
 ### Architecture
 
 L'application est composée de deux processus séparés :
 - **api.js** : Serveur HTTP Express (port 5000)
-- **worker.js** : Workers BullMQ pour les tâches planifiées
+- **worker.js** : Workers BullMQ pour les tâches planifiées et à la demande
 
-Les deux communiquent via Redis pour la gestion des files d'attente.
+Les deux communiquent via Redis pour la gestion des files d'attente. Chaque processus peut être scalé indépendamment.
 
 ## Linter
 
