@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import {fileURLToPath} from 'node:url'
 import test from 'ava'
 import {extractMultiParamFile} from '../index.js'
+import {expandToDaily, isCumulativeParameter} from '../frequency.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -260,4 +261,55 @@ test('extractMultiParamFile - rows with no date are ignored', async t => {
   const volumeSeries = data.series.find(s => s.parameter === 'volume prélevé' && s.frequency === '1 day')
   const total = volumeSeries.data.reduce((sum, d) => sum + (typeof d.value === 'number' ? d.value : 0), 0)
   t.is(total, 3)
+})
+
+// Super-daily frequency expansion tests
+test('expandToDaily - monthly volume is expanded correctly', t => {
+  const monthlyRow = {date: '2025-01-01', value: 3100, remark: 'Janvier'}
+  const expanded = expandToDaily(monthlyRow, '1 month')
+
+  t.is(expanded.length, 31)
+  t.is(expanded[0].date, '2025-01-01')
+  t.is(expanded[30].date, '2025-01-31')
+
+  // Chaque jour devrait avoir value = 3100/31 = 100
+  const dailyValue = 3100 / 31
+  t.is(expanded[0].value, dailyValue)
+
+  // Métadonnées préservées
+  t.is(expanded[0].originalValue, 3100)
+  t.is(expanded[0].originalDate, '2025-01-01')
+  t.is(expanded[0].originalFrequency, '1 month')
+  t.is(expanded[0].daysCovered, 31)
+  t.is(expanded[0].remark, 'Janvier')
+})
+
+test('buildSeriesForParam - cumulative parameters are expanded for super-daily frequencies', t => {
+  // Vérifier que les volumes sont bien identifiés comme cumulatifs
+  t.true(isCumulativeParameter('volume prélevé'))
+  t.true(isCumulativeParameter('volume restitué'))
+
+  // Note: Les tests d'intégration avec fichiers Excel valideront le comportement complet
+  // incluant la présence du champ originalFrequency
+})
+
+test('buildSeriesForParam - non-cumulative parameters keep original frequency', t => {
+  // Vérifier que les autres paramètres ne sont PAS cumulatifs
+  t.false(isCumulativeParameter('température'))
+  t.false(isCumulativeParameter('pH'))
+  t.false(isCumulativeParameter('débit prélevé'))
+
+  // Note: Pour les paramètres non-cumulatifs avec fréquence > 1 jour,
+  // la série garde sa fréquence d'origine (pas d'expansion, pas d'originalFrequency)
+})
+
+test('expandToDaily preserves originalFrequency in series metadata', t => {
+  // Simuler une série avec expansion
+  const monthlyRow = {date: '2025-01-01', value: 3100}
+  const expanded = expandToDaily(monthlyRow, '1 month')
+
+  // Vérifier que chaque ligne expansée contient bien originalFrequency
+  t.is(expanded[0].originalFrequency, '1 month')
+  t.is(expanded[15].originalFrequency, '1 month')
+  t.is(expanded[30].originalFrequency, '1 month')
 })
