@@ -602,7 +602,7 @@ paths:
             Si non fournie, toutes les données disponibles jusqu'à aujourd'hui sont incluses.
         - in: query
           name: aggregationFrequency
-          required: true
+          required: false
           schema:
             type: string
             enum: ['15 minutes', '1 hour', '6 hours', '1 day', '1 month', '1 year']
