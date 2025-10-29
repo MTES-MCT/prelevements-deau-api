@@ -104,8 +104,8 @@ pointIds=207,507f1f77bcf86cd799439011,209
 | Paramètre | Type | Description | Défaut |
 |-----------|------|-------------|--------|
 | `operator` | string | Opérateur d'agrégation (sum, mean, min, max) | Défini par le paramètre* |
-| `from` | string | Date de début (YYYY-MM-DD) | Toutes les données |
-| `to` | string | Date de fin (YYYY-MM-DD) | Toutes les données |
+| `startDate` | string | Date de début (YYYY-MM-DD) | Toutes les données |
+| `endDate` | string | Date de fin (YYYY-MM-DD) | Toutes les données |
 
 \* *Opérateur par défaut selon le paramètre (ex: sum pour "volume prélevé").*
 
