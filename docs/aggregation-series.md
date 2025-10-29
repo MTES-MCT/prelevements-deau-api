@@ -289,13 +289,13 @@ const useAggregates = hasSubDailySeries && !needsRawValues
     "unit": "m3",
     "operator": "sum",
     "frequency": "1 month",
-    "from": "2024-01-01",
-    "to": "2024-12-31",
+    "startDate": "2024-01-01",
+    "endDate": "2024-12-31",
     "points": [
       {
-        "seqId": 207,
-        "code": "CAPT-001",
-        "name": "Captage Ruban"
+        "_id": "507f1f77bcf86cd799439011",
+        "id_point": 207,
+        "nom": "Captage Ruban"
       }
     ],
     "pointsNotFound": [],
@@ -305,13 +305,13 @@ const useAggregates = hasSubDailySeries && !needsRawValues
     "seriesCount": 5,
     "valuesCount": 1250
   },
-  "data": [
+  "values": [
     {
-      "period": "2024-01",
+      "date": "2024-01",
       "value": 1250.5
     },
     {
-      "period": "2024-02",
+      "date": "2024-02",
       "value": 980.3
     }
   ]
@@ -418,8 +418,8 @@ pointIds=207,208,209,210,211&\
 parameter=volume%20prélevé&\
 operator=sum&\
 aggregationFrequency=1%20month&\
-from=2024-01-01&\
-to=2024-12-31"
+startDate=2024-01-01&\
+endDate=2024-12-31"
 ```
 
 ### Suivi multi-préleveurs
@@ -440,7 +440,7 @@ Observer les variations horaires de débit sur un point :
 
 ```bash
 curl ... "?pointIds=207&parameter=débit&operator=mean&\
-aggregationFrequency=1%20hour&from=2024-06-15&to=2024-06-15"
+aggregationFrequency=1%20hour&startDate=2024-06-15&endDate=2024-06-15"
 ```
 
 ## Performance et limitations
