@@ -571,7 +571,7 @@ paths:
           example: "volume prélevé"
         - in: query
           name: operator
-          required: true
+          required: false
           schema:
             type: string
             enum: [sum, mean, min, max]
