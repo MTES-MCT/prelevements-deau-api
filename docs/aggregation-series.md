@@ -366,7 +366,7 @@ Les paramètres supportés sont définis dans `lib/parameters-config.js` :
 export const PARAMETERS_CONFIG = {
   'volume prélevé': {
     valueType: 'cumulative',
-    operators: ['sum'],
+    operators: ['sum', 'mean', 'min', 'max'],
     defaultOperator: 'sum',
     unit: 'm3'
   },
