@@ -649,17 +649,17 @@ paths:
                         type: string
                         description: Fréquence d'agrégation appliquée
                         example: "1 month"
-                      from:
+                      startDate:
                         type: string
                         format: date
                         nullable: true
-                        description: Date de début effective (peut être null si aucune donnée)
+                        description: Date de début de la période d'agrégation demandée
                         example: "2024-01-01"
-                      to:
+                      endDate:
                         type: string
                         format: date
                         nullable: true
-                        description: Date de fin effective (peut être null si aucune donnée)
+                        description: Date de fin de la période d'agrégation demandée
                         example: "2024-12-31"
                       points:
                         type: array
@@ -718,16 +718,17 @@ paths:
                         type: integer
                         description: Nombre total de valeurs considérées
                         example: 1250
-                  data:
+                  values:
                     type: array
-                    description: Données agrégées par période
+                    description: Valeurs agrégées par période
                     items:
                       type: object
                       properties:
-                        period:
+                        date:
                           type: string
                           description: |
                             Identifiant de la période (format dépend de aggregationFrequency) :
+                            - `15 minutes`, `1 hour`, `6 hours` : YYYY-MM-DD HH:MM
                             - `1 day` : YYYY-MM-DD
                             - `1 month` : YYYY-MM
                             - `1 year` : YYYY
