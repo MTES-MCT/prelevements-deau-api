@@ -667,11 +667,14 @@ paths:
                         items:
                           type: object
                           properties:
-                            seqId:
+                            _id:
+                              $ref: '#/components/schemas/ObjectId'
+                              description: ObjectId MongoDB du point
+                            id_point:
                               type: integer
                               description: Identifiant numérique du point
                               example: 207
-                            name:
+                            nom:
                               type: string
                               description: Nom du point de prélèvement
                               example: "Captage Ruban"
