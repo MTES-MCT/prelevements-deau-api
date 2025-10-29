@@ -370,7 +370,7 @@ export const PARAMETERS_CONFIG = {
     defaultOperator: 'sum',
     unit: 'm3'
   },
-  'débit': {
+  'débit prélevé': {
     valueType: 'instantaneous',
     operators: ['mean', 'min', 'max'],
     defaultOperator: 'mean',
