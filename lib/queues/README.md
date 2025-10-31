@@ -94,7 +94,7 @@ Les jobs utilisent un `jobId` stable (`attachment-${id}` ou `dossier-${id}`) pou
 ### Démarrer les workers
 
 ```bash
-yarn start:worker
+npm run start:worker
 ```
 
 Cette commande :
@@ -199,7 +199,7 @@ Authentification Basic Auth requise (username libre, password = `BULLBOARD_PASSW
 
 2. Démarrer l'API :
    ```bash
-   yarn start
+   npm start
    # Affiche : 📊 BullBoard disponible sur /admin/queues
    ```
 

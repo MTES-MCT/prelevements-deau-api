@@ -157,7 +157,7 @@ async function importReferentiel(folderPath) {
   if (!folderPath) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner le chemin du fichier à importer \nExemple : yarn import-reference-data /data/reunion'
+      'Vous devez renseigner le chemin du fichier à importer \nExemple : npm run import-reference-data /data/reunion'
     )
 
     process.exit(1)

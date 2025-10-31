@@ -19,14 +19,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Enable corepack
-        run: corepack enable
       - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'yarn'
+          cache: 'npm'
       - name: Install dependencies
-        run: yarn install --immutable
+        run: npm ci
       - name: Lint OpenAPI spec
-        run: yarn lint:openapi
+        run: npm run lint:openapi

@@ -1,6 +1,5 @@
 {
   "name": "prelevement-deau-data",
-  "packageManager": "yarn@4.6.0",
   "type": "module",
   "workspaces": [
     "packages/*"
