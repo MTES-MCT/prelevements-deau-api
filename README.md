@@ -6,13 +6,13 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 
 ## Prérequis
 
-- Node.js version 22 LTS (22.11+)
+- Node.js version 24 LTS (24.11+)
 - MongoDB version 4.4.29
 - Redis (pour les tâches planifiées via BullMQ)
 
 ## Installation
 
-Ce projet utilise `npm` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 22.11) installé avant de commencer.
+Ce projet utilise `npm` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 24.0) installé avant de commencer.
 
 1. Installez les dépendances :
 
