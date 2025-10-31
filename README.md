@@ -12,12 +12,12 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 
 ## Installation
 
-Ce projet utilise `yarn` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 22.11) installé avant de commencer.
+Ce projet utilise `npm` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 22.11) installé avant de commencer.
 
 1. Installez les dépendances :
 
    ```bash
-   yarn install
+   npm install
    ```
 
 2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez les variables obligatoires.
@@ -43,20 +43,20 @@ Ce jeton sera utilisé en tant que mot de passe pour se connecter à l'applicati
 - Téléchargez les CSV de référence. Assurez-vous d'avoir rempli la variable d'environnement `CSV_SOURCE_URL` avant.
 
 ```bash
-yarn download-csv
+npm run download-csv
 ```
 
 - Importez ensuite ces fichiers en base, le dernier paramètre correspond à l'emplacement des CSV.
 
 ```bash
-yarn import-reference-data ./data
+npm run import-reference-data ./data
 ```
 
 - Importez les points / préleveurs / exploitations / règles / documents :
   _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
 
 ```bash
-yarn import-territoire-data DEP-974 ./data
+npm run import-territoire-data DEP-974 ./data
 ```
 
 - Enfin, récupérez les dossiers déposés sur Démarches Simplifiées. Ces dossiers seront traités :
@@ -65,18 +65,18 @@ yarn import-territoire-data DEP-974 ./data
 3. Enregistrement en base de donnée des dossiers
 
 ```bash
-yarn resync-all-dossiers
+npm run resync-all-dossiers
 ```
 
 ### Autres scripts utiles
 
 - **sync-updated-dossiers** : synchronise uniquement les dossiers modifiés sur Démarches Simplifiées.
   ```bash
-  yarn sync-updated-dossiers
+  npm run sync-updated-dossiers
   ```
 - **drop-dossiers-collections** : supprime les collections liées aux dossiers (avec confirmation).
   ```bash
-  yarn drop-dossiers-collections
+  npm run drop-dossiers-collections
   ```
   Supprime : `dossiers`, `dossier_attachments`, `series`, `series_values`, `integrations_journalieres`
 - **read-multi-params** : valide un fichier multi-paramètres avant import.
@@ -104,13 +104,13 @@ docker run -d -p 6379:6379 redis:alpine
 ### 2. Démarrer l'API HTTP
 
 ```bash
-yarn start
+npm start
 ```
 
 ### 3. Démarrer les workers BullMQ (dans un autre terminal)
 
 ```bash
-yarn start:worker
+npm run start:worker
 ```
 
 Les workers gèrent les tâches planifiées et à la demande :
@@ -156,7 +156,7 @@ http://localhost:5000/admin/queues
 Le projet utilise **xo** comme linter pour assurer la qualité du code. Exécutez la commande suivante pour lancer le linter :
 
 ```bash
-yarn lint
+npm run lint
 ```
 
 ## Documentation de l'API
@@ -175,7 +175,7 @@ Vous pouvez :
 Le lint est automatisé via [Spectral](https://github.com/stoplightio/spectral). Pour lancer une vérification locale :
 
 ```bash
-yarn lint:openapi
+npm run lint:openapi
 ```
 
 Une action GitHub (`.github/workflows/openapi-lint.yml`) exécute ce lint sur chaque PR modifiant le fichier `docs/openapi.yaml`.
