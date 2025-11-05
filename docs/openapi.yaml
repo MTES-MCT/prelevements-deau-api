@@ -780,6 +780,197 @@ paths:
                   message:
                     type: string
                     example: "Aucun point trouvé avec les identifiants: 999"
+  /aggregated-series/options:
+    get:
+      tags: [Séries]
+      summary: Récupérer les options disponibles pour l'agrégation de séries
+      description: |
+        Retourne les paramètres disponibles et leurs plages de dates en fonction du ciblage
+        (préleveur et/ou points). Cette route permet de découvrir quelles données sont disponibles
+        avant d'appeler `/aggregated-series`.
+
+        **Trois modes d'utilisation :**
+
+        1. **Mode pointIds seul** : Options pour une liste explicite de points
+        2. **Mode preleveurId seul** : Options pour tous les points d'un préleveur
+        3. **Mode combiné** : Options pour un sous-ensemble de points d'un préleveur
+
+        **Données retournées :**
+        - Liste des paramètres disponibles avec leurs plages de dates (basées sur `computed.integratedDays`)
+        - Métadonnées de chaque paramètre (type, unité, nombre de séries)
+        - Liste des points résolus
+
+        **Support des identifiants** : Les identifiants de points et préleveurs peuvent être
+        fournis en format numérique (ex: `207,208`) ou MongoDB ObjectId (ex: `507f1f77bcf86cd799439011`),
+        ou même un mélange des deux.
+
+        **Restriction** : Cette route nécessite des privilèges administrateur.
+      operationId: getAggregatedSeriesOptions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: pointIds
+          required: false
+          schema:
+            type: string
+            pattern: '^([\da-fA-F]{24}|\d+)(,([\da-fA-F]{24}|\d+))*$'
+          description: |
+            Liste d'identifiants de points séparés par des virgules.
+            Accepte des IDs numériques (ex: `207,208,209`) ou des ObjectIds MongoDB
+            (ex: `507f1f77bcf86cd799439011,507f191e810c19729de860ea`), ou un mélange des deux.
+
+            **Au moins un paramètre entre `pointIds` et `preleveurId` doit être fourni.**
+          example: "207,208,209"
+        - in: query
+          name: preleveurId
+          required: false
+          schema:
+            oneOf:
+              - type: integer
+                minimum: 1
+              - type: string
+                pattern: '^[\da-fA-F]{24}$'
+          description: |
+            Identifiant du préleveur (numérique ou ObjectId MongoDB).
+            Permet de récupérer les options pour tous les points du préleveur.
+
+            **Au moins un paramètre entre `pointIds` et `preleveurId` doit être fourni.**
+
+            Si `pointIds` est également fourni, seuls les points appartenant au préleveur
+            ET présents dans la liste seront considérés (mode filtrage).
+          example: 42
+      responses:
+        '200':
+          description: Options disponibles récupérées avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  parameters:
+                    type: array
+                    description: Liste des paramètres disponibles avec leurs métadonnées
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          description: Nom du paramètre
+                          example: "volume prélevé"
+                        unit:
+                          type: string
+                          description: Unité du paramètre
+                          example: "m3"
+                        valueType:
+                          type: string
+                          enum: [cumulative, instantaneous]
+                          description: Type de valeur (cumulative ou instantaneous)
+                          example: "cumulative"
+                        minDate:
+                          type: string
+                          format: date
+                          nullable: true
+                          description: Date minimale des données intégrées (YYYY-MM-DD)
+                          example: "2023-01-01"
+                        maxDate:
+                          type: string
+                          format: date
+                          nullable: true
+                          description: Date maximale des données intégrées (YYYY-MM-DD)
+                          example: "2024-12-31"
+                        seriesCount:
+                          type: integer
+                          description: Nombre de séries disponibles pour ce paramètre
+                          example: 5
+                  points:
+                    type: array
+                    description: Liste des points résolus inclus dans la réponse
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          $ref: '#/components/schemas/ObjectId'
+                          description: ObjectId MongoDB du point
+                        id_point:
+                          type: integer
+                          description: Identifiant numérique du point
+                          example: 207
+                        nom:
+                          type: string
+                          description: Nom du point de prélèvement
+                          example: "Captage Ruban"
+              examples:
+                exemple-simple:
+                  summary: Exemple avec deux paramètres disponibles
+                  value:
+                    parameters:
+                      - name: "débit prélevé"
+                        unit: "L/s"
+                        valueType: "instantaneous"
+                        minDate: "2023-01-01"
+                        maxDate: "2024-12-31"
+                        seriesCount: 3
+                      - name: "volume prélevé"
+                        unit: "m3"
+                        valueType: "cumulative"
+                        minDate: "2023-01-01"
+                        maxDate: "2024-12-31"
+                        seriesCount: 5
+                    points:
+                      - _id: "507f1f77bcf86cd799439011"
+                        id_point: 207
+                        nom: "Captage Ruban"
+                      - _id: "507f1f77bcf86cd799439012"
+                        id_point: 208
+                        nom: "Station Nord"
+                exemple-aucune-donnee:
+                  summary: Exemple sans données disponibles
+                  value:
+                    parameters: []
+                    points:
+                      - _id: "507f1f77bcf86cd799439011"
+                        id_point: 207
+                        nom: "Captage Ruban"
+        '400':
+          description: Paramètres invalides
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 400
+                  message:
+                    type: string
+                    example: "Vous devez fournir au moins pointIds ou preleveurId"
+        '403':
+          description: Accès non autorisé (privilèges administrateur requis)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 403
+                  message:
+                    type: string
+                    example: "Accès non autorisé"
+        '404':
+          description: Points ou préleveur non trouvés
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 404
+                  message:
+                    type: string
+                    example: "Aucun point trouvé avec les identifiants: 999"
   /points-prelevement:
     get:
       tags: [Points]
