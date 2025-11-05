@@ -4,13 +4,74 @@
 
 Le système d'agrégation permet de combiner des données de prélèvements provenant de plusieurs points et/ou périodes de temps. Il offre une API flexible pour analyser les volumes prélevés et autres paramètres selon différentes granularités temporelles.
 
-## Route API
+## Routes API
+
+### Route principale : Agrégation de séries
 
 ```
 GET /aggregated-series
 ```
 
 **Restriction** : Route réservée aux administrateurs uniquement.
+
+Cette route permet d'agréger les données de séries temporelles selon différentes modalités spatiales et temporelles.
+
+### Route de découverte : Options disponibles
+
+```
+GET /aggregated-series/options
+```
+
+**Restriction** : Route réservée aux administrateurs uniquement.
+
+Cette route complémentaire permet de **découvrir quelles données sont disponibles** avant d'effectuer une agrégation. Elle retourne :
+- La liste des **paramètres disponibles** pour le ciblage donné (préleveur et/ou points)
+- Les **plages de dates** (min/max) pour chaque paramètre, basées sur les données réellement intégrées
+- Les **métadonnées** de chaque paramètre (type, unité, nombre de séries)
+- La liste des **points résolus**
+
+**Cas d'usage** :
+- Pré-remplir un formulaire avec les options disponibles côté frontend
+- Valider que des données existent avant de lancer une agrégation
+- Découvrir quels paramètres sont mesurés sur un ensemble de points
+
+**Exemple de requête** :
+```bash
+GET /aggregated-series/options?preleveurId=42
+```
+
+**Exemple de réponse** :
+```json
+{
+  "parameters": [
+    {
+      "name": "volume prélevé",
+      "unit": "m3",
+      "valueType": "cumulative",
+      "minDate": "2023-01-01",
+      "maxDate": "2024-12-31",
+      "seriesCount": 5
+    },
+    {
+      "name": "débit prélevé",
+      "unit": "L/s",
+      "valueType": "instantaneous",
+      "minDate": "2023-01-01",
+      "maxDate": "2024-12-31",
+      "seriesCount": 3
+    }
+  ],
+  "points": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "id_point": 207,
+      "nom": "Captage Ruban"
+    }
+  ]
+}
+```
+
+**Note importante** : Cette route ne récupère que les séries avec des données intégrées (`computed.integratedDays`). Les dates retournées correspondent aux dates réellement consolidées dans le système.
 
 ## Modes d'utilisation
 
@@ -113,6 +174,8 @@ pointIds=207,507f1f77bcf86cd799439011,209
 
 ### Fichier principal : `lib/handlers/series-aggregation.js`
 
+Handler pour l'agrégation de séries temporelles.
+
 ```
 validateQueryParams()           → Validation Joi des paramètres
   ├─ Accepte pointIds OU preleveurId (ou les deux)
@@ -140,6 +203,39 @@ aggregateValuesByPeriod()       → Agrégation temporelle (mois/année)
 
 buildAggregationMetadata()      → Construction des métadonnées de réponse
 ```
+
+### Fichier de découverte : `lib/handlers/series-aggregation-options.js`
+
+Handler pour la récupération des options disponibles.
+
+```
+validateQueryParams()                      → Validation Joi des paramètres
+  ├─ Accepte pointIds OU preleveurId (ou les deux)
+  └─ Valide les formats d'identifiants (numériques + ObjectId)
+
+resolvePointsForAggregation()              → Résolution des points (réutilisé)
+  └─ Importé depuis series-aggregation.js
+
+listSeries()                               → Récupération des séries MongoDB
+  └─ Avec onlyIntegratedDays=true pour ne récupérer que les séries intégrées
+
+calculateDateRangeFromIntegratedDays()     → Calcul des dates min/max
+  └─ Parcourt computed.integratedDays de toutes les séries
+
+groupSeriesByParameter()                   → Groupement par paramètre
+  ├─ Crée un Map de séries par paramètre
+  ├─ Filtre les paramètres non supportés
+  ├─ Enrichit avec les métadonnées de parametersConfig
+  └─ Retourne la liste triée par nom de paramètre
+
+getAggregatedSeriesOptionsHandler()        → Handler principal
+  └─ Retourne {parameters: [...], points: [...]}
+```
+
+**Fonction exportée** :
+- `calculateDateRangeFromIntegratedDays(series)` : Exportée pour les tests unitaires
+
+**Réutilisation** : Le handler réutilise `resolvePointsForAggregation()` du fichier principal pour garantir une cohérence dans la résolution des points entre les deux endpoints.
 
 ### Fonctions utilitaires
 
