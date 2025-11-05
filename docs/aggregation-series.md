@@ -186,8 +186,7 @@ resolvePointsForAggregation()   → Résolution des points selon le mode
   ├─ Mode 2: resolvePreleveurPoints()
   └─ Mode 3: Filtrage combiné
 
-fetchSeriesForAggregation()     → Récupération des séries MongoDB
-  └─ listSeries() pour chaque point en parallèle
+listSeries()                    → Récupération des séries MongoDB (appel direct avec pointIds)
 
 fetchAllSeriesValues()          → Récupération des valeurs
   ├─ Détection séries infra-journalières
