@@ -396,7 +396,7 @@ paths:
       summary: Rechercher des séries par préleveur, point et plage de dates intégrées
       description: >-
         Retourne uniquement les métadonnées des séries ayant au moins une date intégrée (computed.integratedDays)
-        dans l'intervalle fourni (from/to). Si from et to sont absents, toutes les séries du couple
+        dans l'intervalle fourni (startDate/endDate). Si startDate et endDate sont absents, toutes les séries du couple
         préleveur/point sont retournées sans filtrage sur integratedDays.
       operationId: searchSeries
       parameters:
@@ -415,12 +415,12 @@ paths:
             Identifiant du point de prélèvement (ObjectId).
             Au moins un des paramètres `preleveurId` ou `pointId` doit être fourni.
         - in: query
-          name: from
+          name: startDate
           required: false
           schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
           description: Date de début (incluse) pour filtrer les dates intégrées
         - in: query
-          name: to
+          name: endDate
           required: false
           schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
           description: Date de fin (incluse) pour filtrer les dates intégrées
@@ -449,11 +449,11 @@ paths:
           required: true
           schema: { $ref: '#/components/schemas/ObjectId' }
         - in: query
-          name: start
+          name: startDate
           description: Date de début (incluse) YYYY-MM-DD
           schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
         - in: query
-          name: end
+          name: endDate
           description: Date de fin (incluse) YYYY-MM-DD
           schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
         - in: query
