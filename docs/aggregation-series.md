@@ -217,7 +217,8 @@ resolvePointsForAggregation()              → Résolution des points (réutilis
   └─ Importé depuis series-aggregation.js
 
 listSeries()                               → Récupération des séries MongoDB
-  └─ Avec onlyIntegratedDays=true pour ne récupérer que les séries intégrées
+  └─ Appelé pour chaque point avec onlyIntegratedDays=true
+  └─ Les résultats sont combinés (flat) pour obtenir toutes les séries
 
 calculateDateRangeFromIntegratedDays()     → Calcul des dates min/max
   └─ Parcourt computed.integratedDays de toutes les séries
