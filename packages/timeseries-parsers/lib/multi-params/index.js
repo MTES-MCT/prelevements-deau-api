@@ -65,6 +65,8 @@ function consolidateData(rawData) {
   const pointPrelevement = safeParsePointPrelevement(rawData.metadata.pointPrelevement)
   const dailyDataTab = rawData.dataTabs.find(tab => tab.period === '1 jour' && tab.hasData)
   const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
+  const hourlyDataTab = rawData.dataTabs.find(tab => tab.period === '1 heure' && tab.hasData)
+  const monthlyDataTab = rawData.dataTabs.find(tab => tab.period === '1 mois' && tab.hasData)
   const otherDataTabs = rawData.dataTabs.filter(tab => tab.period === 'autre' && tab.hasData)
 
   const series = []
@@ -90,6 +92,31 @@ function consolidateData(rawData) {
         frequency: '15 minutes',
         series,
         expectsTime: true
+      })
+    }
+  }
+
+  if (hourlyDataTab) {
+    for (const param of hourlyDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: hourlyDataTab.rows,
+        pointPrelevement,
+        frequency: '1 hour',
+        series,
+        expectsTime: true
+      })
+    }
+  }
+
+  if (monthlyDataTab) {
+    for (const param of monthlyDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: monthlyDataTab.rows,
+        pointPrelevement,
+        frequency: '1 month',
+        series
       })
     }
   }
