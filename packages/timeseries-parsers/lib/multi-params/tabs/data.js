@@ -58,6 +58,10 @@ const NORMALIZED_PERIODS = {
   '15m': '15 minutes',
   '1jour': '1 jour',
   jour: '1 jour',
+  '1heure': '1 heure',
+  heure: '1 heure',
+  '1mois': '1 mois',
+  mois: '1 mois',
   trimestre: '1 trimestre',
   autres: 'autre'
 }
@@ -720,8 +724,16 @@ function getAllowedFrequenceValuesFromSheetName(sheetName) {
     return ['15 minutes']
   }
 
+  if (sheetName.includes('1 heure')) {
+    return ['1 heure', 'heure']
+  }
+
   if (sheetName.includes('1 jour')) {
     return ['1 jour', 'jour']
+  }
+
+  if (sheetName.includes('1 mois')) {
+    return ['1 mois', 'mois']
   }
 
   if (sheetName.includes('1 trimestre')) {
