@@ -3,13 +3,30 @@
 
 import {getDaysInMonth, addDays, parseISO, formatISO, isLeapYear} from 'date-fns'
 
-// Map raw metadata frequency (French labels already normalized by data.js parse) to output frequency tokens
+/**
+ * Normalise les fréquences d'entrée (labels français) vers des tokens de fréquence standardisés.
+ * Gère toutes les variantes possibles ('1 heure', 'heure', '1heure', etc.)
+ *
+ * @param {string} freq Fréquence brute depuis les métadonnées
+ * @returns {string|undefined} Token de fréquence normalisé ou undefined si non supporté
+ */
 export function normalizeOutputFrequency(freq) {
   if (!freq) {
     return undefined
   }
 
-  switch (freq) {
+  // Normaliser les espaces pour gérer '1heure', '1 heure', etc.
+  const normalized = freq
+    .replace(/1\s*heure/, 'heure')
+    .replace(/1\s*minute/, 'minute')
+    .replace(/1\s*seconde/, 'seconde')
+    .replace(/1\s*jour/, 'jour')
+    .replace(/1\s*mois/, 'mois')
+    .replace(/1\s*trimestre/, 'trimestre')
+    .replace(/1\s*année/, 'année')
+    .replace(/15\s*m(in|n)?$/, '15 minutes')
+
+  switch (normalized) {
     case '15 minutes': {
       return '15 minutes'
     }
@@ -26,8 +43,7 @@ export function normalizeOutputFrequency(freq) {
       return '1 second'
     }
 
-    case 'jour':
-    case '1 jour': {
+    case 'jour': {
       return '1 day'
     }
 

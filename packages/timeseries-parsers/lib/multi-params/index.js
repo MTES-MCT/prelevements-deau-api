@@ -1,5 +1,5 @@
 import {pick, minBy, maxBy} from 'lodash-es'
-import {normalizeOutputFrequency, isSubDailyFrequency, isSuperDailyFrequency, isCumulativeParameter, expandToDaily} from './frequency.js'
+import {isSubDailyFrequency, isSuperDailyFrequency, isCumulativeParameter, expandToDaily} from './frequency.js'
 
 import {readSheet} from '../xlsx.js'
 
@@ -125,19 +125,19 @@ function consolidateData(rawData) {
   if (otherDataTabs.length > 0) {
     for (const tab of otherDataTabs) {
       for (const param of tab.parameters) {
-        // Déterminer la fréquence normalisée
-        const normalized = normalizeOutputFrequency(param.frequence)
-        if (!normalized) {
+        // La fréquence est déjà normalisée par la fonction parse() dans data.js
+        const frequency = param.frequence
+        if (!frequency || frequency === 'autre') {
           // Fréquence inconnue / non supportée : ignorer silencieusement
           continue
         }
 
-        const expectsTime = isSubDailyFrequency(normalized)
+        const expectsTime = isSubDailyFrequency(frequency)
         buildSeriesForParam({
           param,
           rowsSource: tab.rows,
           pointPrelevement,
-          frequency: normalized,
+          frequency,
           series,
           expectsTime
         })
