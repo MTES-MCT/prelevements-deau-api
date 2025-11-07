@@ -7,8 +7,21 @@
 - Chaque onglet `Data | T=` présente :
   - des métadonnées par paramètre dans les lignes 2 à 10 (index 1 à 9) :
     - `nom_parametre`, `type`, `frequence`, `unite`, `detail_point_suivi`, `profondeur`, `date_debut`, `date_fin`, `remarque` ;
-  - une ligne d’en-tête (ligne 12) : `date`, `heure`, `valeur_parametreX...`, `Remarque` ;
+  - une ligne d'en-tête (ligne 12) : `date`, `heure`, `valeur_parametreX...`, `Remarque` ;
   - des lignes de données à partir de la ligne 13.
+
+### Onglets standards supportés
+
+Le format multi-paramètres supporte plusieurs onglets standards avec des périodes fixes :
+
+- **`Data | T=15 minutes`** : données avec fréquence de 15 minutes (obligatoire si utilisé)
+- **`Data | T=1 heure`** : données avec fréquence horaire (optionnel, ajouté dans v2.10)
+- **`Data | T=1 jour`** : données avec fréquence journalière (standard)
+- **`Data | T=1 mois`** : données avec fréquence mensuelle (optionnel, ajouté dans v2.10)
+- **`Data | T=1 trimestre`** : données avec fréquence trimestrielle
+- **`Data | T=autre`** : onglet flexible où la fréquence est définie au niveau de chaque paramètre
+
+Les onglets sont **optionnels** : un fichier peut contenir un ou plusieurs de ces onglets selon les besoins. Les onglets avec périodes fixes valident que la fréquence déclarée dans les métadonnées des paramètres correspond bien au nom de l'onglet.
 
 ## Variantes gérées
 
@@ -26,6 +39,7 @@ Le validateur accepte désormais **toutes les fréquences**, y compris celles su
 - `seconde`, `minute`, `15 minutes`, `heure`
 - Nécessitent la présence du champ `heure` dans les données
 - Stockées avec regroupement par date : un document par jour contenant un tableau de valeurs avec timestamps
+- **Onglets dédiés** : `Data | T=15 minutes` et `Data | T=1 heure` (ce dernier ajouté dans v2.10)
 
 ### Fréquence journalière
 - `jour`, `1 jour`
@@ -34,6 +48,7 @@ Le validateur accepte désormais **toutes les fréquences**, y compris celles su
 ### Fréquences supra-journalières (super-daily)
 - `mois`, `trimestre`, `année`
 - Traitement différencié selon le type de paramètre :
+- **Onglets dédiés** : `Data | T=1 mois` (ajouté dans v2.10) et `Data | T=1 trimestre`
 
 #### Paramètres cumulatifs (volumes)
 Les paramètres de type **volume prélevé** et **volume restitué** sont automatiquement expansés en valeurs journalières :
@@ -106,7 +121,60 @@ L'expansion des valeurs annuelles et trimestrielles prend en compte les années 
    - validation spécifique selon le paramètre (`volume prélevé` ≥ 0, `volume restitué` ≥ 0, etc.) ;
    - expansion automatique des valeurs cumulatives avec fréquence > 1 jour.
 
-Les erreurs récurrentes sur un même type (ex. 20 lignes avec une date invalide) sont agrégées par l’`ErrorCollector` afin de conserver une lecture lisible.
+Les erreurs récurrentes sur un même type (ex. 20 lignes avec une date invalide) sont agrégées par l'`ErrorCollector` afin de conserver une lecture lisible.
+
+## Exemples d'utilisation des onglets
+
+### Onglet horaire (`Data | T=1 heure`)
+
+L'onglet horaire permet de saisir des données avec un pas de temps d'une heure. Il est particulièrement utile pour :
+- Le suivi de paramètres physico-chimiques (température, pH, conductivité)
+- Le suivi de débits horaires
+- Les niveaux d'eau avec relevé horaire
+
+**Caractéristiques :**
+- La fréquence dans les métadonnées doit être `heure` ou `1 heure`
+- Le champ `heure` est **obligatoire** pour chaque ligne de données
+- Format de l'heure : `HH:mm` ou `HH:mm:ss`
+- Les données sont stockées avec regroupement par date
+
+**Exemple de métadonnées :**
+```
+nom_parametre: température
+type: moyenne
+frequence: heure
+unite: degrés Celsius
+```
+
+### Onglet mensuel (`Data | T=1 mois`)
+
+L'onglet mensuel permet de saisir des données avec un pas de temps mensuel. Deux comportements selon le type de paramètre :
+
+**Pour les volumes (cumulative) :**
+- Les valeurs mensuelles sont automatiquement **expansées en valeurs journalières**
+- Chaque jour du mois reçoit une fraction égale du volume total
+- Les métadonnées d'expansion sont conservées (`originalValue`, `originalFrequency`, etc.)
+- La série résultante a `frequency = '1 day'` et `originalFrequency = '1 month'`
+
+**Pour les autres paramètres (non-cumulative) :**
+- Les valeurs gardent leur fréquence mensuelle
+- Pas d'expansion effectuée
+- La série conserve `frequency = '1 month'`
+
+**Caractéristiques :**
+- La fréquence dans les métadonnées doit être `mois` ou `1 mois`
+- Le champ `heure` n'est **pas nécessaire**
+- Date au format `YYYY-MM-DD` (généralement le 1er du mois)
+
+**Exemple pour un volume mensuel :**
+```
+nom_parametre: volume prélevé
+type: valeur brute
+frequence: mois
+unite: m³
+```
+
+Si vous saisissez `3100 m³` pour janvier 2025, le système génère automatiquement 31 valeurs de `100 m³` pour chaque jour du mois.
 
 ## Consolidation des séries
 

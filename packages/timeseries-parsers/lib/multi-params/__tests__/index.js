@@ -313,3 +313,86 @@ test('expandToDaily preserves originalFrequency in series metadata', t => {
   t.is(expanded[15].originalFrequency, '1 month')
   t.is(expanded[30].originalFrequency, '1 month')
 })
+
+// Tests pour les nouveaux onglets T=1 heure et T=1 mois
+test('extractMultiParamFile - template with hourly and monthly tabs', async t => {
+  const filePath = path.join(testFilesPath, 'template-v2.10.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors, data} = await extractMultiParamFile(fileContent)
+
+  // Pas d'erreurs critiques attendues (seulement warnings éventuels)
+  const criticalErrors = errors.filter(e => e.severity === 'error' || !e.severity)
+  t.is(criticalErrors.length, 0, 'Aucune erreur critique attendue')
+  t.truthy(data)
+  t.true(Array.isArray(data.series))
+
+  // Vérifier qu'il y a des séries avec fréquence horaire
+  const hourlySeries = data.series.filter(s => s.frequency === '1 hour')
+  t.true(hourlySeries.length > 0, 'Au moins une série horaire doit être présente')
+
+  // Vérifier qu'il y a des séries avec fréquence mensuelle OU avec originalFrequency mensuelle
+  const monthlySeries = data.series.filter(s => s.frequency === '1 month' || s.originalFrequency === '1 month')
+  t.true(monthlySeries.length > 0, 'Au moins une série mensuelle (ou expansée depuis mensuel) doit être présente')
+})
+
+test('extractMultiParamFile - hourly series have time field', async t => {
+  const filePath = path.join(testFilesPath, 'template-v2.10.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {data} = await extractMultiParamFile(fileContent)
+
+  // Le template contient des températures horaires pour les 1er et 2 novembre 2025 (48 valeurs)
+  const hourlySeries = data.series.find(s => s.frequency === '1 hour' && s.parameter === 'température')
+
+  t.truthy(hourlySeries, 'Une série de température horaire doit être présente')
+  t.is(hourlySeries.frequency, '1 hour')
+  t.is(hourlySeries.valueType, 'instantaneous')
+  t.true(Array.isArray(hourlySeries.data))
+  t.is(hourlySeries.data.length, 48, '1er et 2 novembre 2025 = 48 heures')
+  t.is(hourlySeries.minDate, '2025-11-01')
+  t.is(hourlySeries.maxDate, '2025-11-02')
+
+  // Vérifier que les points de données ont un champ time
+  for (const point of hourlySeries.data) {
+    t.truthy(point.date, 'Chaque point doit avoir une date')
+    t.truthy(point.time, 'Chaque point horaire doit avoir une heure')
+    t.regex(point.time, /^\d{2}:\d{2}$/, 'Le format de l\'heure doit être HH:mm')
+    t.true(typeof point.value === 'number', 'La valeur doit être un nombre')
+  }
+})
+
+test('extractMultiParamFile - monthly volumes are expanded to daily', async t => {
+  const filePath = path.join(testFilesPath, 'template-v2.10.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {data} = await extractMultiParamFile(fileContent)
+
+  // Le template contient novembre et décembre 2025 (30 + 31 = 61 jours)
+  const expandedVolumeSeries = data.series.find(
+    s => s.parameter === 'volume prélevé' && s.originalFrequency === '1 month'
+  )
+
+  t.truthy(expandedVolumeSeries, 'Une série de volume prélevé mensuel expansée doit être présente')
+  t.is(expandedVolumeSeries.frequency, '1 day', 'Fréquence journalière après expansion')
+  t.is(expandedVolumeSeries.originalFrequency, '1 month', 'Fréquence d\'origine conservée')
+  t.is(expandedVolumeSeries.valueType, 'cumulative')
+  t.is(expandedVolumeSeries.minDate, '2025-11-01')
+  t.is(expandedVolumeSeries.maxDate, '2025-12-31')
+
+  // Novembre 2025 = 30 jours + Décembre 2025 = 31 jours
+  t.is(expandedVolumeSeries.data.length, 61, 'Novembre (30j) + Décembre (31j) = 61 jours')
+
+  // Vérifier les métadonnées d'expansion sur le premier point (novembre)
+  const firstPoint = expandedVolumeSeries.data[0]
+  t.is(firstPoint.date, '2025-11-01')
+  t.is(firstPoint.time, undefined, 'Pas de champ time pour les données journalières')
+  t.true(typeof firstPoint.value === 'number')
+  t.truthy(firstPoint.originalValue, 'Valeur originale conservée')
+  t.is(firstPoint.originalDate, '2025-11-01')
+  t.is(firstPoint.originalFrequency, '1 month')
+  t.is(firstPoint.daysCovered, 30, 'Novembre 2025 a 30 jours')
+
+  // Vérifier le premier point de décembre
+  const decemberFirstPoint = expandedVolumeSeries.data[30]
+  t.is(decemberFirstPoint.date, '2025-12-01')
+  t.is(decemberFirstPoint.originalDate, '2025-12-01')
+  t.is(decemberFirstPoint.daysCovered, 31, 'Décembre 2025 a 31 jours')
+})

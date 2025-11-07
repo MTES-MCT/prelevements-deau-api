@@ -17,7 +17,8 @@
     "lint": "xo",
     "lint:openapi": "spectral lint docs/openapi.yaml",
     "test": "ava",
-    "coverage": "c8 ava"
+    "coverage": "c8 ava",
+    "coverage:report": "c8 --reporter=html --reporter=text ava"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.895.0",

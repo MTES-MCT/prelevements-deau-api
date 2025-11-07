@@ -8,6 +8,7 @@ import {
   readAsDateString,
   readAsTimeString
 } from '../../xlsx.js'
+import {normalizeOutputFrequency} from '../frequency.js'
 
 import {ErrorCollector} from '../error-collector.js'
 
@@ -58,6 +59,10 @@ const NORMALIZED_PERIODS = {
   '15m': '15 minutes',
   '1jour': '1 jour',
   jour: '1 jour',
+  '1heure': '1 heure',
+  heure: '1 heure',
+  '1mois': '1 mois',
+  mois: '1 mois',
   trimestre: '1 trimestre',
   autres: 'autre'
 }
@@ -343,29 +348,17 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'frequence',
       type: 'string',
       parse(value) {
-        const allowedValues = new Set([
-          'seconde',
-          'minute',
-          '15 minutes',
-          'heure',
-          'jour',
-          'mois',
-          'trimestre',
-          'année',
-          'autre'
-        ])
+        // Normalize to lowercase and trim
+        const normalized = value.toLowerCase().trim()
 
-        value = value
-          .toLowerCase()
-          .trim()
-          .replace(/1\s*jour/, 'jour')
-          .replace(/15\s*m(in|n)?$/, '15 minutes')
+        // Use centralized normalization function
+        const result = normalizeOutputFrequency(normalized)
 
-        if (allowedValues.has(value)) {
-          return value
+        if (!result) {
+          throw new Error(`La fréquence "${value}" n'est pas reconnue`)
         }
 
-        throw new Error(`La fréquence "${value}" n'est pas reconnue`)
+        return result
       },
       row: 3,
       required: true
@@ -720,12 +713,20 @@ function getAllowedFrequenceValuesFromSheetName(sheetName) {
     return ['15 minutes']
   }
 
+  if (sheetName.includes('1 heure')) {
+    return ['1 hour']
+  }
+
   if (sheetName.includes('1 jour')) {
-    return ['1 jour', 'jour']
+    return ['1 day']
+  }
+
+  if (sheetName.includes('1 mois')) {
+    return ['1 month']
   }
 
   if (sheetName.includes('1 trimestre')) {
-    return ['1 trimestre', 'trimestre']
+    return ['1 quarter']
   }
 
   if (sheetName.includes('autre')) {
@@ -743,7 +744,7 @@ function getAllowedFrequenceValuesFromSheetName(sheetName) {
  */
 // Fonction pour déterminer si la fréquence est inférieure à un jour
 function isFrequencyLessThanOneDay(frequency) {
-  const frequenciesLessThanOneDay = ['15 minutes', 'heure', 'minute', 'seconde']
+  const frequenciesLessThanOneDay = ['15 minutes', '1 hour', '1 minute', '1 second']
   return frequenciesLessThanOneDay.includes(frequency) || false
 }
 
@@ -759,11 +760,11 @@ function getExpectedTimeDifference(frequency) {
   const msPerDay = 24 * msPerHour
 
   switch (frequency) {
-    case 'seconde': {
+    case '1 second': {
       return 1000
     }
 
-    case 'minute': {
+    case '1 minute': {
       return msPerMinute
     }
 
@@ -771,27 +772,23 @@ function getExpectedTimeDifference(frequency) {
       return 15 * msPerMinute
     }
 
-    case 'heure': {
+    case '1 hour': {
       return msPerHour
     }
 
-    case 'jour': {
+    case '1 day': {
       return msPerDay
     }
 
-    case '1 jour': {
-      return msPerDay
-    }
-
-    case 'mois': {
+    case '1 month': {
       return 30 * msPerDay
     } // Approximation
 
-    case 'trimestre': {
+    case '1 quarter': {
       return 91 * msPerDay
     } // Approximation pour un trimestre
 
-    case 'année': {
+    case '1 year': {
       return 365 * msPerDay
     } // Approximation
 

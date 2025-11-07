@@ -1,5 +1,5 @@
 import {pick, minBy, maxBy} from 'lodash-es'
-import {normalizeOutputFrequency, isSubDailyFrequency, isSuperDailyFrequency, isCumulativeParameter, expandToDaily} from './frequency.js'
+import {isSubDailyFrequency, isSuperDailyFrequency, isCumulativeParameter, expandToDaily} from './frequency.js'
 
 import {readSheet} from '../xlsx.js'
 
@@ -65,6 +65,8 @@ function consolidateData(rawData) {
   const pointPrelevement = safeParsePointPrelevement(rawData.metadata.pointPrelevement)
   const dailyDataTab = rawData.dataTabs.find(tab => tab.period === '1 jour' && tab.hasData)
   const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
+  const hourlyDataTab = rawData.dataTabs.find(tab => tab.period === '1 heure' && tab.hasData)
+  const monthlyDataTab = rawData.dataTabs.find(tab => tab.period === '1 mois' && tab.hasData)
   const otherDataTabs = rawData.dataTabs.filter(tab => tab.period === 'autre' && tab.hasData)
 
   const series = []
@@ -94,23 +96,48 @@ function consolidateData(rawData) {
     }
   }
 
+  if (hourlyDataTab) {
+    for (const param of hourlyDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: hourlyDataTab.rows,
+        pointPrelevement,
+        frequency: '1 hour',
+        series,
+        expectsTime: true
+      })
+    }
+  }
+
+  if (monthlyDataTab) {
+    for (const param of monthlyDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: monthlyDataTab.rows,
+        pointPrelevement,
+        frequency: '1 month',
+        series
+      })
+    }
+  }
+
   // Onglets "autre" : la fréquence réelle vient du champ param.frequence
   if (otherDataTabs.length > 0) {
     for (const tab of otherDataTabs) {
       for (const param of tab.parameters) {
-        // Déterminer la fréquence normalisée
-        const normalized = normalizeOutputFrequency(param.frequence)
-        if (!normalized) {
+        // La fréquence est déjà normalisée par la fonction parse() dans data.js
+        const frequency = param.frequence
+        if (!frequency || frequency === 'autre') {
           // Fréquence inconnue / non supportée : ignorer silencieusement
           continue
         }
 
-        const expectsTime = isSubDailyFrequency(normalized)
+        const expectsTime = isSubDailyFrequency(frequency)
         buildSeriesForParam({
           param,
           rowsSource: tab.rows,
           pointPrelevement,
-          frequency: normalized,
+          frequency,
           series,
           expectsTime
         })
