@@ -354,7 +354,7 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
         // Use centralized normalization function
         const result = normalizeOutputFrequency(normalized)
 
-        if (!result || result === 'autre') {
+        if (!result) {
           throw new Error(`La fréquence "${value}" n'est pas reconnue`)
         }
 
