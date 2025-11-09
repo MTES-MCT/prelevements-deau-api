@@ -64,7 +64,20 @@ components:
         status: { type: string }
         result:
           type: object
-          description: Résumé de consolidation (structure partielle)
+          description: Résumé de consolidation du dossier
+          properties:
+            preleveur: { $ref: '#/components/schemas/ObjectId', nullable: true }
+            attachmentCount: { type: integer }
+            unprocessedAttachmentCount: { type: integer }
+            unparsedAttachmentCount: { type: integer }
+            parsedAttachmentCounts: { type: integer }
+            totalVolumePreleve:
+              type: number
+              description: "Volume total prélevé pour le dossier (somme des volumes de tous les attachments en m³)"
+            foundPointPrelevements: { type: array, items: { type: integer } }
+            notFoundPointPrelevements: { type: array, items: { type: integer } }
+            acceptedDaysCount: { type: integer }
+        consolidatedAt: { type: string, format: date-time, nullable: true }
         files:
           type: array
           items: { $ref: '#/components/schemas/AttachmentSummary' }
@@ -78,6 +91,9 @@ components:
           type: object
           properties:
             seriesCount: { type: integer }
+            totalVolumePreleve:
+              type: number
+              description: "Volume total prélevé pour cette pièce jointe (somme des volumes de toutes les séries en m³)"
             valueRowCount: { type: integer }
             rawErrorsSize: { type: integer }
             errorSummary:
