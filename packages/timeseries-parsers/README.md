@@ -31,12 +31,18 @@ npm install @fabnum/prelevements-deau-timeseries-parsers
 Le package inclut un outil en ligne de commande pour inspecter rapidement les séries extraites d'un fichier.
 
 ```bash
-# Utilisation avec npx
+# Installation du package
+npm install @fabnum/prelevements-deau-timeseries-parsers
+
+# Utilisation de la commande
 npx timeseries-inspect <fichier> --type <camion-citerne|multi-params>
 
 # Exemples
 npx timeseries-inspect mon-fichier.xlsx --type multi-params
 npx timeseries-inspect volumes.xlsx --type camion-citerne
+
+# Ou directement via npx (sans installation préalable)
+npx @fabnum/prelevements-deau-timeseries-parsers timeseries-inspect <fichier> --type <...>
 ```
 
 Le script affiche :
