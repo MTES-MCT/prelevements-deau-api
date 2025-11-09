@@ -26,6 +26,25 @@ Plusieurs versions de modèles Excel ont été communiquées au fil du temps. Le
 npm install @fabnum/prelevements-deau-timeseries-parsers
 ```
 
+## CLI
+
+Le package inclut un outil en ligne de commande pour inspecter rapidement les séries extraites d'un fichier.
+
+```bash
+# Utilisation avec npx
+npx timeseries-inspect <fichier> --type <camion-citerne|multi-params>
+
+# Exemples
+npx timeseries-inspect mon-fichier.xlsx --type multi-params
+npx timeseries-inspect volumes.xlsx --type camion-citerne
+```
+
+Le script affiche :
+- Les erreurs et avertissements de validation
+- Le nombre de séries extraites
+- Pour chaque série : point de prélèvement, paramètre, unité, fréquence, type de valeur, période couverte, nombre de valeurs
+- Un échantillon des premières valeurs de chaque série
+
 ## API
 
 Les deux fonctions exposées prennent un `Buffer` (contenu binaire du fichier) et renvoient un objet `{data, rawData, errors}`. Les messages sont normalisés, avec une propriété `severity` à `error` ou `warning`.
