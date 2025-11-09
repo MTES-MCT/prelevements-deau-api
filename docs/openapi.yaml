@@ -70,7 +70,9 @@ components:
             attachmentCount: { type: integer }
             unprocessedAttachmentCount: { type: integer }
             unparsedAttachmentCount: { type: integer }
-            parsedAttachmentCounts: { type: integer }
+            parsedAttachmentCounts:
+              type: object
+              additionalProperties: { type: integer }
             totalVolumePreleve:
               type: number
               description: "Volume total prélevé pour le dossier (somme des volumes de tous les attachments en m³)"
