@@ -5,9 +5,10 @@ import 'dotenv/config'
 import {argv} from 'node:process'
 
 import {chain, keyBy} from 'lodash-es'
+import {ObjectId} from 'mongodb'
 
 import got from 'got'
-import mongo, {ObjectId} from '../lib/util/mongo.js'
+import mongo from '../lib/util/mongo.js'
 import {readDataFromCsvFile} from '../lib/import/csv.js'
 import {getCommune} from '../lib/util/cog.js'
 import {parseNomenclature} from '../lib/import/generic.js'
