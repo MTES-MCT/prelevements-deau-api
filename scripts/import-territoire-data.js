@@ -27,19 +27,25 @@ import {initSequence} from '../lib/util/sequences.js'
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
 import {bulkDeletePreleveurs, bulkInsertPreleveurs} from '../lib/models/preleveur.js'
 import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/exploitation.js'
-import {createDocument, decorateDocument, getDocument} from '../lib/models/document.js'
+import {bulkInsertRegles, bulkDeleteRegles} from '../lib/models/regle.js'
+import {bulkInsertDocuments, bulkDeleteDocuments} from '../lib/models/document.js'
+import {uploadDocumentToS3} from '../lib/services/document.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
 const exploitationsIds = new Map()
 const documentsIds = new Map()
 
-function getPointId(id_point) {
-  return pointsIds.get(id_point)
+function getPointId(idPoint) {
+  return pointsIds.get(idPoint)
 }
 
-function getPreleveurId(id_preleveur) {
-  return preleveursIds.get(id_preleveur)
+function getPreleveurId(idPreleveur) {
+  return preleveursIds.get(idPreleveur)
+}
+
+function getExploitationId(idExploitation) {
+  return exploitationsIds.get(idExploitation)
 }
 
 function getDocumentId(idDocument) {
@@ -144,7 +150,7 @@ async function preparePoint(point) {
   return pointToInsert
 }
 
-async function prepareExploitation(exploitation, exploitationsUsages, {regles}) {
+async function prepareExploitation(exploitation, exploitationsUsages, exploitationDocumentsMap) {
   const exploitationToInsert = exploitation
 
   if (exploitation.id_point) {
@@ -163,8 +169,12 @@ async function prepareExploitation(exploitation, exploitationsUsages, {regles}) 
     .filter(u => u.id_exploitation === exploitation.id_exploitation)
     .map(u => parseNomenclature(u.id_usage, usages))
 
-  exploitationToInsert.documents = []
-  exploitationToInsert.regles = regles[exploitation.id_exploitation] || []
+  // Peupler le tableau documents avec les ObjectId
+  const documentIds = exploitationDocumentsMap[exploitation.id_exploitation] || []
+  exploitationToInsert.documents = documentIds
+    .map(idDocument => getDocumentId(idDocument))
+    .filter(Boolean) // Filtrer les documents non trouvés
+
   exploitationToInsert._id = new ObjectId()
 
   exploitationsIds.set(exploitationToInsert.id_exploitation, exploitationToInsert._id)
@@ -187,152 +197,8 @@ function preparePreleveur(preleveur) {
   return preleveurToInsert
 }
 
-async function importPoints(folderPath, codeTerritoire, nomTerritoire) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données points_prelevement pour : ' + nomTerritoire)
-  const points = await readDataFromCsvFile(
-    folderPath + '/point-prelevement.csv',
-    POINTS_PRELEVEMENT_DEFINITION
-  )
-
-  console.log('\n=> Nettoyage de la collection points_prelevement...')
-  await bulkDeletePointsPrelevement(codeTerritoire)
-  console.log('...Ok !')
-
-  const pointsToInsert = await Promise.all(points.map(point => preparePoint(point)))
-  const {insertedCount} = await bulkInsertPointsPrelevement(
-    codeTerritoire,
-    pointsToInsert
-  )
-  console.log(
-    '\u001B[32;1m%s\u001B[0m',
-    '\n=> ' + insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
-  )
-}
-
-async function extractRegles(filePath) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Extraction des règles')
-
-  const regles = await readDataFromCsvFile(
-    `${filePath}/regle.csv`,
-    REGLES_DEFINITION,
-    false
-  )
-
-  const exploitationsRegles = await readDataFromCsvFile(
-    `${filePath}/exploitation-regle.csv`,
-    EXPLOITATIONS_REGLES_DEFINITION,
-    false
-  )
-
-  const reglesIndex = keyBy(regles, 'id_regle')
-
-  return chain(exploitationsRegles)
-    .groupBy('id_exploitation')
-    .mapValues(items => items.map(item => {
-      const {id_regle, ...regle} = reglesIndex[item.id_regle]
-      return regle
-    }))
-    .value()
-}
-
-async function importDocumentsInExploitations(filePath) {
-  console.log(
-    '\n\u001B[35;1;4m%s\u001B[0m',
-    '=> Insertion des documents dans les exploitations'
-  )
-
-  const documents = await readDataFromCsvFile(
-    `${filePath}/document.csv`,
-    DOCUMENTS_DEFINITION,
-    false
-  )
-
-  const exploitations = await readDataFromCsvFile(
-    `${filePath}/exploitation.csv`,
-    EXPLOITATIONS_DEFINITION,
-    false
-  )
-
-  const exploitationsDocuments = await readDataFromCsvFile(
-    `${filePath}/exploitation-document.csv`,
-    EXPLOITATIONS_DOCUMENTS_DEFINITION,
-    false
-  )
-
-  if (documents.length > 0) {
-    const updatePromises = exploitationsDocuments.map(async ed => {
-      const {id_exploitation, id_document} = ed
-      const idDocument = getDocumentId(id_document)
-      const document = await getDocument(idDocument)
-      const exploitation = exploitations.find(e => e.id_exploitation === id_exploitation)
-
-      if (document && exploitation) {
-        const documentWithPreleveur = {
-          ...document,
-          id_preleveur: exploitation.id_beneficiaire
-        }
-
-        const decoratedDocumentWithPreleveur = await decorateDocument(documentWithPreleveur)
-
-        await mongo.db.collection('exploitations').updateOne(
-          {id_exploitation},
-          {$push: {documents: decoratedDocumentWithPreleveur}}
-        )
-      }
-    })
-
-    await Promise.all(updatePromises)
-
-    console.log(
-      '\u001B[34;1m%s\u001B[0m',
-      '\n=> Les documents ont été ajoutés aux exploitations\n\n'
-    )
-  }
-}
-
-async function importExploitations(folderPath, codeTerritoire, nomTerritoire) {
-  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
-  const exploitationsUsages = await readDataFromCsvFile(
-    folderPath + '/exploitation-usage.csv',
-    EXPLOITATIONS_USAGES_DEFINITION,
-    false
-  )
-  const exploitations = await readDataFromCsvFile(
-    folderPath + '/exploitation.csv',
-    EXPLOITATIONS_DEFINITION,
-    false
-  )
-
-  const regles = await extractRegles(folderPath)
-
-  const exploitationsToInsert = await Promise.all(
-    exploitations.map(
-      exploitation => prepareExploitation(exploitation, exploitationsUsages, {regles})
-    )
-  )
-
-  if (exploitationsToInsert) {
-    console.log('\n=> Nettoyage de la collection exploitations...')
-    await bulkDeleteExploitations(codeTerritoire)
-    console.log('...Ok !')
-
-    const {insertedCount} = await bulkInsertExploitations(codeTerritoire, exploitationsToInsert)
-    console.log(
-      '\u001B[32;1m%s\u001B[0m',
-      '\n=> ' + insertedCount + ' documents insérés dans la collection exploitations\n\n'
-    )
-  }
-
-  await importDocumentsInExploitations(folderPath)
-}
-
-async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
+async function importPreleveurs(preleveurs, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données preleveurs pour : ' + nomTerritoire)
-  const preleveurs = await readDataFromCsvFile(
-    folderPath + '/beneficiaire-email.csv',
-    PRELEVEURS_DEFINITION,
-    false
-  )
 
   // Temporary fix for multiple emails in the same field
   for (const preleveur of preleveurs) {
@@ -359,123 +225,248 @@ async function importPreleveurs(folderPath, codeTerritoire, nomTerritoire) {
   }
 }
 
-async function importDocuments(filePath, codeTerritoire) {
+async function importDocuments(csvData, folderPath, codeTerritoire) {
   console.log(
     '\n\u001B[35;1;4m%s\u001B[0m',
     '=> Import des documents dans la collection documents'
   )
 
+  const {documents, exploitations, exploitationsDocuments} = csvData
   const fichiersIntrouvables = []
+  const fichiersSkippes = []
 
-  const documents = await readDataFromCsvFile(
-    `${filePath}/document.csv`,
-    DOCUMENTS_DEFINITION,
-    false
-  )
+  if (documents.length === 0) {
+    console.log('Aucun document à importer')
+    return
+  }
 
-  const exploitations = await readDataFromCsvFile(
-    `${filePath}/exploitation.csv`,
-    EXPLOITATIONS_DEFINITION,
-    false
-  )
+  console.log('\n=> Nettoyage de la collection documents...')
+  await bulkDeleteDocuments(codeTerritoire)
+  console.log('...Ok !')
 
-  const exploitationsDocuments = await readDataFromCsvFile(
-    `${filePath}/exploitation-document.csv`,
-    EXPLOITATIONS_DOCUMENTS_DEFINITION,
-    false
-  )
+  // Préparer les documents avec leurs préleveurs
+  const documentsToInsert = []
 
-  if (documents.length > 0) {
-    console.log('\n=> Nettoyage de la collection documents...')
-    await mongo.db.collection('documents').deleteMany({territoire: codeTerritoire})
-    console.log('...Ok !')
+  for (const document of documents) {
+    const {nom_fichier, id_document} = document
 
-    const documentsWithBeneficiaire = documents.map(document => {
-      const relatedExploitationIds = new Set(exploitationsDocuments
-        .filter(ed => ed.id_document === document.id_document)
-        .map(ed => ed.id_exploitation))
-
-      const beneficiaireIds = [...new Set(exploitations
-        .filter(exploitation => relatedExploitationIds.has(exploitation.id_exploitation))
-        .map(exploitation => exploitation.id_beneficiaire))]
-
-      return {
-        ...document,
-        territoire: codeTerritoire,
-        id_preleveurs: beneficiaireIds
-      }
-    })
-
-    for (const document of documentsWithBeneficiaire) {
-      const {nom_fichier, id_preleveurs} = document
-
-      if (!nom_fichier) {
-        continue
-      }
-
-      const url = `${process.env.S3_PUBLIC_URL}/document/${nom_fichier}`
-
-      let buffer
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        buffer = await got(url).buffer()
-      } catch (error) {
-        console.error(`Erreur avec le document ${nom_fichier} : ${error.message}`)
-        fichiersIntrouvables.push(nom_fichier)
-        continue
-      }
-
-      const filename = nom_fichier
-
-      for (const currentPreleveurId of id_preleveurs) {
-        // eslint-disable-next-line no-await-in-loop
-        const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur: currentPreleveurId})
-
-        const documentData = {
-          ...document,
-          nom_fichier: filename
-        }
-
-        const originalDocumentId = documentData.id_document
-
-        delete documentData.id_document
-        delete documentData.territoire
-        delete documentData.id_preleveurs
-
-        const file = {
-          buffer,
-          originalname: filename,
-          size: buffer.length
-        }
-
-        if (id_preleveurs.length > 1) {
-          console.log(`Création du document ${filename} pour le préleveur ${currentPreleveurId} (${id_preleveurs.indexOf(currentPreleveurId) + 1}/${id_preleveurs.length})`)
-        } else {
-          console.log(`Création du document ${filename}`)
-        }
-
-        // eslint-disable-next-line no-await-in-loop
-        const insertedDocument = await createDocument(documentData, file, preleveur?._id || currentPreleveurId, codeTerritoire)
-
-        documentsIds.set(originalDocumentId, insertedDocument._id)
-      }
+    if (!nom_fichier) {
+      continue
     }
 
-    // eslint-disable-next-line unicorn/no-console-spaces
-    console.log('Fichiers introuvables : ', fichiersIntrouvables)
+    // Trouver les préleveurs associés à ce document
+    const relatedExploitationIds = new Set(exploitationsDocuments
+      .filter(ed => ed.id_document === id_document)
+      .map(ed => ed.id_exploitation))
 
+    const beneficiaireIds = [...new Set(exploitations
+      .filter(exploitation => relatedExploitationIds.has(exploitation.id_exploitation))
+      .map(exploitation => exploitation.id_beneficiaire))]
+
+    if (beneficiaireIds.length === 0) {
+      console.warn(`Document ${nom_fichier} (id: ${id_document}) n'a pas de préleveur associé`)
+      continue
+    }
+
+    // Télécharger le fichier
+    const url = `${process.env.S3_PUBLIC_URL}/document/${nom_fichier}`
+    let buffer
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      buffer = await got(url).buffer()
+    } catch (error) {
+      console.error(`Erreur avec le document ${nom_fichier} : ${error.message}`)
+      fichiersIntrouvables.push(nom_fichier)
+      continue
+    }
+
+    // Créer un document par préleveur (duplication)
+    for (const currentPreleveurId of beneficiaireIds) {
+      // eslint-disable-next-line no-await-in-loop
+      const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur: currentPreleveurId})
+
+      if (!preleveur) {
+        console.warn(`Préleveur ${currentPreleveurId} introuvable pour le document ${nom_fichier}`)
+        continue
+      }
+
+      const preleveurObjectId = preleveur._id
+
+      // Upload vers S3 (idempotent avec hash)
+      // eslint-disable-next-line no-await-in-loop
+      const {objectKey, skipped} = await uploadDocumentToS3({
+        buffer,
+        filename: nom_fichier,
+        codeTerritoire,
+        preleveurSeqId: currentPreleveurId
+      })
+
+      if (skipped) {
+        fichiersSkippes.push(`${nom_fichier} (préleveur ${currentPreleveurId})`)
+      }
+
+      const documentToInsert = {
+        _id: new ObjectId(),
+        preleveur: preleveurObjectId,
+        nom_fichier,
+        taille: buffer.length,
+        objectKey,
+        reference: document.reference,
+        nature: document.nature,
+        date_signature: document.date_signature,
+        date_fin_validite: document.date_fin_validite,
+        date_ajout: document.date_ajout,
+        remarque: document.remarque
+      }
+
+      documentsToInsert.push(documentToInsert)
+
+      // Mémoriser le mapping id_document → ObjectId (dernier créé)
+      documentsIds.set(id_document, documentToInsert._id)
+
+      if (beneficiaireIds.length > 1) {
+        console.log(`Préparation du document ${nom_fichier} pour le préleveur ${currentPreleveurId} (${beneficiaireIds.indexOf(currentPreleveurId) + 1}/${beneficiaireIds.length})`)
+      } else {
+        console.log(`Préparation du document ${nom_fichier}`)
+      }
+    }
+  }
+
+  if (documentsToInsert.length > 0) {
+    const {insertedCount} = await bulkInsertDocuments(codeTerritoire, documentsToInsert)
     console.log(
-      '\u001B[34;1m%s\u001B[0m',
-      '\n=> Les documents ont été importés dans la collection documents\n\n'
+      '\u001B[32;1m%s\u001B[0m',
+      `\n=> ${insertedCount} documents insérés dans la collection documents\n`
     )
   }
+
+  if (fichiersIntrouvables.length > 0) {
+    // eslint-disable-next-line unicorn/no-console-spaces
+    console.log('Fichiers introuvables : ', fichiersIntrouvables)
+  }
+
+  if (fichiersSkippes.length > 0) {
+    console.log(`Fichiers déjà présents dans S3 (${fichiersSkippes.length} skippés) :`, fichiersSkippes)
+  }
+
+  console.log()
+}
+
+async function importPoints(points, codeTerritoire, nomTerritoire) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données points_prelevement pour : ' + nomTerritoire)
+
+  console.log('\n=> Nettoyage de la collection points_prelevement...')
+  await bulkDeletePointsPrelevement(codeTerritoire)
+  console.log('...Ok !')
+
+  const pointsToInsert = await Promise.all(points.map(point => preparePoint(point)))
+  const {insertedCount} = await bulkInsertPointsPrelevement(
+    codeTerritoire,
+    pointsToInsert
+  )
+  console.log(
+    '\u001B[32;1m%s\u001B[0m',
+    '\n=> ' + insertedCount + ' documents insérés dans la collection points_prelevement\n\n'
+  )
+}
+
+async function importExploitations(csvData, codeTerritoire, nomTerritoire) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des données exploitations pour : ' + nomTerritoire)
+
+  const {exploitations, exploitationsUsages, exploitationsDocuments} = csvData
+
+  // Index des documents par exploitation
+  const exploitationDocumentsMap = chain(exploitationsDocuments)
+    .groupBy('id_exploitation')
+    .mapValues(items => items.map(item => item.id_document))
+    .value()
+
+  const exploitationsToInsert = await Promise.all(
+    exploitations.map(
+      exploitation => prepareExploitation(exploitation, exploitationsUsages, exploitationDocumentsMap)
+    )
+  )
+
+  if (exploitationsToInsert) {
+    console.log('\n=> Nettoyage de la collection exploitations...')
+    await bulkDeleteExploitations(codeTerritoire)
+    console.log('...Ok !')
+
+    const {insertedCount} = await bulkInsertExploitations(codeTerritoire, exploitationsToInsert)
+    console.log(
+      '\u001B[32;1m%s\u001B[0m',
+      '\n=> ' + insertedCount + ' documents insérés dans la collection exploitations\n\n'
+    )
+  }
+}
+
+async function importRegles(csvData, codeTerritoire) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des règles')
+
+  const {regles, exploitationsRegles, exploitations} = csvData
+
+  if (regles.length === 0) {
+    console.log('Aucune règle à importer')
+    return
+  }
+
+  console.log('\n=> Nettoyage de la collection regles...')
+  await bulkDeleteRegles(codeTerritoire)
+  console.log('...Ok !')
+
+  // Index des règles par id_regle
+  const reglesIndex = keyBy(regles, 'id_regle')
+
+  // Grouper les exploitations par règle
+  const reglesData = chain(exploitationsRegles)
+    .groupBy('id_regle')
+    .map((items, idRegle) => {
+      const regle = reglesIndex[idRegle]
+      const exploitationIds = items.map(item => getExploitationId(item.id_exploitation))
+
+      // Trouver le préleveur via la première exploitation
+      const firstExploitation = exploitations.find(e => e.id_exploitation === items[0].id_exploitation)
+      const preleveurId = firstExploitation ? getPreleveurId(firstExploitation.id_beneficiaire) : null
+
+      const regleToInsert = {
+        _id: new ObjectId(),
+        preleveur: preleveurId,
+        exploitations: exploitationIds,
+        parametre: regle.parametre,
+        unite: regle.unite,
+        valeur: regle.valeur,
+        contrainte: regle.contrainte,
+        debut_validite: regle.debut_validite,
+        fin_validite: regle.fin_validite,
+        debut_periode: regle.debut_periode,
+        fin_periode: regle.fin_periode,
+        remarque: regle.remarque
+      }
+
+      // Ajouter le document si présent
+      if (regle.id_document) {
+        const documentId = getDocumentId(regle.id_document)
+        if (documentId) {
+          regleToInsert.document = documentId
+        }
+      }
+
+      return regleToInsert
+    })
+    .value()
+
+  const {insertedCount} = await bulkInsertRegles(codeTerritoire, reglesData)
+  console.log(
+    '\u001B[32;1m%s\u001B[0m',
+    '\n=> ' + insertedCount + ' règles insérées dans la collection regles\n\n'
+  )
 }
 
 async function importData(folderPath, codeTerritoire) {
   if (!codeTerritoire) {
     console.error(
       '\u001B[41m\u001B[30m%s\u001B[0m',
-      'Vous devez renseigner l’id du territoire à importer. \nExemple : npm run import-territoire-data DEP-974 /data/reunion'
+      'Vous devez renseigner l\'id du territoire à importer. \nExemple : npm run import-territoire-data DEP-974 /data/reunion'
     )
 
     process.exit(1)
@@ -505,10 +496,56 @@ async function importData(folderPath, codeTerritoire) {
     process.exit(1)
   }
 
-  await importPreleveurs(folderPath, codeTerritoire, validTerritoire.nom)
-  await importDocuments(folderPath, codeTerritoire)
-  await importPoints(folderPath, codeTerritoire, validTerritoire.nom)
-  await importExploitations(folderPath, codeTerritoire, validTerritoire.nom)
+  // Lecture des fichiers CSV une seule fois
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Lecture des fichiers CSV')
+  const csvData = {
+    preleveurs: await readDataFromCsvFile(
+      `${folderPath}/beneficiaire-email.csv`,
+      PRELEVEURS_DEFINITION,
+      false
+    ),
+    points: await readDataFromCsvFile(
+      `${folderPath}/point-prelevement.csv`,
+      POINTS_PRELEVEMENT_DEFINITION
+    ),
+    exploitations: await readDataFromCsvFile(
+      `${folderPath}/exploitation.csv`,
+      EXPLOITATIONS_DEFINITION,
+      false
+    ),
+    exploitationsUsages: await readDataFromCsvFile(
+      `${folderPath}/exploitation-usage.csv`,
+      EXPLOITATIONS_USAGES_DEFINITION,
+      false
+    ),
+    exploitationsDocuments: await readDataFromCsvFile(
+      `${folderPath}/exploitation-document.csv`,
+      EXPLOITATIONS_DOCUMENTS_DEFINITION,
+      false
+    ),
+    documents: await readDataFromCsvFile(
+      `${folderPath}/document.csv`,
+      DOCUMENTS_DEFINITION,
+      false
+    ),
+    regles: await readDataFromCsvFile(
+      `${folderPath}/regle.csv`,
+      REGLES_DEFINITION,
+      false
+    ),
+    exploitationsRegles: await readDataFromCsvFile(
+      `${folderPath}/exploitation-regle.csv`,
+      EXPLOITATIONS_REGLES_DEFINITION,
+      false
+    )
+  }
+  console.log('\u001B[32;1m%s\u001B[0m', '=> Fichiers CSV chargés en mémoire\n')
+
+  await importPreleveurs(csvData.preleveurs, codeTerritoire, validTerritoire.nom)
+  await importDocuments(csvData, folderPath, codeTerritoire)
+  await importPoints(csvData.points, codeTerritoire, validTerritoire.nom)
+  await importExploitations(csvData, codeTerritoire, validTerritoire.nom)
+  await importRegles(csvData, codeTerritoire)
 
   if (pointsIds.size > 0) {
     const latestPointId = Math.max(...pointsIds.keys())

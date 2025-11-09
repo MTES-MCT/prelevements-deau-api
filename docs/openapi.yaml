@@ -22,6 +22,10 @@ tags:
     description: Points de prélèvements (captages / stations)
   - name: Exploitations
     description: Exploitations liées à des points et préleveurs
+  - name: Documents
+    description: Documents administratifs et justificatifs
+  - name: Règles
+    description: Règles de prélèvement (volumes, débits, horaires)
   - name: Préleveurs
     description: Acteurs réalisant les prélèvements
   - name: Territoires
@@ -118,6 +122,51 @@ components:
         date_fin: { type: string, format: date, nullable: true }
         statut: { type: string }
         usages: { type: array, items: { type: string } }
+        documents: { type: array, items: { type: object }, description: "Documents associés (décorés si disponibles)" }
+    Document:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        preleveur: { $ref: '#/components/schemas/ObjectId' }
+        territoire: { type: string }
+        nom_fichier: { type: string, description: "Nom du fichier" }
+        reference: { type: string, nullable: true, description: "Référence administrative" }
+        nature: { type: string, enum: [autorisation, arrete_prefectoral, recepisse, autre] }
+        date_signature: { type: string, format: date }
+        date_fin_validite: { type: string, format: date, nullable: true }
+        date_ajout: { type: string, format: date }
+        remarque: { type: string, nullable: true }
+        taille: { type: integer, description: "Taille du fichier en octets" }
+        objectKey: { type: string, description: "Clé S3 du fichier" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: string, format: date-time, nullable: true }
+        downloadUrl: { type: string, description: "URL de téléchargement pré-signée (décoré)" }
+        hasRegles: { type: boolean, description: "Indique si le document est associé à des règles (décoré)" }
+        hasExploitations: { type: boolean, description: "Indique si le document est associé à des exploitations (décoré)" }
+    Regle:
+      type: object
+      properties:
+        _id: { $ref: '#/components/schemas/ObjectId' }
+        preleveur: { $ref: '#/components/schemas/ObjectId' }
+        territoire: { type: string }
+        document: { $ref: '#/components/schemas/ObjectId', nullable: true, description: "ObjectId du document (décoré dans les réponses)" }
+        exploitations:
+          type: array
+          items: { $ref: '#/components/schemas/ObjectId' }
+          description: "Tableau d'ObjectIds des exploitations (décorées dans les réponses)"
+        parametre: { type: string, description: "Paramètre de la règle (ex: VOLUME_PRELEVE)" }
+        unite: { type: string, description: "Unité de mesure (ex: m3)" }
+        valeur: { type: number, description: "Valeur numérique de la contrainte" }
+        contrainte: { type: string, description: "Type de contrainte (ex: MAX)" }
+        debut_validite: { type: string, format: date, description: "Date de début de validité" }
+        fin_validite: { type: string, format: date, nullable: true, description: "Date de fin de validité" }
+        debut_periode: { type: string, format: date, nullable: true, description: "Début de période (ex: début saison)" }
+        fin_periode: { type: string, format: date, nullable: true, description: "Fin de période (ex: fin saison)" }
+        remarque: { type: string, nullable: true, description: "Remarque ou commentaire" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: string, format: date-time, nullable: true }
     Statistiques:
       type: object
       additionalProperties: true
@@ -1130,6 +1179,147 @@ paths:
           schema: { $ref: '#/components/schemas/ObjectId' }
       responses:
         '200': { description: Supprimée }
+  /exploitations/{exploitationId}/documents:
+    get:
+      tags: [Exploitations, Documents]
+      summary: Lister les documents d'une exploitation
+      description: Liste les documents associés à une exploitation.
+      operationId: listExploitationDocuments
+      parameters:
+        - in: path
+          name: exploitationId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Liste de documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Document' }
+  /documents/{documentId}:
+    get:
+      tags: [Documents]
+      summary: Obtenir un document
+      description: Retourne les détails d'un document avec métadonnées décorées.
+      operationId: getDocument
+      parameters:
+        - in: path
+          name: documentId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Document
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+    put:
+      tags: [Documents]
+      summary: Mettre à jour un document
+      description: Met à jour les métadonnées d'un document existant.
+      operationId: updateDocument
+      parameters:
+        - in: path
+          name: documentId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nom_fichier: { type: string }
+                reference: { type: string, nullable: true }
+                nature: { type: string, enum: [autorisation, arrete_prefectoral, recepisse, autre] }
+                date_signature: { type: string, format: date }
+                date_fin_validite: { type: string, format: date, nullable: true }
+                date_ajout: { type: string, format: date }
+                remarque: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Mis à jour
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+    delete:
+      tags: [Documents]
+      summary: Supprimer un document
+      description: Supprime un document (soft delete).
+      operationId: deleteDocument
+      parameters:
+        - in: path
+          name: documentId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200': { description: Supprimé }
+  /regles/{regleId}:
+    get:
+      tags: [Règles]
+      summary: Obtenir une règle
+      description: Retourne les détails d'une règle avec document et exploitations décorés.
+      operationId: getRegle
+      parameters:
+        - in: path
+          name: regleId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Règle
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Regle' }
+    put:
+      tags: [Règles]
+      summary: Mettre à jour une règle
+      description: Met à jour les propriétés d'une règle existante.
+      operationId: updateRegle
+      parameters:
+        - in: path
+          name: regleId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document: { $ref: '#/components/schemas/ObjectId', nullable: true }
+                exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' } }
+                parametre: { type: string }
+                unite: { type: string }
+                valeur: { type: number }
+                contrainte: { type: string }
+                debut_validite: { type: string, format: date }
+                fin_validite: { type: string, format: date, nullable: true }
+                debut_periode: { type: string, format: date, nullable: true }
+                fin_periode: { type: string, format: date, nullable: true }
+                remarque: { type: string }
+      responses:
+        '200':
+          description: Mis à jour
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Regle' }
+    delete:
+      tags: [Règles]
+      summary: Supprimer une règle
+      description: Supprime une règle (soft delete).
+      operationId: deleteRegle
+      parameters:
+        - in: path
+          name: regleId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200': { description: Supprimée }
   /preleveurs:
     get:
       tags: [Préleveurs]
@@ -1244,6 +1434,60 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Exploitation' }
+  /preleveurs/{preleveurId}/regles:
+    get:
+      tags: [Préleveurs, Règles]
+      summary: Lister les règles d'un préleveur
+      description: Liste les règles de prélèvement associées à un préleveur (décorées).
+      operationId: listPreleveurRegles
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Liste de règles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Regle' }
+    post:
+      tags: [Préleveurs, Règles]
+      summary: Créer une règle pour un préleveur
+      description: Crée une nouvelle règle de prélèvement liée à un préleveur.
+      operationId: createPreleveurRegle
+      parameters:
+        - in: path
+          name: preleveurId
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parametre, unite, valeur, contrainte, debut_validite, exploitations]
+              properties:
+                document: { $ref: '#/components/schemas/ObjectId', nullable: true }
+                exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' }, minItems: 1 }
+                parametre: { type: string }
+                unite: { type: string }
+                valeur: { type: number }
+                contrainte: { type: string }
+                debut_validite: { type: string, format: date }
+                fin_validite: { type: string, format: date, nullable: true }
+                debut_periode: { type: string, format: date, nullable: true }
+                fin_periode: { type: string, format: date, nullable: true }
+                remarque: { type: string }
+      responses:
+        '200':
+          description: Règle créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Regle' }
   /preleveurs/{preleveurId}/documents:
     get:
       tags: [Préleveurs]
@@ -1262,11 +1506,9 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  additionalProperties: true
+                items: { $ref: '#/components/schemas/Document' }
     post:
-      tags: [Préleveurs]
+      tags: [Préleveurs, Documents]
       summary: Ajouter un document à un préleveur
       description: Ajoute (upload) un document pour un préleveur donné.
       operationId: addPreleveurDocument
@@ -1281,29 +1523,25 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              required: [document, nature, date_signature, date_ajout]
               properties:
                 document:
                   type: string
                   format: binary
+                  description: "Fichier à uploader"
+                nom_fichier: { type: string, description: "Nom du document (optionnel, déduit du fichier si non fourni)" }
+                reference: { type: string, description: "Référence administrative" }
+                nature: { type: string, enum: [autorisation, arrete_prefectoral, recepisse, autre], description: "Nature du document" }
+                date_signature: { type: string, format: date, description: "Date de signature" }
+                date_fin_validite: { type: string, format: date, description: "Date de fin de validité" }
+                date_ajout: { type: string, format: date, description: "Date d'ajout" }
+                remarque: { type: string, description: "Remarques éventuelles" }
       responses:
-        '200': { description: Ajouté }
-  /preleveurs/{preleveurId}/documents/{documentId}:
-    delete:
-      tags: [Préleveurs]
-      summary: Supprimer un document
-      description: Supprime un document précédemment téléversé.
-      operationId: deletePreleveurDocument
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-        - in: path
-          name: documentId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200': { description: Supprimé }
+        '200':
+          description: Document créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
   /territoires/{codeTerritoire}/points-prelevement:
     get:
       tags: [Territoires]
