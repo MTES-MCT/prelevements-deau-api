@@ -396,3 +396,46 @@ test('extractMultiParamFile - monthly volumes are expanded to daily', async t =>
   t.is(decemberFirstPoint.originalDate, '2025-12-01')
   t.is(decemberFirstPoint.daysCovered, 31, 'Décembre 2025 a 31 jours')
 })
+
+test('extractMultiParamFile - quarterly data tab', async t => {
+  const filePath = path.join(testFilesPath, 'quarterly-data.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {data, errors} = await extractMultiParamFile(fileContent)
+
+  // Pas d'erreurs critiques attendues
+  const criticalErrors = errors.filter(e => e.severity === 'error' || !e.severity)
+  t.is(criticalErrors.length, 0, 'Aucune erreur critique attendue')
+  t.truthy(data)
+  t.true(Array.isArray(data.series))
+
+  // Vérifier qu'il y a exactement 3 séries trimestrielles
+  const quarterlySeries = data.series.filter(s => s.frequency === '1 quarter')
+  t.is(quarterlySeries.length, 3, 'Trois séries trimestrielles doivent être présentes')
+
+  // Vérifier la série de chlorures
+  const chloruresSeries = data.series.find(s => s.parameter === 'chlorures')
+  t.truthy(chloruresSeries, 'Une série de chlorures doit être présente')
+  t.is(chloruresSeries.frequency, '1 quarter')
+  t.is(chloruresSeries.unit, 'mg/L')
+  t.is(chloruresSeries.valueType, 'instantaneous')
+  t.is(chloruresSeries.pointPrelevement, 220)
+  t.is(chloruresSeries.data.length, 1)
+  t.is(chloruresSeries.data[0].date, '2025-02-26')
+  t.is(chloruresSeries.data[0].value, 34)
+
+  // Vérifier la série de sulfates
+  const sulfatesSeries = data.series.find(s => s.parameter === 'sulfates')
+  t.truthy(sulfatesSeries, 'Une série de sulfates doit être présente')
+  t.is(sulfatesSeries.frequency, '1 quarter')
+  t.is(sulfatesSeries.unit, 'mg/L')
+  t.is(sulfatesSeries.data.length, 1)
+  t.is(sulfatesSeries.data[0].value, 19)
+
+  // Vérifier la série de nitrates
+  const nitratesSeries = data.series.find(s => s.parameter === 'nitrates')
+  t.truthy(nitratesSeries, 'Une série de nitrates doit être présente')
+  t.is(nitratesSeries.frequency, '1 quarter')
+  t.is(nitratesSeries.unit, 'mg/L')
+  t.is(nitratesSeries.data.length, 1)
+  t.is(nitratesSeries.data[0].value, 13)
+})

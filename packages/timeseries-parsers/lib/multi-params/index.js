@@ -67,6 +67,7 @@ function consolidateData(rawData) {
   const fifteenMinutesDataTab = rawData.dataTabs.find(tab => tab.period === '15 minutes' && tab.hasData)
   const hourlyDataTab = rawData.dataTabs.find(tab => tab.period === '1 heure' && tab.hasData)
   const monthlyDataTab = rawData.dataTabs.find(tab => tab.period === '1 mois' && tab.hasData)
+  const quarterlyDataTab = rawData.dataTabs.find(tab => tab.period === '1 trimestre' && tab.hasData)
   const otherDataTabs = rawData.dataTabs.filter(tab => tab.period === 'autre' && tab.hasData)
 
   const series = []
@@ -116,6 +117,18 @@ function consolidateData(rawData) {
         rowsSource: monthlyDataTab.rows,
         pointPrelevement,
         frequency: '1 month',
+        series
+      })
+    }
+  }
+
+  if (quarterlyDataTab) {
+    for (const param of quarterlyDataTab.parameters) {
+      buildSeriesForParam({
+        param,
+        rowsSource: quarterlyDataTab.rows,
+        pointPrelevement,
+        frequency: '1 quarter',
         series
       })
     }
