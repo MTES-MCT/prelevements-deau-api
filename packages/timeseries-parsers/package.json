@@ -4,12 +4,16 @@
   "license": "MIT",
   "main": "index.js",
   "type": "module",
+  "bin": {
+    "timeseries-inspect": "./bin/timeseries-inspect.js"
+  },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
     "file-type": "^21.0.0",
     "lodash-es": "^4.17.21",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "yargs": "^17.7.2"
   }
 }
