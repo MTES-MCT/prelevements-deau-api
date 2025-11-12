@@ -14,6 +14,7 @@ async function main() {
 
   for (const dossier of dossiers) {
     try {
+      // eslint-disable-next-line no-await-in-loop
       await markDossierForReconsolidation(dossier._id)
       successCount++
     } catch (error) {
