@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import mongo from '../lib/util/mongo.js'
+import {closeConnection} from '../lib/queues/config.js'
 import {getAllDossiers, markDossierForReconsolidation} from '../lib/models/dossier.js'
 
 // Connect to MongoDB
@@ -33,6 +34,7 @@ async function main() {
 try {
   await main()
 } finally {
-  // Disconnect from MongoDB
+  // Disconnect from MongoDB and Redis
   await mongo.disconnect()
+  await closeConnection()
 }
