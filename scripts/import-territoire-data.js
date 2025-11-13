@@ -35,6 +35,7 @@ import {uploadDocumentToS3} from '../lib/services/document.js'
 const pointsIds = new Map()
 const preleveursIds = new Map()
 const exploitationsIds = new Map()
+const exploitationsPreleveursIds = new Map()
 const documentsIds = new Map()
 
 function getPointId(idPoint) {
@@ -161,6 +162,8 @@ async function prepareExploitation(exploitation, exploitationsUsages, exploitati
 
   if (exploitation.id_beneficiaire) {
     exploitationToInsert.preleveur = getPreleveurId(exploitation.id_beneficiaire)
+    // Sauvegarder la relation exploitation -> preleveur avant de supprimer
+    exploitationsPreleveursIds.set(exploitation.id_exploitation, exploitationToInsert.preleveur)
     delete exploitationToInsert.id_beneficiaire
   }
 
@@ -238,6 +241,12 @@ async function importDocuments(csvData, folderPath, codeTerritoire) {
 
   if (documents.length === 0) {
     console.log('Aucun document à importer')
+    return
+  }
+
+  // Skip upload si variable d'environnement définie
+  if (process.env.SKIP_DOCUMENT_UPLOAD === 'true') {
+    console.log('\u001B[33m%s\u001B[0m', '⚠️  SKIP_DOCUMENT_UPLOAD activé - Les documents ne seront pas uploadés vers S3')
     return
   }
 
@@ -404,7 +413,7 @@ async function importExploitations(csvData, codeTerritoire, nomTerritoire) {
 async function importRegles(csvData, codeTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des règles')
 
-  const {regles, exploitationsRegles, exploitations} = csvData
+  const {regles, exploitationsRegles} = csvData
 
   if (regles.length === 0) {
     console.log('Aucune règle à importer')
@@ -425,9 +434,9 @@ async function importRegles(csvData, codeTerritoire) {
       const regle = reglesIndex[idRegle]
       const exploitationIds = items.map(item => getExploitationId(item.id_exploitation))
 
-      // Trouver le préleveur via la première exploitation
-      const firstExploitation = exploitations.find(e => e.id_exploitation === items[0].id_exploitation)
-      const preleveurId = firstExploitation ? getPreleveurId(firstExploitation.id_beneficiaire) : null
+      // Récupérer le préleveur via le mapping exploitation -> préleveur
+      const firstExploitationId = items[0].id_exploitation
+      const preleveurId = exploitationsPreleveursIds.get(firstExploitationId)
 
       const regleToInsert = {
         _id: new ObjectId(),
