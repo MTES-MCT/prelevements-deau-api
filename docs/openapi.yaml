@@ -159,9 +159,9 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         deletedAt: { type: string, format: date-time, nullable: true }
-        downloadUrl: { type: string, description: "URL de téléchargement pré-signée (décoré)" }
-        hasRegles: { type: boolean, description: "Indique si le document est associé à des règles (décoré)" }
-        hasExploitations: { type: boolean, description: "Indique si le document est associé à des exploitations (décoré)" }
+        downloadUrl: { type: string, description: "URL de téléchargement pré-signée" }
+        hasRegles: { type: boolean, description: "Indique si le document est associé à des règles (décoré, uniquement dans la liste des documents d'un préleveur)" }
+        hasExploitations: { type: boolean, description: "Indique si le document est associé à des exploitations (décoré, uniquement dans la liste des documents d'un préleveur)" }
     Regle:
       type: object
       properties:
