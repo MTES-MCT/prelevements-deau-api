@@ -68,25 +68,19 @@ npm run import-territoire-data DEP-974 ./data
 npm run resync-all-dossiers
 ```
 
-### Autres scripts utiles
+### Scripts utilitaires
 
-- **sync-updated-dossiers** : synchronise uniquement les dossiers modifiés sur Démarches Simplifiées.
-  ```bash
-  npm run sync-updated-dossiers
-  ```
-- **drop-dossiers-collections** : supprime les collections liées aux dossiers (avec confirmation).
-  ```bash
-  npm run drop-dossiers-collections
-  ```
-  Supprime : `dossiers`, `dossier_attachments`, `series`, `series_values`, `integrations_journalieres`
-- **read-multi-params** : valide un fichier multi-paramètres avant import.
-  ```bash
-  node scripts/read-multi-params.js <fichier.csv>
-  ```
-- **validate-declaration-file** : valide un fichier de déclaration (camion citerne ou multi-paramètres).
-  ```bash
-  node scripts/validate-declaration-file.js <filePath> [camion-citerne|multi-params]
-  ```
+Le projet dispose de nombreux scripts pour la gestion, la synchronisation et la maintenance des données.
+
+**Principaux scripts :**
+- `resync-all-dossiers` : resynchronise tous les dossiers depuis DS (première sync ou resync complète)
+- `sync-updated-dossiers` : synchronise uniquement les dossiers modifiés
+- `reprocess-all-attachments` : retraite tous les attachments en erreur
+- `reconsolidate-all-dossiers` : force la reconsolidation de tous les dossiers
+- `trigger-scheduled-job` : lance manuellement un job schedulé (cron)
+- `validate-declaration-file` : valide un fichier avant import
+
+📖 **Documentation complète :** Voir [docs/scripts.md](docs/scripts.md) pour la liste exhaustive des scripts, leurs usages et workflows recommandés.
 
 ## Lancer l'application
 
