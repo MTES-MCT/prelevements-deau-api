@@ -94,8 +94,8 @@ class SyncProcess {
             filename: fileEntry.filename,
             s3: this.s3
           })
-        } catch {
-          console.error(`[dossier: ${dossier.number}] Erreur lors du téléchargement de la pièce jointe : ${fileEntry.filename}`)
+        } catch (error) {
+          console.error(`[dossier: ${dossier.number}] Erreur lors du téléchargement de la pièce jointe : ${fileEntry.filename}`, error)
         }
       }
 
