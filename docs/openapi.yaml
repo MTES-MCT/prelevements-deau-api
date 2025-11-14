@@ -672,7 +672,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: ['15 minutes', '1 hour', '6 hours', '1 day', '1 month', '1 year']
+            enum: ['15 minutes', '1 hour', '6 hours', '1 day', '1 month', '1 quarter', '1 year']
           description: |
             Fréquence d'agrégation temporelle :
 
@@ -684,6 +684,7 @@ paths:
             **Fréquences journalières et supérieures** :
             - `1 day` : Valeurs quotidiennes (pas d'agrégation temporelle)
             - `1 month` : Agrégation mensuelle
+            - `1 quarter` : Agrégation trimestrielle
             - `1 year` : Agrégation annuelle
           example: "1 month"
       responses:

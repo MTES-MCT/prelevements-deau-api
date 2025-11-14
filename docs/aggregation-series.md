@@ -158,6 +158,7 @@ pointIds=207,507f1f77bcf86cd799439011,209
 **Journalières et supérieures** :
 - `1 day` : Valeurs quotidiennes (pas d'agrégation temporelle)
 - `1 month` : Agrégation mensuelle
+- `1 quarter` : Agrégation trimestrielle
 - `1 year` : Agrégation annuelle
 
 ### Paramètres optionnels
@@ -270,9 +271,10 @@ resolvePreleveurPoints(preleveurId, territoire)
 
 ```javascript
 extractPeriod(date, frequency)
-// Extrait la période (mois ou année) d'une date
-// '2024-01-15', '1 month' → '2024-01'
-// '2024-01-15', '1 year'  → '2024'
+// Extrait la période (mois, trimestre ou année) d'une date
+// '2024-01-15', '1 month'   → '2024-01'
+// '2024-01-15', '1 quarter' → '2024-Q1'
+// '2024-01-15', '1 year'    → '2024'
 
 extractSubDailyPeriod(date, time, frequency)
 // Extrait la période infra-journalière
@@ -288,7 +290,7 @@ applyAggregationOperator(values, operator)
 // Filtre automatiquement les valeurs invalides (null, NaN, Infinity)
 
 aggregateValuesByPeriod(dailyValues, frequency, operator)
-// Agrège des valeurs journalières par mois ou année
+// Agrège des valeurs journalières par mois, trimestre ou année
 ```
 
 ## Optimisation : dailyAggregates
