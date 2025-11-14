@@ -34,13 +34,13 @@ async function computeHash(dossier) {
   return hashObject(dossier, {algorithm: 'sha256'}).slice(0, 7)
 }
 
-export async function downloadAndStore(originalUrl, objectKey, {s3, filename, type}) {
+export async function downloadAndStore(originalUrl, objectKey, {s3}) {
   if (await s3.objectExists(objectKey)) {
     return
   }
 
   const buffer = await got(originalUrl).buffer()
-  await s3.uploadObject(objectKey, buffer, {filename, type})
+  await s3.uploadObject(objectKey, buffer)
 }
 
 class SyncProcess {
@@ -89,11 +89,7 @@ class SyncProcess {
         const objectKey = getAttachmentObjectKey(this.demarcheNumber, dossier.number, storageKey)
 
         try {
-          await downloadAndStore(fileEntry.url, objectKey, {
-            type: fileEntry.type,
-            filename: fileEntry.filename,
-            s3: this.s3
-          })
+          await downloadAndStore(fileEntry.url, objectKey, {s3: this.s3})
         } catch (error) {
           console.error(`[dossier: ${dossier.number}] Erreur lors du téléchargement de la pièce jointe : ${fileEntry.filename}`, error)
         }
