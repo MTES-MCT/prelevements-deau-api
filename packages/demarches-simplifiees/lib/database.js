@@ -1,3 +1,5 @@
+import {Buffer} from 'node:buffer'
+
 export async function readDatabase(s3, demarcheNumber) {
   const objectKey = getDatabaseObjectKey(demarcheNumber)
   const buffer = await s3.downloadObject(objectKey)
