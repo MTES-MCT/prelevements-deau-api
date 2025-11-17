@@ -142,7 +142,7 @@ test('extractMultiParamFile - invalid metadata field value', async t => {
   const filePath = path.join(testFilesPath, 'invalid-metadata-value.xlsx')
   const fileContent = await fs.readFile(filePath)
   const {errors} = await extractMultiParamFile(fileContent)
-  t.true(errors.some(e => e.message.includes('doit être l\'une des valeurs suivantes')))
+  t.true(errors.some(e => e.message.includes('n\'est pas valide pour le paramètre')))
 })
 
 test('extractMultiParamFile - invalid date_debut', async t => {

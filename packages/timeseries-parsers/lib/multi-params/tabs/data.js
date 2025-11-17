@@ -9,6 +9,7 @@ import {
   readAsTimeString
 } from '../../xlsx.js'
 import {normalizeOutputFrequency} from '../frequency.js'
+import {normalizeParameterName} from '../parameter.js'
 
 import {ErrorCollector} from '../error-collector.js'
 
@@ -309,23 +310,16 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
     {
       fieldName: 'nom_parametre',
       type: 'string',
-      enum: [
-        'chlorures',
-        'conductivité',
-        'débit prélevé',
-        'débit réservé',
-        'débit restitué',
-        'nitrates',
-        'niveau d’eau',
-        'pH',
-        'relevé d’index de compteur',
-        'sulfates',
-        'température',
-        'turbidité',
-        'volume prélevé',
-        'volume restitué',
-        'autre'
-      ],
+      parse(value) {
+        // Normaliser le nom du paramètre vers sa forme canonique
+        const result = normalizeParameterName(value)
+
+        if (!result) {
+          throw new Error(`Le paramètre "${value}" n'est pas reconnu`)
+        }
+
+        return result
+      },
       row: 1,
       required: true
     },
@@ -348,11 +342,8 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'frequence',
       type: 'string',
       parse(value) {
-        // Normalize to lowercase and trim
-        const normalized = value.toLowerCase().trim()
-
         // Use centralized normalization function
-        const result = normalizeOutputFrequency(normalized)
+        const result = normalizeOutputFrequency(value)
 
         if (!result) {
           throw new Error(`La fréquence "${value}" n'est pas reconnue`)
