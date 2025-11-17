@@ -10,6 +10,7 @@ import {
 } from '../../xlsx.js'
 import {normalizeOutputFrequency} from '../frequency.js'
 import {normalizeParameterName} from '../parameter.js'
+import {normalizeUnit} from '../unit.js'
 
 import {ErrorCollector} from '../error-collector.js'
 
@@ -262,35 +263,6 @@ function extractParameterRows(dataRows, paramIndex, paramName, errorCollector) {
   return rows
 }
 
-const UNITE_ALLOWED_VALUES = [
-  'µS/cm',
-  'degrés Celsius',
-  'L/s',
-  'm³/h',
-  'm³',
-  'm NGR',
-  'mg/L',
-  'autre'
-]
-
-/**
- * Normalise une chaîne d'unité pour la comparaison.
- *
- * @param {string} value La chaîne d'unité.
- * @returns {string} La chaîne d'unité normalisée.
- */
-function degradeUniteValue(value) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace('³', '3')
-    .replace('µ', 'u')
-    .replace('degrés', 'degres')
-}
-
-const UNITE_DEGRADED_ALLOWED_VALUES = UNITE_ALLOWED_VALUES
-  .map(value => degradeUniteValue(value))
-
 /**
  * Valide et extrait les champs de métadonnées pour une seule colonne de paramètre.
  *
@@ -311,7 +283,6 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'nom_parametre',
       type: 'string',
       parse(value) {
-        // Normaliser le nom du paramètre vers sa forme canonique
         const result = normalizeParameterName(value)
 
         if (!result) {
@@ -342,7 +313,6 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'frequence',
       type: 'string',
       parse(value) {
-        // Use centralized normalization function
         const result = normalizeOutputFrequency(value)
 
         if (!result) {
@@ -358,15 +328,13 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'unite',
       type: 'string',
       parse(value) {
-        const degradedValue = degradeUniteValue(value)
+        const result = normalizeUnit(value)
 
-        const pos = UNITE_DEGRADED_ALLOWED_VALUES.indexOf(degradedValue)
-
-        if (pos !== -1) {
-          return UNITE_ALLOWED_VALUES[pos]
+        if (!result) {
+          throw new Error(`L'unité "${value}" n'est pas reconnue`)
         }
 
-        throw new Error(`L'unité "${value}" n'est pas reconnue`)
+        return result
       },
       row: 4,
       required: true
