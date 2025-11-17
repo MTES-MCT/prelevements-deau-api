@@ -1,5 +1,10 @@
 import test from 'ava'
-import {normalizeString, normalizeParameterName} from '../parameter.js'
+import {
+  normalizeString,
+  normalizeParameterName,
+  getCanonicalParameterConfig,
+  convertToReferenceValue
+} from '../parameter.js'
 
 test('normalizeString - normalise une chaîne basique', t => {
   t.is(normalizeString('Volume Prélevé'), 'volume preleve')
@@ -99,4 +104,55 @@ test('normalizeParameterName - tous les paramètres standards sont trouvés', t 
   for (const param of parameters) {
     t.truthy(normalizeParameterName(param), `Le paramètre "${param}" devrait être trouvé`)
   }
+})
+
+test('getCanonicalParameterConfig - retourne nom canonique et config', t => {
+  const result = getCanonicalParameterConfig('Conductivité Électrique')
+
+  t.truthy(result)
+  t.is(result.canonicalName, 'conductivité')
+  t.truthy(result.config)
+  t.true(Array.isArray(result.config.units))
+})
+
+test('getCanonicalParameterConfig - retourne undefined si inconnu', t => {
+  t.is(getCanonicalParameterConfig('paramètre inconnu'), undefined)
+  t.is(getCanonicalParameterConfig(null), undefined)
+})
+
+test('convertToReferenceValue - retourne valeur identique pour unité de référence', t => {
+  const {targetUnit, targetValue, isValid} = convertToReferenceValue('conductivité', 'µS/cm', 2000)
+
+  t.is(targetUnit, 'µS/cm')
+  t.is(targetValue, 2000)
+  t.true(isValid)
+})
+
+test('convertToReferenceValue - convertit L/s vers m³/h pour débits', t => {
+  const result = convertToReferenceValue('débit prélevé', 'L/s', 10)
+
+  t.is(result.targetUnit, 'm³/h')
+  t.is(result.targetValue, 36)
+  t.true(result.isValid)
+})
+
+test('convertToReferenceValue - invalide si valeur hors bornes', t => {
+  const result = convertToReferenceValue('débit prélevé', 'L/s', 70_000)
+
+  t.is(result.targetUnit, 'm³/h')
+  t.is(result.targetValue, 252_000)
+  t.false(result.isValid)
+})
+
+test('convertToReferenceValue - invalide si conversion impossible', t => {
+  const result = convertToReferenceValue('chlorures', 'L/s', 10)
+
+  t.is(result.targetUnit, undefined)
+  t.is(result.targetValue, undefined)
+  t.false(result.isValid)
+})
+
+test('convertToReferenceValue - invalide si paramètre ou unité inconnus', t => {
+  t.false(convertToReferenceValue('paramètre inconnu', 'L/s', 10).isValid)
+  t.false(convertToReferenceValue('débit prélevé', 'unité inconnue', 10).isValid)
 })

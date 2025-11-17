@@ -1,21 +1,151 @@
 import {deburr} from 'lodash-es'
+import {normalizeUnit} from './unit.js'
+
+const DEBIT_UNITS = [
+  {
+    unit: 'm³/h',
+    isReference: true,
+    min: 0,
+    max: 200_000
+  },
+  {
+    unit: 'L/s',
+    isReference: false,
+    convertToReference(value) {
+      return value * 3.6
+    },
+    min: 0,
+    max: 60_000
+  }
+]
+
+const VOLUME_UNITS = [
+  {
+    unit: 'm³',
+    isReference: true,
+    min: 0,
+    max: 100_000_000
+  }
+]
 
 const AVAILABLE_PARAMETERS = {
-  chlorures: [],
-  conductivité: ['conductivité électrique'],
-  'débit prélevé': [],
-  'débit réservé': [],
-  'débit restitué': [],
-  nitrates: [],
-  'niveau piézométrique': ['niveau d’eau'],
-  pH: [],
-  'relevé d’index de compteur': [],
-  sulfates: [],
-  température: [],
-  turbidité: [],
-  'volume prélevé': [],
-  'volume restitué': [],
-  autre: []
+  chlorures: {
+    units: [
+      {
+        unit: 'mg/L',
+        isReference: true,
+        min: 0,
+        max: 30_000
+      }
+    ]
+  },
+  conductivité: {
+    aliases: ['conductivité électrique'],
+    units: [
+      {
+        unit: 'µS/cm',
+        isReference: true,
+        min: 0,
+        max: 200_000
+      }
+    ]
+  },
+  'débit prélevé': {
+    units: DEBIT_UNITS
+  },
+  'débit réservé': {
+    units: DEBIT_UNITS
+  },
+  'débit restitué': {
+    units: DEBIT_UNITS
+  },
+  nitrates: {
+    units: [
+      {
+        unit: 'mg/L',
+        isReference: true,
+        min: 0,
+        max: 500
+      }
+    ]
+  },
+  'niveau piézométrique': {
+    aliases: ['niveau d’eau'],
+    units: [
+      {
+        unit: 'm NGR',
+        isReference: true,
+        min: -200,
+        max: 3000
+      }
+    ]
+  },
+  pH: {
+    units: [
+      {
+        unit: 'autre',
+        isReference: true,
+        min: 4,
+        max: 11
+      }
+    ]
+  },
+  'relevé d’index de compteur': {
+    units: [
+      {
+        unit: 'm³',
+        isReference: true,
+        min: 0,
+        max: 1_000_000_000
+      }
+    ]
+  },
+  sulfates: {
+    units: [
+      {
+        unit: 'mg/L',
+        isReference: true,
+        min: 0,
+        max: 5000
+      }
+    ]
+  },
+  température: {
+    units: [
+      {
+        unit: 'degrés Celsius',
+        isReference: true,
+        min: -5,
+        max: 60
+      }
+    ]
+  },
+  turbidité: {
+    units: [
+      {
+        unit: 'autre',
+        isReference: true,
+        min: 0,
+        max: 5000
+      }
+    ]
+  },
+  'volume prélevé': {
+    units: VOLUME_UNITS
+  },
+  'volume restitué': {
+    units: VOLUME_UNITS
+  },
+  autre: {
+    units: [
+      {
+        unit: 'autre',
+        isReference: true,
+        min: undefined,
+        max: undefined
+      }
+    ]
+  }
 }
 
 /**
@@ -47,11 +177,15 @@ export function normalizeString(str) {
  */
 const NORMALIZED_PARAMETERS_MAP = new Map()
 
-for (const [canonical, aliases] of Object.entries(AVAILABLE_PARAMETERS)) {
+for (const [canonical, config] of Object.entries(AVAILABLE_PARAMETERS)) {
   NORMALIZED_PARAMETERS_MAP.set(normalizeString(canonical), canonical)
 
+  const aliases = config?.aliases ?? []
   for (const alias of aliases) {
-    NORMALIZED_PARAMETERS_MAP.set(normalizeString(alias), canonical)
+    const normalizedAlias = normalizeString(alias)
+    if (normalizedAlias) {
+      NORMALIZED_PARAMETERS_MAP.set(normalizedAlias, canonical)
+    }
   }
 }
 
@@ -73,4 +207,101 @@ export function normalizeParameterName(paramName) {
   }
 
   return NORMALIZED_PARAMETERS_MAP.get(normalized)
+}
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isWithinBounds(value, {min, max}) {
+  if (!isFiniteNumber(value)) {
+    return false
+  }
+
+  if (min !== undefined && value < min) {
+    return false
+  }
+
+  if (max !== undefined && value > max) {
+    return false
+  }
+
+  return true
+}
+
+function getReferenceUnit(units) {
+  return units.find(unit => unit.isReference)
+}
+
+export function getCanonicalParameterConfig(paramName) {
+  const canonicalName = normalizeParameterName(paramName)
+  if (!canonicalName) {
+    return
+  }
+
+  return {
+    canonicalName,
+    config: AVAILABLE_PARAMETERS[canonicalName]
+  }
+}
+
+export function convertToReferenceValue(paramName, sourceUnit, sourceValue) {
+  const canonicalUnit = normalizeUnit(sourceUnit)
+  const {canonicalName, config} = getCanonicalParameterConfig(paramName) ?? {}
+
+  if (!canonicalName || !canonicalUnit || !config) {
+    return {
+      targetUnit: undefined,
+      targetValue: undefined,
+      isValid: false
+    }
+  }
+
+  const unitConfig = config.units.find(unit => unit.unit === canonicalUnit)
+
+  if (!unitConfig) {
+    return {
+      targetUnit: undefined,
+      targetValue: undefined,
+      isValid: false
+    }
+  }
+
+  const referenceUnitConfig = getReferenceUnit(config.units)
+
+  if (!referenceUnitConfig) {
+    return {
+      targetUnit: undefined,
+      targetValue: undefined,
+      isValid: false
+    }
+  }
+
+  const isValueValidInSourceUnit = isWithinBounds(sourceValue, unitConfig)
+
+  if (unitConfig.isReference) {
+    const isValueValid = isValueValidInSourceUnit
+    return {
+      targetUnit: unitConfig.unit,
+      targetValue: isFiniteNumber(sourceValue) ? sourceValue : undefined,
+      isValid: isValueValid
+    }
+  }
+
+  if (typeof unitConfig.convertToReference !== 'function') {
+    return {
+      targetUnit: undefined,
+      targetValue: undefined,
+      isValid: false
+    }
+  }
+
+  const convertedValue = isFiniteNumber(sourceValue) ? unitConfig.convertToReference(sourceValue) : undefined
+  const isValueValid = isValueValidInSourceUnit && isWithinBounds(convertedValue, referenceUnitConfig)
+
+  return {
+    targetUnit: referenceUnitConfig.unit,
+    targetValue: convertedValue,
+    isValid: isValueValid
+  }
 }
