@@ -16,7 +16,7 @@ export function normalizeOutputFrequency(freq) {
   }
 
   // Normaliser les espaces pour gérer '1heure', '1 heure', etc.
-  const normalized = freq
+  const normalized = freq.toLowerCase().trim()
     .replace(/1\s*heure/, 'heure')
     .replace(/1\s*minute/, 'minute')
     .replace(/1\s*seconde/, 'seconde')
