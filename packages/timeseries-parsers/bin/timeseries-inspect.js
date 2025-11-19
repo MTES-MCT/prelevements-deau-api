@@ -58,10 +58,6 @@ function displaySerieInfo(serie, index) {
   console.log(`   Fréquence:            ${serie.frequency}`)
   console.log(`   Type de valeur:       ${serie.valueType}`)
 
-  if (serie.originalFrequency) {
-    console.log(`   Fréquence d'origine:  ${serie.originalFrequency} (expansé en ${serie.frequency})`)
-  }
-
   console.log(`   Date min:             ${serie.minDate}`)
   console.log(`   Date max:             ${serie.maxDate}`)
   console.log(`   Nombre de valeurs:    ${serie.data.length}`)

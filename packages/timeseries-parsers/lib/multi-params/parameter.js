@@ -213,7 +213,7 @@ function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
-function isWithinBounds(value, {min, max}) {
+export function isWithinBounds(value, {min, max}) {
   if (!isFiniteNumber(value)) {
     return false
   }

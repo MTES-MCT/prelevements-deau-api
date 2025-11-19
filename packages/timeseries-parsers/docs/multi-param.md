@@ -47,54 +47,7 @@ Le validateur accepte désormais **toutes les fréquences**, y compris celles su
 
 ### Fréquences supra-journalières (super-daily)
 - `mois`, `trimestre`, `année`
-- Traitement différencié selon le type de paramètre :
 - **Onglets dédiés** : `Data | T=1 mois` (ajouté dans v2.10) et `Data | T=1 trimestre`
-
-#### Paramètres cumulatifs (volumes)
-Les paramètres de type **volume prélevé** et **volume restitué** sont automatiquement expansés en valeurs journalières :
-- La valeur mensuelle/trimestrielle/annuelle est divisée par le nombre de jours de la période
-- Une entrée est créée pour chaque jour avec métadonnées de traçabilité :
-  - `value` : valeur journalisée (divisée)
-  - `originalValue` : valeur d'origine
-  - `originalDate` : date de début de période
-  - `originalFrequency` : fréquence d'origine (`1 month`, `1 quarter`, `1 year`)
-  - `daysCovered` : nombre de jours couverts
-- La série résultante a `frequency = '1 day'` et `originalFrequency = '1 month'` (ou autre)
-
-**Exemple** : Volume mensuel de 3100 m³ pour janvier 2025
-```javascript
-// Résultat : 31 entrées journalières
-{
-  frequency: '1 day',
-  originalFrequency: '1 month',
-  data: [
-    {date: '2025-01-01', value: 100, originalValue: 3100, originalFrequency: '1 month', daysCovered: 31},
-    {date: '2025-01-02', value: 100, originalValue: 3100, originalFrequency: '1 month', daysCovered: 31},
-    // ... jusqu'au 2025-01-31
-  ]
-}
-```
-
-#### Paramètres non-cumulatifs
-Les autres paramètres (température, pH, débit, conductivité, etc.) **conservent leur fréquence d'origine** :
-- Aucune expansion n'est effectuée
-- La série garde `frequency = '1 month'` (ou autre)
-- Pas de champ `originalFrequency`
-- Stockage direct : un document par période
-
-**Exemple** : Température moyenne mensuelle de 15°C pour janvier 2025
-```javascript
-{
-  frequency: '1 month',
-  data: [{date: '2025-01-01', value: 15}]
-}
-```
-
-### Gestion des années bissextiles
-L'expansion des valeurs annuelles et trimestrielles prend en compte les années bissextiles :
-- Année 2024 : 366 jours
-- Année 2025 : 365 jours
-- Trimestre incluant février : calcul précis du nombre de jours
 
 ## Validation étape par étape
 
@@ -110,6 +63,7 @@ L'expansion des valeurs annuelles et trimestrielles prend en compte les années 
 4. **Métadonnées des paramètres** :
    - présence des champs obligatoires (`nom_parametre`, `type`, `frequence`, `unite`) ;
    - conformité aux listes autorisées et normalisation éventuelle ;
+   - validation de l'unité par rapport au paramètre (via configuration canonique) ;
    - cohérence des dates (`date_debut` ≤ `date_fin` quand les deux sont renseignées).
 5. **Données** :
    - validation des dates et heures ligne par ligne (regroupement des erreurs sur plusieurs lignes en un seul message) ;
@@ -118,8 +72,7 @@ L'expansion des valeurs annuelles et trimestrielles prend en compte les années 
    - contrôle des plages de dates par rapport aux métadonnées.
 6. **Extraction des valeurs** :
    - filtrage des lignes dépourvues de date ;
-   - validation spécifique selon le paramètre (`volume prélevé` ≥ 0, `volume restitué` ≥ 0, etc.) ;
-   - expansion automatique des valeurs cumulatives avec fréquence > 1 jour.
+   - validation des valeurs (min/max) selon l'unité déclarée.
 
 Les erreurs récurrentes sur un même type (ex. 20 lignes avec une date invalide) sont agrégées par l'`ErrorCollector` afin de conserver une lecture lisible.
 
@@ -148,18 +101,7 @@ unite: degrés Celsius
 
 ### Onglet mensuel (`Data | T=1 mois`)
 
-L'onglet mensuel permet de saisir des données avec un pas de temps mensuel. Deux comportements selon le type de paramètre :
-
-**Pour les volumes (cumulative) :**
-- Les valeurs mensuelles sont automatiquement **expansées en valeurs journalières**
-- Chaque jour du mois reçoit une fraction égale du volume total
-- Les métadonnées d'expansion sont conservées (`originalValue`, `originalFrequency`, etc.)
-- La série résultante a `frequency = '1 day'` et `originalFrequency = '1 month'`
-
-**Pour les autres paramètres (non-cumulative) :**
-- Les valeurs gardent leur fréquence mensuelle
-- Pas d'expansion effectuée
-- La série conserve `frequency = '1 month'`
+L'onglet mensuel permet de saisir des données avec un pas de temps mensuel.
 
 **Caractéristiques :**
 - La fréquence dans les métadonnées doit être `mois` ou `1 mois`
@@ -174,8 +116,6 @@ frequence: mois
 unite: m³
 ```
 
-Si vous saisissez `3100 m³` pour janvier 2025, le système génère automatiquement 31 valeurs de `100 m³` pour chaque jour du mois.
-
 ## Consolidation des séries
 
 - Les fréquences sont normalisées via `normalizeOutputFrequency` :
@@ -185,9 +125,7 @@ Si vous saisissez `3100 m³` pour janvier 2025, le système génère automatique
 - Les séries conservent :
   - `pointPrelevement` (numérique si convertible) ;
   - `parameter`, `unit`, `frequency`, `valueType` (mapping : `valeur brute` → `instantaneous`, `moyenne` → `average`, `différence d'index` → `delta-index`, `volume prélevé` / `volume restitué` → `cumulative`, etc.) ;
-  - `originalFrequency` (optionnel) : présent uniquement si les données ont été expansées depuis une fréquence > 1 jour ;
   - `data[]` avec `date`, et `time` si la fréquence est infra-journalière ; `remark` est renseigné si la colonne `Remarque` est remplie dans la ligne source.
-  - Pour les données expansées : chaque entrée `data[]` contient aussi `originalValue`, `originalDate`, `originalFrequency` et `daysCovered`.
 - Les métadonnées facultatives alimentent `series.extras` :
   - `detailPointSuivi`, `profondeur` (numérique), `commentaire` (remarque sur le paramètre).
 - Après consolidation, un passage de déduplication supprime les doublons temporels et ajoute, le cas échéant, un avertissement global.

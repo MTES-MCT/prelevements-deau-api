@@ -3,7 +3,8 @@ import {
   normalizeString,
   normalizeParameterName,
   getCanonicalParameterConfig,
-  convertToReferenceValue
+  convertToReferenceValue,
+  isWithinBounds
 } from '../parameter.js'
 
 test('normalizeString - normalise une chaîne basique', t => {
@@ -155,4 +156,27 @@ test('convertToReferenceValue - invalide si conversion impossible', t => {
 test('convertToReferenceValue - invalide si paramètre ou unité inconnus', t => {
   t.false(convertToReferenceValue('paramètre inconnu', 'L/s', 10).isValid)
   t.false(convertToReferenceValue('débit prélevé', 'unité inconnue', 10).isValid)
+})
+
+test('isWithinBounds - valide les bornes', t => {
+  t.true(isWithinBounds(10, {min: 0, max: 100}))
+  t.true(isWithinBounds(0, {min: 0, max: 100}))
+  t.true(isWithinBounds(100, {min: 0, max: 100}))
+  t.false(isWithinBounds(-1, {min: 0, max: 100}))
+  t.false(isWithinBounds(101, {min: 0, max: 100}))
+})
+
+test('isWithinBounds - gère les bornes infinies', t => {
+  t.true(isWithinBounds(1000, {min: 0}))
+  t.false(isWithinBounds(-1, {min: 0}))
+  t.true(isWithinBounds(-1000, {max: 0}))
+  t.false(isWithinBounds(1, {max: 0}))
+})
+
+test('isWithinBounds - rejette les valeurs non numériques', t => {
+  t.false(isWithinBounds(Number.NaN, {min: 0, max: 100}))
+  t.false(isWithinBounds(Number.POSITIVE_INFINITY, {min: 0, max: 100}))
+  t.false(isWithinBounds('10', {min: 0, max: 100}))
+  t.false(isWithinBounds(null, {min: 0, max: 100}))
+  t.false(isWithinBounds(undefined, {min: 0, max: 100}))
 })

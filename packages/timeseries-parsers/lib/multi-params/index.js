@@ -1,11 +1,13 @@
 import {pick, minBy, maxBy} from 'lodash-es'
-import {isSubDailyFrequency, isSuperDailyFrequency, isCumulativeParameter, expandToDaily} from './frequency.js'
+import {isSubDailyFrequency, isCumulativeParameter} from './frequency.js'
 
 import {readSheet} from '../xlsx.js'
 
 import {validateAndExtract as validateAndExtractMetadata} from './tabs/metadata.js'
 import {validateAndExtract as validateAndExtractData} from './tabs/data.js'
 import {dedupe} from '../dedupe.js'
+
+export {convertToReferenceValue} from './parameter.js'
 
 export async function extractMultiParamFile(buffer) {
   let workbook
@@ -233,38 +235,15 @@ function buildSeriesForParam({param, rowsSource, pointPrelevement, frequency, se
   const isCumulative = isCumulativeParameter(nom_parametre)
   const valueType = isCumulative ? 'cumulative' : mapTypeToValueType(type)
 
-  // Si fréquence > 1 jour ET paramètre cumulatif, expanser les données en valeurs journalières
-  let finalRows = rows
-  let finalFrequency = frequency
-  let originalFrequency
-
-  if (isSuperDailyFrequency(frequency) && isCumulative) {
-    // Expanser chaque ligne en plusieurs lignes journalières pour les volumes
-    const expandedRows = []
-    for (const row of rows) {
-      const dailyRows = expandToDaily(row, frequency)
-      expandedRows.push(...dailyRows)
-    }
-
-    finalRows = expandedRows
-    originalFrequency = frequency // Conserver la fréquence d'origine
-    finalFrequency = '1 day' // Les données sont maintenant journalières
-  }
-
   const seriesObj = {
     pointPrelevement,
     parameter: nom_parametre,
     unit: unite,
-    frequency: finalFrequency,
+    frequency,
     valueType,
-    minDate: minBy(finalRows, 'date').date,
-    maxDate: maxBy(finalRows, 'date').date,
-    data: finalRows
-  }
-
-  // Ajouter la fréquence originale si les données ont été expansées
-  if (originalFrequency) {
-    seriesObj.originalFrequency = originalFrequency
+    minDate: minBy(rows, 'date').date,
+    maxDate: maxBy(rows, 'date').date,
+    data: rows
   }
 
   const extras = {}

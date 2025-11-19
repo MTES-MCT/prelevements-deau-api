@@ -43,7 +43,7 @@ Aucun avertissement n'est émis pour ce type de fichier.
 
 Cette fonction valide les fichiers « multiparamètres » composés d'un onglet « A LIRE » et d'au moins un onglet de données « Data | T=… ». Les vérifications portent sur la structure du classeur, les métadonnées de chaque paramètre et la cohérence des données.
 
-Le validateur ne retient que les séries dont la granularité est journalière ou plus fine. Les fréquences agrégées (par exemple `T = 1 trimestre`) sont ignorées pour éviter d’intégrer des valeurs qui nécessiteraient une désagrégation préalable.
+Le validateur accepte toutes les fréquences, y compris les fréquences supra-journalières (mensuelle, trimestrielle, annuelle).
 
 ### Erreurs possibles
 

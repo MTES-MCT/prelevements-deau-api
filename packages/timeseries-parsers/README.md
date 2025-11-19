@@ -68,10 +68,10 @@ Les deux fonctions exposées prennent un `Buffer` (contenu binaire du fichier) e
 
 - **Entrée** : le contenu d'un fichier multiparamètres DS.
 - **Sortie** :
-  - `data.series` — séries normalisées par paramètre (volume prélevé, débit, pH, etc.), avec fréquence (`1 day`, `15 minutes`, `1 hour`, `1 month`, `1 quarter`, `1 year`), nature (`valueType`) et éventuels commentaires/metadata. Pour les séries expansées depuis une fréquence > 1 jour, le champ `originalFrequency` indique la fréquence d'origine.
+  - `data.series` — séries normalisées par paramètre (volume prélevé, débit, pH, etc.), avec fréquence (`1 day`, `15 minutes`, `1 hour`, `1 month`, `1 quarter`, `1 year`), nature (`valueType`) et éventuels commentaires/metadata.
   - `rawData` — contenu extrait des onglets `A LIRE` et `Data | T=`.
   - `errors` — messages structurés, agrégés par plage quand c'est pertinent.
-- **Comportement notable** : validation détaillée de chaque paramètre (métadonnées, pas de temps, cohérence des dates/heures), gestion des valeurs manquantes nécessitant une remarque, normalisation des fréquences/unités. Les paramètres cumulatifs (volumes) avec une fréquence > 1 jour sont automatiquement expansés en valeurs journalières avec préservation des métadonnées d'origine. Voir [`docs/multi-param.md`](docs/multi-param.md).
+- **Comportement notable** : validation détaillée de chaque paramètre (métadonnées, pas de temps, cohérence des dates/heures), gestion des valeurs manquantes nécessitant une remarque, normalisation des fréquences/unités. La validation des unités et des plages de valeurs est dynamique et basée sur une configuration canonique (`parameter.js`). Voir [`docs/multi-param.md`](docs/multi-param.md).
 
 ## Exemple d’utilisation
 
@@ -102,7 +102,7 @@ async function parseCamion(fileBuffer) {
 
 ## Structure des résultats
 
-- `data.series[]` : chaque série contient au minimum `pointPrelevement`, `parameter`, `unit`, `frequency`, `valueType`, `minDate`, `maxDate`, `data[]`. Le champ optionnel `originalFrequency` est présent lorsque les données ont été expansées depuis une fréquence > 1 jour. Les points de données incluent `date`, et selon les cas `time` (fréquence infra-journalière), `remark`, et pour les données expansées : `originalValue`, `originalDate`, `originalFrequency`, `daysCovered`.
+- `data.series[]` : chaque série contient au minimum `pointPrelevement`, `parameter`, `unit`, `frequency`, `valueType`, `minDate`, `maxDate`, `data[]`. Les points de données incluent `date`, et selon les cas `time` (fréquence infra-journalière) et `remark`.
 - `rawData` : représente une vue détaillée des éléments intermédiaires (en-têtes normalisés, lignes brutes, métadonnées) pour faciliter le diagnostic ou des traitements spécifiques.
 - `errors[]` : chaque message possède `message`, `severity` et, selon les cas, `explanation` et `internalMessage`. Les agrégations d'erreurs de données regroupent plusieurs lignes en un seul message quand elles partagent la même cause.
 
