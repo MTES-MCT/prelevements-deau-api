@@ -157,8 +157,9 @@ function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
       const isUnitAllowed = config.units.some(u => u.unit === unite)
 
       if (!isUnitAllowed) {
+        const allowedUnits = config.units.map(u => u.unit).join(', ')
         errorCollector.addSingleError({
-          message: `L'unité '${unite}' n'est pas autorisée pour le paramètre '${paramName}'.`
+          message: `L'unité '${unite}' n'est pas autorisée pour le paramètre '${paramName}'. Unités autorisées : ${allowedUnits}.`
         })
         continue
       }
