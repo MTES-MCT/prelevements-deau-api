@@ -19,6 +19,7 @@
     "lint": "xo",
     "lint:openapi": "spectral lint docs/openapi.yaml",
     "test": "ava",
+    "test:ci": "ava --timeout=1m",
     "coverage": "c8 ava",
     "coverage:report": "c8 --reporter=html --reporter=text ava"
   },
