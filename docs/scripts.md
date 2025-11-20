@@ -116,7 +116,7 @@ npm run reconsolidate-all-dossiers
 
 ### `reprocess-all-attachments`
 
-Force le retraitement de **tous** les attachments non traités ou en erreur.
+Force le retraitement de **tous** les attachments.
 
 ```bash
 npm run reprocess-all-attachments
