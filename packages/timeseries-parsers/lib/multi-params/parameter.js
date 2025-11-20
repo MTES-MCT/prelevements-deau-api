@@ -3,19 +3,19 @@ import {normalizeUnit} from './unit.js'
 
 const DEBIT_UNITS = [
   {
-    unit: 'm³/h',
+    unit: 'L/s',
     isReference: true,
     min: 0,
-    max: 200_000
+    max: 60_000
   },
   {
-    unit: 'L/s',
+    unit: 'm³/h',
     isReference: false,
     convertToReference(value) {
-      return value * 3.6
+      return value / 3.6
     },
     min: 0,
-    max: 60_000
+    max: 200_000
   }
 ]
 

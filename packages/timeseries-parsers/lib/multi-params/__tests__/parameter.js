@@ -129,19 +129,19 @@ test('convertToReferenceValue - retourne valeur identique pour unité de référ
   t.true(isValid)
 })
 
-test('convertToReferenceValue - convertit L/s vers m³/h pour débits', t => {
-  const result = convertToReferenceValue('débit prélevé', 'L/s', 10)
+test('convertToReferenceValue - convertit m³/h vers L/s pour débits', t => {
+  const result = convertToReferenceValue('débit prélevé', 'm³/h', 36)
 
-  t.is(result.targetUnit, 'm³/h')
-  t.is(result.targetValue, 36)
+  t.is(result.targetUnit, 'L/s')
+  t.is(result.targetValue, 10)
   t.true(result.isValid)
 })
 
 test('convertToReferenceValue - invalide si valeur hors bornes', t => {
-  const result = convertToReferenceValue('débit prélevé', 'L/s', 70_000)
+  const result = convertToReferenceValue('débit prélevé', 'm³/h', 252_000)
 
-  t.is(result.targetUnit, 'm³/h')
-  t.is(result.targetValue, 252_000)
+  t.is(result.targetUnit, 'L/s')
+  t.is(result.targetValue, 70_000)
   t.false(result.isValid)
 })
 
