@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import {fileURLToPath} from 'node:url'
 import test from 'ava'
 import {extractMultiParamFile} from '../index.js'
-import {expandToDaily, isCumulativeParameter} from '../frequency.js'
+import {isCumulativeParameter} from '../frequency.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -97,8 +97,7 @@ test('extractMultiParamFile - missing point name', async t => {
   const filePath = path.join(testFilesPath, 'missing-point-name.xlsx')
   const fileContent = await fs.readFile(filePath)
   const {errors} = await extractMultiParamFile(fileContent)
-  t.is(errors.length, 1)
-  t.is(errors[0].message, 'Le nom du point de prélèvement (cellule B3 de l\'onglet \'A LIRE\') est manquant')
+  t.true(errors.some(e => e.message.includes('Le nom du point de prélèvement (cellule B3 de l\'onglet \'A LIRE\') est manquant')))
 })
 
 test('extractMultiParamFile - modified header in data tab', async t => {
@@ -263,34 +262,10 @@ test('extractMultiParamFile - rows with no date are ignored', async t => {
   t.is(total, 3)
 })
 
-// Super-daily frequency expansion tests
-test('expandToDaily - monthly volume is expanded correctly', t => {
-  const monthlyRow = {date: '2025-01-01', value: 3100, remark: 'Janvier'}
-  const expanded = expandToDaily(monthlyRow, '1 month')
-
-  t.is(expanded.length, 31)
-  t.is(expanded[0].date, '2025-01-01')
-  t.is(expanded[30].date, '2025-01-31')
-
-  // Chaque jour devrait avoir value = 3100/31 = 100
-  const dailyValue = 3100 / 31
-  t.is(expanded[0].value, dailyValue)
-
-  // Métadonnées préservées
-  t.is(expanded[0].originalValue, 3100)
-  t.is(expanded[0].originalDate, '2025-01-01')
-  t.is(expanded[0].originalFrequency, '1 month')
-  t.is(expanded[0].daysCovered, 31)
-  t.is(expanded[0].remark, 'Janvier')
-})
-
 test('buildSeriesForParam - cumulative parameters are expanded for super-daily frequencies', t => {
   // Vérifier que les volumes sont bien identifiés comme cumulatifs
   t.true(isCumulativeParameter('volume prélevé'))
   t.true(isCumulativeParameter('volume restitué'))
-
-  // Note: Les tests d'intégration avec fichiers Excel valideront le comportement complet
-  // incluant la présence du champ originalFrequency
 })
 
 test('buildSeriesForParam - non-cumulative parameters keep original frequency', t => {
@@ -298,22 +273,7 @@ test('buildSeriesForParam - non-cumulative parameters keep original frequency', 
   t.false(isCumulativeParameter('température'))
   t.false(isCumulativeParameter('pH'))
   t.false(isCumulativeParameter('débit prélevé'))
-
-  // Note: Pour les paramètres non-cumulatifs avec fréquence > 1 jour,
-  // la série garde sa fréquence d'origine (pas d'expansion, pas d'originalFrequency)
 })
-
-test('expandToDaily preserves originalFrequency in series metadata', t => {
-  // Simuler une série avec expansion
-  const monthlyRow = {date: '2025-01-01', value: 3100}
-  const expanded = expandToDaily(monthlyRow, '1 month')
-
-  // Vérifier que chaque ligne expansée contient bien originalFrequency
-  t.is(expanded[0].originalFrequency, '1 month')
-  t.is(expanded[15].originalFrequency, '1 month')
-  t.is(expanded[30].originalFrequency, '1 month')
-})
-
 // Tests pour les nouveaux onglets T=1 heure et T=1 mois
 test('extractMultiParamFile - template with hourly and monthly tabs', async t => {
   const filePath = path.join(testFilesPath, 'template-v2.10.xlsx')
@@ -330,9 +290,9 @@ test('extractMultiParamFile - template with hourly and monthly tabs', async t =>
   const hourlySeries = data.series.filter(s => s.frequency === '1 hour')
   t.true(hourlySeries.length > 0, 'Au moins une série horaire doit être présente')
 
-  // Vérifier qu'il y a des séries avec fréquence mensuelle OU avec originalFrequency mensuelle
-  const monthlySeries = data.series.filter(s => s.frequency === '1 month' || s.originalFrequency === '1 month')
-  t.true(monthlySeries.length > 0, 'Au moins une série mensuelle (ou expansée depuis mensuel) doit être présente')
+  // Vérifier qu'il y a des séries avec fréquence mensuelle
+  const monthlySeries = data.series.filter(s => s.frequency === '1 month')
+  t.true(monthlySeries.length > 0, 'Au moins une série mensuelle doit être présente')
 })
 
 test('extractMultiParamFile - hourly series have time field', async t => {
@@ -358,43 +318,6 @@ test('extractMultiParamFile - hourly series have time field', async t => {
     t.regex(point.time, /^\d{2}:\d{2}$/, 'Le format de l\'heure doit être HH:mm')
     t.true(typeof point.value === 'number', 'La valeur doit être un nombre')
   }
-})
-
-test('extractMultiParamFile - monthly volumes are expanded to daily', async t => {
-  const filePath = path.join(testFilesPath, 'template-v2.10.xlsx')
-  const fileContent = await fs.readFile(filePath)
-  const {data} = await extractMultiParamFile(fileContent)
-
-  // Le template contient novembre et décembre 2025 (30 + 31 = 61 jours)
-  const expandedVolumeSeries = data.series.find(
-    s => s.parameter === 'volume prélevé' && s.originalFrequency === '1 month'
-  )
-
-  t.truthy(expandedVolumeSeries, 'Une série de volume prélevé mensuel expansée doit être présente')
-  t.is(expandedVolumeSeries.frequency, '1 day', 'Fréquence journalière après expansion')
-  t.is(expandedVolumeSeries.originalFrequency, '1 month', 'Fréquence d\'origine conservée')
-  t.is(expandedVolumeSeries.valueType, 'cumulative')
-  t.is(expandedVolumeSeries.minDate, '2025-11-01')
-  t.is(expandedVolumeSeries.maxDate, '2025-12-31')
-
-  // Novembre 2025 = 30 jours + Décembre 2025 = 31 jours
-  t.is(expandedVolumeSeries.data.length, 61, 'Novembre (30j) + Décembre (31j) = 61 jours')
-
-  // Vérifier les métadonnées d'expansion sur le premier point (novembre)
-  const firstPoint = expandedVolumeSeries.data[0]
-  t.is(firstPoint.date, '2025-11-01')
-  t.is(firstPoint.time, undefined, 'Pas de champ time pour les données journalières')
-  t.true(typeof firstPoint.value === 'number')
-  t.truthy(firstPoint.originalValue, 'Valeur originale conservée')
-  t.is(firstPoint.originalDate, '2025-11-01')
-  t.is(firstPoint.originalFrequency, '1 month')
-  t.is(firstPoint.daysCovered, 30, 'Novembre 2025 a 30 jours')
-
-  // Vérifier le premier point de décembre
-  const decemberFirstPoint = expandedVolumeSeries.data[30]
-  t.is(decemberFirstPoint.date, '2025-12-01')
-  t.is(decemberFirstPoint.originalDate, '2025-12-01')
-  t.is(decemberFirstPoint.daysCovered, 31, 'Décembre 2025 a 31 jours')
 })
 
 test('extractMultiParamFile - quarterly data tab', async t => {
@@ -438,4 +361,17 @@ test('extractMultiParamFile - quarterly data tab', async t => {
   t.is(nitratesSeries.unit, 'mg/L')
   t.is(nitratesSeries.data.length, 1)
   t.is(nitratesSeries.data[0].value, 13)
+})
+
+test('extractMultiParamFile - inconsistent unit', async t => {
+  const filePath = path.join(testFilesPath, 'inconsistent-unit.xlsx')
+  const fileContent = await fs.readFile(filePath)
+  const {errors, data} = await extractMultiParamFile(fileContent)
+
+  // Verify error message
+  t.true(errors.some(e => e.message.includes('L\'unité \'L/s\' n\'est pas autorisée pour le paramètre \'volume prélevé\'')))
+
+  // Verify that the series is rejected (not present in data.series)
+  const volumeSeries = data.series.find(s => s.parameter === 'volume prélevé')
+  t.falsy(volumeSeries, 'The series with invalid unit should be rejected')
 })

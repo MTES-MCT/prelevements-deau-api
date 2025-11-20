@@ -9,7 +9,8 @@ import {
   readAsTimeString
 } from '../../xlsx.js'
 import {normalizeOutputFrequency} from '../frequency.js'
-import {normalizeParameterName} from '../parameter.js'
+import {normalizeParameterName, getCanonicalParameterConfig, isWithinBounds} from '../parameter.js'
+import {normalizeUnit} from '../unit.js'
 
 import {ErrorCollector} from '../error-collector.js'
 
@@ -148,7 +149,21 @@ function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
       continue
     }
 
-    const {frequence, nom_parametre: paramName, date_debut, date_fin} = fields
+    const {frequence, nom_parametre: paramName, date_debut, date_fin, unite} = fields
+
+    const {config} = getCanonicalParameterConfig(paramName) || {}
+
+    if (config) {
+      const isUnitAllowed = config.units.some(u => u.unit === unite)
+
+      if (!isUnitAllowed) {
+        const allowedUnits = config.units.map(u => u.unit).join(', ')
+        errorCollector.addSingleError({
+          message: `L'unité '${unite}' n'est pas autorisée pour le paramètre '${paramName}'. Unités autorisées : ${allowedUnits}.`
+        })
+        continue
+      }
+    }
 
     validateParameterFrequency({frequence, paramName, allowedFrequenceValues, paramIndex, errorCollector})
 
@@ -158,7 +173,7 @@ function validateAndExtractParameters(dataSheet, dataRows, {errorCollector}) {
 
     validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin, errorCollector})
 
-    const rows = extractParameterRows(dataRows, paramIndex, paramName, errorCollector)
+    const rows = extractParameterRows(dataRows, {paramIndex, paramName, unit: unite, errorCollector})
 
     parameters.push({paramIndex, ...fields, rows})
   }
@@ -229,14 +244,17 @@ function validateParameterDateRange(dataRows, {paramIndex, date_debut, date_fin,
  * Extrait et valide les lignes de données pour un seul paramètre.
  *
  * @param {Array<object>} dataRows Les lignes de données.
- * @param {number} paramIndex L'index de colonne du paramètre.
- * @param {string} paramName Le nom du paramètre.
- * @param {ErrorCollector} errorCollector L'instance du collecteur d'erreurs.
+ * @param {object} options L'objet des options.
+ * @param {number} options.paramIndex L'index de colonne du paramètre.
+ * @param {string} options.paramName Le nom du paramètre.
+ * @param {string} options.unit L'unité du paramètre.
+ * @param {ErrorCollector} options.errorCollector L'instance du collecteur d'erreurs.
  * @returns {Array<object>} Les lignes extraites pour le paramètre.
  */
-function extractParameterRows(dataRows, paramIndex, paramName, errorCollector) {
-  const paramDefinition = PARAM_TYPE_DEFINITIONS[paramName]
-  const validate = paramDefinition?.validate
+function extractParameterRows(dataRows, {paramIndex, paramName, unit, errorCollector}) {
+  const {config} = getCanonicalParameterConfig(paramName) || {}
+  const unitConfig = config?.units.find(u => u.unit === unit)
+
   const rows = []
 
   for (const row of dataRows) {
@@ -246,9 +264,19 @@ function extractParameterRows(dataRows, paramIndex, paramName, errorCollector) {
       continue
     }
 
-    if (validate && !validate(valeur)) {
+    if (unitConfig && !isWithinBounds(valeur, unitConfig)) {
+      const {min, max} = unitConfig
+      let boundsInfo = ''
+      if (min !== undefined && max !== undefined) {
+        boundsInfo = ` (min: ${min}, max: ${max})`
+      } else if (max !== undefined) {
+        boundsInfo = ` (max: ${max})`
+      } else if (min !== undefined) {
+        boundsInfo = ` (min: ${min})`
+      }
+
       errorCollector.addSingleError({
-        message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}`
+        message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}${boundsInfo}`
       })
     } else {
       rows.push({
@@ -261,35 +289,6 @@ function extractParameterRows(dataRows, paramIndex, paramName, errorCollector) {
 
   return rows
 }
-
-const UNITE_ALLOWED_VALUES = [
-  'µS/cm',
-  'degrés Celsius',
-  'L/s',
-  'm³/h',
-  'm³',
-  'm NGR',
-  'mg/L',
-  'autre'
-]
-
-/**
- * Normalise une chaîne d'unité pour la comparaison.
- *
- * @param {string} value La chaîne d'unité.
- * @returns {string} La chaîne d'unité normalisée.
- */
-function degradeUniteValue(value) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace('³', '3')
-    .replace('µ', 'u')
-    .replace('degrés', 'degres')
-}
-
-const UNITE_DEGRADED_ALLOWED_VALUES = UNITE_ALLOWED_VALUES
-  .map(value => degradeUniteValue(value))
 
 /**
  * Valide et extrait les champs de métadonnées pour une seule colonne de paramètre.
@@ -311,7 +310,6 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'nom_parametre',
       type: 'string',
       parse(value) {
-        // Normaliser le nom du paramètre vers sa forme canonique
         const result = normalizeParameterName(value)
 
         if (!result) {
@@ -342,7 +340,6 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'frequence',
       type: 'string',
       parse(value) {
-        // Use centralized normalization function
         const result = normalizeOutputFrequency(value)
 
         if (!result) {
@@ -358,15 +355,13 @@ function validateAndExtractParamFields(dataSheet, colIndex, {errorCollector}) {
       fieldName: 'unite',
       type: 'string',
       parse(value) {
-        const degradedValue = degradeUniteValue(value)
+        const result = normalizeUnit(value)
 
-        const pos = UNITE_DEGRADED_ALLOWED_VALUES.indexOf(degradedValue)
-
-        if (pos !== -1) {
-          return UNITE_ALLOWED_VALUES[pos]
+        if (!result) {
+          throw new Error(`L'unité "${value}" n'est pas reconnue`)
         }
 
-        throw new Error(`L'unité "${value}" n'est pas reconnue`)
+        return result
       },
       row: 4,
       required: true
@@ -789,10 +784,3 @@ function getExpectedTimeDifference(frequency) {
   }
 }
 
-const PARAM_TYPE_DEFINITIONS = {
-  'volume prélevé': {
-    validate(value) {
-      return value >= 0
-    }
-  }
-}

@@ -1,5 +1,11 @@
 import test from 'ava'
-import {normalizeString, normalizeParameterName} from '../parameter.js'
+import {
+  normalizeString,
+  normalizeParameterName,
+  getCanonicalParameterConfig,
+  convertToReferenceValue,
+  isWithinBounds
+} from '../parameter.js'
 
 test('normalizeString - normalise une chaîne basique', t => {
   t.is(normalizeString('Volume Prélevé'), 'volume preleve')
@@ -99,4 +105,78 @@ test('normalizeParameterName - tous les paramètres standards sont trouvés', t 
   for (const param of parameters) {
     t.truthy(normalizeParameterName(param), `Le paramètre "${param}" devrait être trouvé`)
   }
+})
+
+test('getCanonicalParameterConfig - retourne nom canonique et config', t => {
+  const result = getCanonicalParameterConfig('Conductivité Électrique')
+
+  t.truthy(result)
+  t.is(result.canonicalName, 'conductivité')
+  t.truthy(result.config)
+  t.true(Array.isArray(result.config.units))
+})
+
+test('getCanonicalParameterConfig - retourne undefined si inconnu', t => {
+  t.is(getCanonicalParameterConfig('paramètre inconnu'), undefined)
+  t.is(getCanonicalParameterConfig(null), undefined)
+})
+
+test('convertToReferenceValue - retourne valeur identique pour unité de référence', t => {
+  const {targetUnit, targetValue, isValid} = convertToReferenceValue('conductivité', 'µS/cm', 2000)
+
+  t.is(targetUnit, 'µS/cm')
+  t.is(targetValue, 2000)
+  t.true(isValid)
+})
+
+test('convertToReferenceValue - convertit m³/h vers L/s pour débits', t => {
+  const result = convertToReferenceValue('débit prélevé', 'm³/h', 36)
+
+  t.is(result.targetUnit, 'L/s')
+  t.is(result.targetValue, 10)
+  t.true(result.isValid)
+})
+
+test('convertToReferenceValue - invalide si valeur hors bornes', t => {
+  const result = convertToReferenceValue('débit prélevé', 'm³/h', 252_000)
+
+  t.is(result.targetUnit, 'L/s')
+  t.is(result.targetValue, 70_000)
+  t.false(result.isValid)
+})
+
+test('convertToReferenceValue - invalide si conversion impossible', t => {
+  const result = convertToReferenceValue('chlorures', 'L/s', 10)
+
+  t.is(result.targetUnit, undefined)
+  t.is(result.targetValue, undefined)
+  t.false(result.isValid)
+})
+
+test('convertToReferenceValue - invalide si paramètre ou unité inconnus', t => {
+  t.false(convertToReferenceValue('paramètre inconnu', 'L/s', 10).isValid)
+  t.false(convertToReferenceValue('débit prélevé', 'unité inconnue', 10).isValid)
+})
+
+test('isWithinBounds - valide les bornes', t => {
+  t.true(isWithinBounds(10, {min: 0, max: 100}))
+  t.true(isWithinBounds(0, {min: 0, max: 100}))
+  t.true(isWithinBounds(100, {min: 0, max: 100}))
+  t.false(isWithinBounds(-1, {min: 0, max: 100}))
+  t.false(isWithinBounds(101, {min: 0, max: 100}))
+})
+
+test('isWithinBounds - gère les bornes infinies', t => {
+  t.true(isWithinBounds(1000, {min: 0}))
+  t.false(isWithinBounds(-1, {min: 0}))
+  t.true(isWithinBounds(-1000, {max: 0}))
+  t.false(isWithinBounds(1, {max: 0}))
+})
+
+test('isWithinBounds - rejette les valeurs non numériques', t => {
+  t.false(isWithinBounds(Number.NaN, {min: 0, max: 100}))
+  t.false(isWithinBounds(Number.POSITIVE_INFINITY, {min: 0, max: 100}))
+  t.false(isWithinBounds('10', {min: 0, max: 100}))
+  t.false(isWithinBounds(null, {min: 0, max: 100}))
+  t.false(isWithinBounds(undefined, {min: 0, max: 100}))
 })

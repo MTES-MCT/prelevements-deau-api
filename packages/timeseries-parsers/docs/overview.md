@@ -14,25 +14,14 @@ Le validateur a été développé pour rapprocher les fichiers transmis via Dém
 1. **Ouverture du fichier** — prise en charge des formats `xls`, `xlsx` et `ods`, avec gestion des fichiers corrompus.
 2. **Contrôle structurel** — vérification des feuilles attendues, des en-têtes et de la présence d’au moins une ligne exploitable.
 3. **Validation métier** — vérifications fines par type de fichier (métadonnées, pas de temps, plages de dates, doublons, cohérence des unités…).
-4. **Consolidation** — normalisation des données valides en séries temporelles (`series[]`) et collecte des informations intermédiaires dans `rawData`. Les paramètres cumulatifs (volumes) avec une fréquence > 1 jour sont expansés en valeurs journalières ; les autres paramètres conservent leur fréquence d'origine.
+4. **Consolidation** — normalisation des données valides en séries temporelles (`series[]`) et collecte des informations intermédiaires dans `rawData`.
 5. **Déduplication** — suppression des doublons temporels dans chaque série, accompagnée d'un avertissement global lorsqu'un nettoyage est effectué.
 
-Toutes les fréquences sont désormais acceptées, y compris les fréquences supra-journalières (mensuelle, trimestrielle, annuelle). Un traitement différencié est appliqué selon le type de paramètre :
-
-### Paramètres cumulatifs (volumes)
-Les paramètres **volume prélevé** et **volume restitué** avec une fréquence > 1 jour sont automatiquement expansés en valeurs journalières :
-- La valeur est divisée uniformément par le nombre de jours de la période (gestion des années bissextiles)
-- Chaque valeur journalisée conserve les métadonnées d'origine (`originalValue`, `originalDate`, `originalFrequency`, `daysCovered`)
-- La série résultante a `frequency: '1 day'` et `originalFrequency: '1 month'` (ou autre)
-
-### Paramètres non-cumulatifs
-Les autres paramètres (température, pH, débit, conductivité, etc.) conservent leur fréquence d'origine sans expansion.
-
-Chaque étape peut ajouter des messages de validation, toujours encapsulés dans la propriété `errors`.
+Toutes les fréquences sont acceptées, y compris les fréquences supra-journalières (mensuelle, trimestrielle, annuelle).
 
 ## Structure du retour
 
-- `data.series[]` regroupe les séries prêtes à être exploitées : chaque entrée expose l'identifiant du point de prélèvement, le paramètre mesuré, l'unité, la fréquence, la nature de la valeur (`valueType`) ainsi que les bornes temporelles (`minDate`, `maxDate`). Pour les séries expansées depuis une fréquence > 1 jour, le champ `originalFrequency` indique la fréquence d'origine.
+- `data.series[]` regroupe les séries prêtes à être exploitées : chaque entrée expose l'identifiant du point de prélèvement, le paramètre mesuré, l'unité, la fréquence, la nature de la valeur (`valueType`) ainsi que les bornes temporelles (`minDate`, `maxDate`).
 - `rawData` contient les éléments intermédiaires : métadonnées issues des onglets, lignes interprétées, en-têtes normalisés, etc. Cette structure facilite le diagnostic en cas d'erreur et permet des traitements spécifiques côté application.
 - `errors[]` référence les erreurs et avertissements. Un message peut inclure une `explanation` destinée à l'utilisateur et, parfois, un `internalMessage` utile pour la traçabilité technique.
 
