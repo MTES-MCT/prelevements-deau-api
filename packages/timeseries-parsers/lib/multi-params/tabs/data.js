@@ -265,8 +265,18 @@ function extractParameterRows(dataRows, {paramIndex, paramName, unit, errorColle
     }
 
     if (unitConfig && !isWithinBounds(valeur, unitConfig)) {
+      const {min, max} = unitConfig
+      let boundsInfo = ''
+      if (min !== undefined && max !== undefined) {
+        boundsInfo = ` (min: ${min}, max: ${max})`
+      } else if (max !== undefined) {
+        boundsInfo = ` (max: ${max})`
+      } else if (min !== undefined) {
+        boundsInfo = ` (min: ${min})`
+      }
+
       errorCollector.addSingleError({
-        message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}`
+        message: `Valeur incorrecte pour le paramètre '${paramName}' à la date ${row.date} et à l'heure ${row.heure} : ${valeur}${boundsInfo}`
       })
     } else {
       rows.push({
