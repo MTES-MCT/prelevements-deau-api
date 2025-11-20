@@ -75,7 +75,7 @@ Le projet dispose de nombreux scripts pour la gestion, la synchronisation et la 
 **Principaux scripts :**
 - `resync-all-dossiers` : resynchronise tous les dossiers depuis DS (première sync ou resync complète)
 - `sync-updated-dossiers` : synchronise uniquement les dossiers modifiés
-- `reprocess-all-attachments` : retraite tous les attachments en erreur
+- `reprocess-all-attachments` : retraite tous les attachments
 - `reconsolidate-all-dossiers` : force la reconsolidation de tous les dossiers
 - `trigger-scheduled-job` : lance manuellement un job schedulé (cron)
 - `validate-declaration-file` : valide un fichier avant import

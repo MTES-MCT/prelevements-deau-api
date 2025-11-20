@@ -1,15 +1,15 @@
 import 'dotenv/config'
 import mongo from '../lib/util/mongo.js'
 import {closeConnection} from '../lib/queues/config.js'
-import {getUnprocessedAttachments} from '../lib/models/dossier.js'
+import {getAllAttachments} from '../lib/models/dossier.js'
 import {markAttachmentForReprocessing} from '../lib/services/dossier.js'
 
 // Connect to MongoDB
 await mongo.connect()
 
 async function main() {
-  const attachments = await getUnprocessedAttachments()
-  console.log(`Retraitement de ${attachments.length} attachments`)
+  const attachments = await getAllAttachments()
+  console.log(`Retraitement de tous les ${attachments.length} attachments`)
 
   let successCount = 0
   let errorCount = 0
