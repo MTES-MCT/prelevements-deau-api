@@ -1,7 +1,8 @@
 import 'dotenv/config'
 import mongo from '../lib/util/mongo.js'
 import {closeConnection} from '../lib/queues/config.js'
-import {getAllDossiers, markDossierForReconsolidation} from '../lib/models/dossier.js'
+import {getAllDossiers} from '../lib/models/dossier.js'
+import {markDossierForReconsolidation} from '../lib/services/dossier.js'
 
 // Connect to MongoDB
 await mongo.connect()

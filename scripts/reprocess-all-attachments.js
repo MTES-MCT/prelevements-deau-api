@@ -1,7 +1,8 @@
 import 'dotenv/config'
 import mongo from '../lib/util/mongo.js'
 import {closeConnection} from '../lib/queues/config.js'
-import {getUnprocessedAttachments, markAttachmentForReprocessing} from '../lib/models/dossier.js'
+import {getUnprocessedAttachments} from '../lib/models/dossier.js'
+import {markAttachmentForReprocessing} from '../lib/services/dossier.js'
 
 // Connect to MongoDB
 await mongo.connect()
