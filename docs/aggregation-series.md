@@ -52,6 +52,7 @@ GET /aggregated-series/options?preleveurId=42
       "temporalOperators": ["sum"],
       "defaultSpatialOperator": "sum",
       "defaultTemporalOperator": "sum",
+      "hasTemporalOverlap": false,
       "minDate": "2023-01-01",
       "maxDate": "2024-12-31",
       "seriesCount": 5
@@ -64,6 +65,7 @@ GET /aggregated-series/options?preleveurId=42
       "temporalOperators": ["mean", "min", "max"],
       "defaultSpatialOperator": "sum",
       "defaultTemporalOperator": "mean",
+      "hasTemporalOverlap": true,
       "minDate": "2023-01-01",
       "maxDate": "2024-12-31",
       "seriesCount": 3
@@ -79,7 +81,11 @@ GET /aggregated-series/options?preleveurId=42
 }
 ```
 
+**Champ `hasTemporalOverlap`** : Indique si plusieurs séries du paramètre ont des données simultanées (plusieurs préleveurs actifs en même temps). Si `true` et que le paramètre ne supporte pas `sum` en spatial (température, chimie, piézométrie), une erreur 400 sera retournée lors de l'agrégation.
+
 **Note importante** : Cette route ne récupère que les séries avec des données intégrées (`computed.integratedDays`). Les dates retournées correspondent aux dates réellement consolidées dans le système.
+
+**Fail-fast sur overlap** : Si plusieurs séries d'un même paramètre ont des périodes qui se chevauchent (plusieurs préleveurs actifs simultanément) ET que le paramètre ne supporte pas `sum` en spatial (température, chimie, piézométrie), une erreur 400 est retournée. Ces paramètres ne peuvent être agrégés que temporellement, pas spatialement.
 
 ## Agrégation spatiale vs temporelle
 
@@ -96,9 +102,8 @@ Combine les valeurs de **plusieurs points à un même instant** (phase 6 du trai
 - **Résultat spatial** : 37 L/s (sum)
 
 **Opérateurs autorisés selon le paramètre** :
-- **Volumes** : `sum` (volume total prélevé)
-- **Débits** : `sum` (débit total)
-- **Autres paramètres** (température, chimie, piézométrie) : `mean`, `min`, `max` uniquement
+- **Volumes et débits** : `sum` uniquement (agrégation spatiale cohérente)
+- **Autres paramètres** (température, chimie, piézométrie) : **aucun opérateur spatial** (pas d'agrégation possible si overlap temporel)
 
 ### Agrégation temporelle
 
@@ -401,6 +406,19 @@ const useAggregates = hasSubDailySeries && !needsRawValues
 - Dates invalides (format ou chronologie)
 - Paramètre non supporté
 
+### Paramètre non éligible (400)
+
+```json
+{
+  "code": 400,
+  "message": "Le paramètre 'température' ne peut pas être agrégé spatialement car plusieurs séries ont des données simultanées sur les points sélectionnés. Ce paramètre ne supporte que les opérateurs : mean, min, max."
+}
+```
+
+**Cause** : Le paramètre demandé a des séries avec overlap temporel (plusieurs préleveurs actifs en même temps) et ne supporte pas l'opérateur `sum` en spatial. L'agrégation spatiale n'a pas de sens métier pour ce paramètre.
+
+**Solution** : Utiliser `/aggregated-series/options` pour obtenir uniquement les paramètres éligibles.
+
 ### Accès non autorisé (403)
 
 ```json
@@ -531,17 +549,17 @@ export const parametersConfig = {
   },
   'niveau piézométrique': {
     valueType: 'instantaneous',
-    spatialOperators: ['mean', 'min', 'max'],
+    spatialOperators: [],
     temporalOperators: ['mean', 'min', 'max'],
-    defaultSpatialOperator: 'mean',
+    defaultSpatialOperator: null,
     defaultTemporalOperator: 'mean',
     unit: 'm NGF'
   },
   'pH': {
     valueType: 'instantaneous',
-    spatialOperators: ['mean', 'min', 'max'],
+    spatialOperators: [],
     temporalOperators: ['mean', 'min', 'max'],
-    defaultSpatialOperator: 'mean',
+    defaultSpatialOperator: null,
     defaultTemporalOperator: 'mean',
     unit: '',
     warning: 'Échelle logarithmique : la moyenne arithmétique n\'est pas appropriée'
@@ -565,18 +583,18 @@ export const parametersConfig = {
 ```javascript
 'température': {
   valueType: 'instantaneous',
-  spatialOperators: ['mean', 'min', 'max'],
+  spatialOperators: [],
   temporalOperators: ['mean', 'min', 'max'],
-  defaultSpatialOperator: 'mean',
+  defaultSpatialOperator: null,
   defaultTemporalOperator: 'mean',
   unit: '°C'
 }
 ```
 
 **Règles métier** :
-- **Volumes** (cumulatifs) : `sum` autorisé spatial et temporal (données = incréments)
-- **Débits** (instantanés) : `sum` spatial uniquement (débit total), `mean/min/max` temporal
-- **Autres paramètres instantanés** : `mean/min/max` spatial et temporal, pas de `sum`
+- **Volumes et débits** : `sum` spatial uniquement (agrégation cohérente : volume total, débit total)
+- **Autres paramètres** (température, chimie, piézométrie) : **pas d'opérateurs spatiaux** - seule l'agrégation temporelle est possible
+- **Séries consécutives sans overlap** : Si plusieurs séries d'un paramètre sans opérateurs spatiaux sont consécutives dans le temps (pas de chevauchement), elles sont automatiquement concaténées
 
 ## Cas d'usage avancés
 
