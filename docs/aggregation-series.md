@@ -48,6 +48,10 @@ GET /aggregated-series/options?preleveurId=42
       "name": "volume prélevé",
       "unit": "m3",
       "valueType": "cumulative",
+      "spatialOperators": ["sum"],
+      "temporalOperators": ["sum"],
+      "defaultSpatialOperator": "sum",
+      "defaultTemporalOperator": "sum",
       "minDate": "2023-01-01",
       "maxDate": "2024-12-31",
       "seriesCount": 5
@@ -56,6 +60,10 @@ GET /aggregated-series/options?preleveurId=42
       "name": "débit prélevé",
       "unit": "L/s",
       "valueType": "instantaneous",
+      "spatialOperators": ["sum"],
+      "temporalOperators": ["mean", "min", "max"],
+      "defaultSpatialOperator": "sum",
+      "defaultTemporalOperator": "mean",
       "minDate": "2023-01-01",
       "maxDate": "2024-12-31",
       "seriesCount": 3
@@ -73,6 +81,42 @@ GET /aggregated-series/options?preleveurId=42
 
 **Note importante** : Cette route ne récupère que les séries avec des données intégrées (`computed.integratedDays`). Les dates retournées correspondent aux dates réellement consolidées dans le système.
 
+## Agrégation spatiale vs temporelle
+
+Le système distingue **deux types d'agrégation** avec des opérateurs différents :
+
+### Agrégation spatiale (multi-points)
+
+Combine les valeurs de **plusieurs points à un même instant** (phase 6 du traitement).
+
+**Exemple** : Débit total d'une installation avec 3 captages
+- Point A : 10 L/s
+- Point B : 15 L/s
+- Point C : 12 L/s
+- **Résultat spatial** : 37 L/s (sum)
+
+**Opérateurs autorisés selon le paramètre** :
+- **Volumes** : `sum` (volume total prélevé)
+- **Débits** : `sum` (débit total)
+- **Autres paramètres** (température, chimie, piézométrie) : `mean`, `min`, `max` uniquement
+
+### Agrégation temporelle
+
+Combine les valeurs d'une **même série sur plusieurs périodes** (phase 7 du traitement).
+
+**Exemple** : Débit moyen mensuel à partir de valeurs journalières
+- Jour 1 : 10 L/s
+- Jour 2 : 12 L/s
+- Jour 3 : 11 L/s
+- **Résultat temporal** : 11 L/s (mean)
+
+**Opérateurs autorisés selon le paramètre** :
+- **Volumes** : `sum` (cumul de la période)
+- **Débits** : `mean`, `min`, `max` uniquement (pas de sum)
+- **Autres paramètres** : `mean`, `min`, `max` uniquement
+
+**Note importante** : La somme (`sum`) sur des débits n'a pas de sens temporellement (on ne peut pas additionner des débits dans le temps), mais elle est valide spatialement (débit total de plusieurs points).
+
 ## Modes d'utilisation
 
 Le système propose **3 modes d'opération** distincts :
@@ -82,7 +126,7 @@ Le système propose **3 modes d'opération** distincts :
 Agrégation sur une liste définie de points de prélèvement.
 
 ```bash
-GET /aggregated-series?pointIds=207,208,209&parameter=volume prélevé&operator=sum&aggregationFrequency=1 month
+GET /aggregated-series?pointIds=207,208,209&parameter=volume prélevé&spatialOperator=sum&temporalOperator=sum&aggregationFrequency=1 month
 ```
 
 **Cas d'usage** : Analyse d'un groupe spécifique de points (zone géographique, type d'ouvrage, etc.)
@@ -92,7 +136,7 @@ GET /aggregated-series?pointIds=207,208,209&parameter=volume prélevé&operator=
 Agrégation sur l'ensemble des points exploités par un préleveur.
 
 ```bash
-GET /aggregated-series?preleveurId=42&parameter=volume prélevé&operator=sum&aggregationFrequency=1 month
+GET /aggregated-series?preleveurId=42&parameter=volume prélevé&spatialOperator=sum&temporalOperator=sum&aggregationFrequency=1 month
 ```
 
 **Cas d'usage** : Bilan global d'un préleveur, suivi de sa consommation totale.
@@ -102,7 +146,7 @@ GET /aggregated-series?preleveurId=42&parameter=volume prélevé&operator=sum&ag
 Agrégation sur un sous-ensemble des points d'un préleveur.
 
 ```bash
-GET /aggregated-series?preleveurId=42&pointIds=207,208&parameter=volume prélevé&operator=sum&aggregationFrequency=1 month
+GET /aggregated-series?preleveurId=42&pointIds=207,208&parameter=volume prélevé&spatialOperator=sum&temporalOperator=sum&aggregationFrequency=1 month
 ```
 
 **Cas d'usage** : Analyse d'une partie des installations d'un préleveur (ex : uniquement les captages en nappe).
@@ -165,11 +209,18 @@ pointIds=207,507f1f77bcf86cd799439011,209
 
 | Paramètre | Type | Description | Défaut |
 |-----------|------|-------------|--------|
-| `operator` | string | Opérateur d'agrégation (sum, mean, min, max) | Défini par le paramètre* |
+| `spatialOperator` | string | Opérateur d'agrégation spatiale (sum, mean, min, max) | Défini par le paramètre* |
+| `temporalOperator` | string | Opérateur d'agrégation temporelle (sum, mean, min, max) | Défini par le paramètre* |
+| `operator` | string | Opérateur unique (rétrocompatibilité) - utilisé si spatialOperator/temporalOperator non fournis | Défini par le paramètre* |
 | `startDate` | string | Date de début (YYYY-MM-DD) | Toutes les données |
 | `endDate` | string | Date de fin (YYYY-MM-DD) | Toutes les données |
 
-\* *Opérateur par défaut selon le paramètre (ex: sum pour "volume prélevé").*
+\* *Opérateurs par défaut selon le paramètre (ex: sum/sum pour "volume prélevé", sum/mean pour "débit prélevé").*
+
+**Note sur les opérateurs** :
+- Si seul `operator` est fourni, il sera utilisé pour les deux phases (spatial et temporal)
+- Si `spatialOperator` et/ou `temporalOperator` sont fournis, ils ont la priorité sur `operator`
+- La validation vérifie que chaque opérateur est autorisé dans son contexte
 
 ## Architecture du code
 
@@ -384,7 +435,8 @@ const useAggregates = hasSubDailySeries && !needsRawValues
   "metadata": {
     "parameter": "volume prélevé",
     "unit": "m3",
-    "operator": "sum",
+    "spatialOperator": "sum",
+    "temporalOperator": "sum",
     "frequency": "1 month",
     "startDate": "2024-01-01",
     "endDate": "2024-12-31",
@@ -460,26 +512,41 @@ Lorsque `preleveurId` est utilisé :
 Les paramètres supportés sont définis dans `lib/parameters-config.js` :
 
 ```javascript
-export const PARAMETERS_CONFIG = {
+export const parametersConfig = {
   'volume prélevé': {
     valueType: 'cumulative',
-    operators: ['sum', 'mean', 'min', 'max'],
-    defaultOperator: 'sum',
+    spatialOperators: ['sum'],
+    temporalOperators: ['sum'],
+    defaultSpatialOperator: 'sum',
+    defaultTemporalOperator: 'sum',
     unit: 'm3'
   },
   'débit prélevé': {
     valueType: 'instantaneous',
-    operators: ['mean', 'min', 'max'],
-    defaultOperator: 'mean',
-    unit: 'm3/h'
+    spatialOperators: ['sum'],
+    temporalOperators: ['mean', 'min', 'max'],
+    defaultSpatialOperator: 'sum',
+    defaultTemporalOperator: 'mean',
+    unit: 'L/s'
   },
-  'niveau': {
+  'niveau piézométrique': {
     valueType: 'instantaneous',
-    operators: ['mean', 'min', 'max'],
-    defaultOperator: 'mean',
-    unit: 'm'
+    spatialOperators: ['mean', 'min', 'max'],
+    temporalOperators: ['mean', 'min', 'max'],
+    defaultSpatialOperator: 'mean',
+    defaultTemporalOperator: 'mean',
+    unit: 'm NGF'
+  },
+  'pH': {
+    valueType: 'instantaneous',
+    spatialOperators: ['mean', 'min', 'max'],
+    temporalOperators: ['mean', 'min', 'max'],
+    defaultSpatialOperator: 'mean',
+    defaultTemporalOperator: 'mean',
+    unit: '',
+    warning: 'Échelle logarithmique : la moyenne arithmétique n\'est pas appropriée'
   }
-  // ... 10 autres paramètres
+  // ... 9 autres paramètres
 }
 ```
 
@@ -487,20 +554,29 @@ export const PARAMETERS_CONFIG = {
 
 1. Ajouter la configuration dans `parameters-config.js`
 2. Définir le `valueType` (cumulative ou instantaneous)
-3. Lister les opérateurs compatibles
-4. Définir l'opérateur par défaut
-5. Spécifier l'unité
+3. Lister les opérateurs spatiaux compatibles (`spatialOperators`)
+4. Lister les opérateurs temporels compatibles (`temporalOperators`)
+5. Définir les opérateurs par défaut (`defaultSpatialOperator`, `defaultTemporalOperator`)
+6. Spécifier l'unité
+7. Ajouter un `warning` si nécessaire (ex: échelle logarithmique)
 
 **Exemple** :
 
 ```javascript
 'température': {
   valueType: 'instantaneous',
-  operators: ['mean', 'min', 'max'],
-  defaultOperator: 'mean',
+  spatialOperators: ['mean', 'min', 'max'],
+  temporalOperators: ['mean', 'min', 'max'],
+  defaultSpatialOperator: 'mean',
+  defaultTemporalOperator: 'mean',
   unit: '°C'
 }
 ```
+
+**Règles métier** :
+- **Volumes** (cumulatifs) : `sum` autorisé spatial et temporal (données = incréments)
+- **Débits** (instantanés) : `sum` spatial uniquement (débit total), `mean/min/max` temporal
+- **Autres paramètres instantanés** : `mean/min/max` spatial et temporal, pas de `sum`
 
 ## Cas d'usage avancés
 
@@ -513,7 +589,8 @@ curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:5000/aggregated-series?\
 pointIds=207,208,209,210,211&\
 parameter=volume%20prélevé&\
-operator=sum&\
+spatialOperator=sum&\
+temporalOperator=sum&\
 aggregationFrequency=1%20month&\
 startDate=2024-01-01&\
 endDate=2024-12-31"
@@ -525,18 +602,30 @@ Comparer les consommations de plusieurs préleveurs (requêtes séparées) :
 
 ```bash
 # Préleveur A
-curl ... "?preleveurId=42&parameter=volume prélevé&operator=sum&..."
+curl ... "?preleveurId=42&parameter=volume prélevé&spatialOperator=sum&temporalOperator=sum&..."
 
 # Préleveur B
-curl ... "?preleveurId=43&parameter=volume prélevé&operator=sum&..."
+curl ... "?preleveurId=43&parameter=volume prélevé&spatialOperator=sum&temporalOperator=sum&..."
+```
+
+### Analyse de débit : total spatial, moyenne temporelle
+
+Obtenir le débit total d'une installation (somme spatiale) avec moyennes mensuelles (temporelle) :
+
+```bash
+curl ... "?pointIds=207,208,209&parameter=débit%20prélevé&\
+spatialOperator=sum&\
+temporalOperator=mean&\
+aggregationFrequency=1%20month&startDate=2024-01-01&endDate=2024-12-31"
 ```
 
 ### Analyse horaire fine
 
-Observer les variations horaires de débit sur un point :
+Observer les variations horaires de débit sur un point (pas d'agrégation spatiale) :
 
 ```bash
-curl ... "?pointIds=207&parameter=débit&operator=mean&\
+curl ... "?pointIds=207&parameter=débit%20prélevé&\
+temporalOperator=mean&\
 aggregationFrequency=1%20hour&startDate=2024-06-15&endDate=2024-06-15"
 ```
 
