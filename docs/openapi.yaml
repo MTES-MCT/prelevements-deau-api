@@ -951,6 +951,51 @@ paths:
                           type: integer
                           description: Nombre de séries disponibles pour ce paramètre
                           example: 5
+                        spatialOperators:
+                          type: array
+                          items:
+                            type: string
+                            enum: [sum, mean, min, max]
+                          description: Opérateurs d'agrégation spatiale disponibles pour ce paramètre
+                          example: ["sum"]
+                        temporalOperators:
+                          type: array
+                          items:
+                            type: string
+                            enum: [sum, mean, min, max]
+                          description: Opérateurs d'agrégation temporelle disponibles pour ce paramètre
+                          example: ["sum"]
+                        defaultSpatialOperator:
+                          type: string
+                          enum: [sum, mean, min, max]
+                          nullable: true
+                          description: Opérateur spatial par défaut
+                          example: "sum"
+                        defaultTemporalOperator:
+                          type: string
+                          enum: [sum, mean, min, max]
+                          nullable: true
+                          description: Opérateur temporel par défaut
+                          example: "sum"
+                        availableFrequencies:
+                          type: array
+                          items:
+                            type: string
+                            enum: ["15 minutes", "1 hour", "6 hours", "1 day", "1 month", "1 quarter", "1 year"]
+                          description: |
+                            Fréquences d'agrégation disponibles pour ce paramètre.
+                            - Paramètres cumulatifs : ['1 day', '1 month', '1 quarter', '1 year'] (expansés à 1 jour minimum)
+                            - Paramètres instantanés : toutes les fréquences disponibles
+                          example: ["1 day", "1 month", "1 quarter", "1 year"]
+                        hasTemporalOverlap:
+                          type: boolean
+                          description: Indique si plusieurs séries ont des données simultanées (overlap temporel)
+                          example: false
+                        warning:
+                          type: string
+                          nullable: true
+                          description: Avertissement éventuel sur les calculs pour ce paramètre
+                          example: null
                   points:
                     type: array
                     description: Liste des points résolus inclus dans la réponse
@@ -976,12 +1021,26 @@ paths:
                       - name: "débit prélevé"
                         unit: "L/s"
                         valueType: "instantaneous"
+                        spatialOperators: ["sum"]
+                        temporalOperators: ["mean", "min", "max"]
+                        defaultSpatialOperator: "sum"
+                        defaultTemporalOperator: "mean"
+                        availableFrequencies: ["15 minutes", "1 hour", "6 hours", "1 day", "1 month", "1 quarter", "1 year"]
+                        hasTemporalOverlap: false
+                        warning: null
                         minDate: "2023-01-01"
                         maxDate: "2024-12-31"
                         seriesCount: 3
                       - name: "volume prélevé"
                         unit: "m³"
                         valueType: "cumulative"
+                        spatialOperators: ["sum"]
+                        temporalOperators: ["sum"]
+                        defaultSpatialOperator: "sum"
+                        defaultTemporalOperator: "sum"
+                        availableFrequencies: ["1 day", "1 month", "1 quarter", "1 year"]
+                        hasTemporalOverlap: false
+                        warning: null
                         minDate: "2023-01-01"
                         maxDate: "2024-12-31"
                         seriesCount: 5
