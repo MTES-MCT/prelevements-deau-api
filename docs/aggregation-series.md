@@ -408,14 +408,11 @@ const useAggregates = hasSubDailySeries && !needsRawValues
 
 ### Paramètre non éligible (400)
 
-```json
-{
-  "code": 400,
-  "message": "Le paramètre 'température' ne peut pas être agrégé spatialement car plusieurs séries ont des données simultanées sur les points sélectionnés. Ce paramètre ne supporte que les opérateurs : mean, min, max."
-}
-```
+**Cause** : Le paramètre demandé a des séries avec overlap temporel (plusieurs préleveurs actifs en même temps) et ne supporte pas l'agrégation spatiale. L'agrégation spatiale n'a pas de sens métier pour ce paramètre.
 
-**Cause** : Le paramètre demandé a des séries avec overlap temporel (plusieurs préleveurs actifs en même temps) et ne supporte pas l'opérateur `sum` en spatial. L'agrégation spatiale n'a pas de sens métier pour ce paramètre.
+**Solution** : Utiliser `/aggregated-series/options` pour obtenir uniquement les paramètres éligibles.
+
+**Note** : Le message d'erreur exact est généré dynamiquement par le code selon le contexte.
 
 **Solution** : Utiliser `/aggregated-series/options` pour obtenir uniquement les paramètres éligibles.
 
@@ -527,74 +524,33 @@ Lorsque `preleveurId` est utilisé :
 
 ## Configuration des paramètres
 
-Les paramètres supportés sont définis dans `lib/parameters-config.js` :
+Les paramètres supportés sont définis dans `lib/parameters-config.js`.
 
-```javascript
-export const parametersConfig = {
-  'volume prélevé': {
-    valueType: 'cumulative',
-    spatialOperators: ['sum'],
-    temporalOperators: ['sum'],
-    defaultSpatialOperator: 'sum',
-    defaultTemporalOperator: 'sum',
-    unit: 'm3'
-  },
-  'débit prélevé': {
-    valueType: 'instantaneous',
-    spatialOperators: ['sum'],
-    temporalOperators: ['mean', 'min', 'max'],
-    defaultSpatialOperator: 'sum',
-    defaultTemporalOperator: 'mean',
-    unit: 'L/s'
-  },
-  'niveau piézométrique': {
-    valueType: 'instantaneous',
-    spatialOperators: [],
-    temporalOperators: ['mean', 'min', 'max'],
-    defaultSpatialOperator: null,
-    defaultTemporalOperator: 'mean',
-    unit: 'm NGF'
-  },
-  'pH': {
-    valueType: 'instantaneous',
-    spatialOperators: [],
-    temporalOperators: ['mean', 'min', 'max'],
-    defaultSpatialOperator: null,
-    defaultTemporalOperator: 'mean',
-    unit: '',
-    warning: 'Échelle logarithmique : la moyenne arithmétique n\'est pas appropriée'
-  }
-  // ... 9 autres paramètres
-}
-```
+**Structure de configuration** :
+- `valueType` : `'cumulative'` (incréments) ou `'instantaneous'` (valeurs ponctuelles)
+- `spatialOperators` : Liste des opérateurs spatiaux autorisés (`['sum']` ou `[]`)
+- `temporalOperators` : Liste des opérateurs temporels autorisés
+- `defaultSpatialOperator` : Opérateur spatial par défaut (`'sum'` ou `null`)
+- `defaultTemporalOperator` : Opérateur temporel par défaut
+- `unit` : Unité de mesure
+- `warning` : Avertissement optionnel (ex: pH avec échelle logarithmique)
+
+**Catégories** :
+- **Volumes** : `spatialOperators: ['sum']`, `temporalOperators: ['sum']`
+- **Débits** : `spatialOperators: ['sum']`, `temporalOperators: ['mean', 'min', 'max']`
+- **Autres paramètres** : `spatialOperators: []`, `temporalOperators: ['mean', 'min', 'max']`
 
 ### Ajout d'un nouveau paramètre
 
-1. Ajouter la configuration dans `parameters-config.js`
-2. Définir le `valueType` (cumulative ou instantaneous)
-3. Lister les opérateurs spatiaux compatibles (`spatialOperators`)
-4. Lister les opérateurs temporels compatibles (`temporalOperators`)
-5. Définir les opérateurs par défaut (`defaultSpatialOperator`, `defaultTemporalOperator`)
-6. Spécifier l'unité
-7. Ajouter un `warning` si nécessaire (ex: échelle logarithmique)
+1. Ajouter la configuration dans `lib/parameters-config.js` en suivant la structure documentée ci-dessus
+2. Appliquer les règles métier :
+   - **Volumes et débits** : `spatialOperators: ['sum']` (agrégation cohérente)
+   - **Autres paramètres** : `spatialOperators: []` (pas d'agrégation spatiale)
+3. Vérifier que les tests passent : `npm test`
 
-**Exemple** :
-
-```javascript
-'température': {
-  valueType: 'instantaneous',
-  spatialOperators: [],
-  temporalOperators: ['mean', 'min', 'max'],
-  defaultSpatialOperator: null,
-  defaultTemporalOperator: 'mean',
-  unit: '°C'
-}
-```
-
-**Règles métier** :
-- **Volumes et débits** : `sum` spatial uniquement (agrégation cohérente : volume total, débit total)
-- **Autres paramètres** (température, chimie, piézométrie) : **pas d'opérateurs spatiaux** - seule l'agrégation temporelle est possible
-- **Séries consécutives sans overlap** : Si plusieurs séries d'un paramètre sans opérateurs spatiaux sont consécutives dans le temps (pas de chevauchement), elles sont automatiquement concaténées
+**Comportement** :
+- **Séries avec overlap** : Erreur 400 si paramètre sans opérateurs spatiaux
+- **Séries consécutives** : Concaténation automatique sans erreur
 
 ## Cas d'usage avancés
 
