@@ -214,18 +214,14 @@ pointIds=207,507f1f77bcf86cd799439011,209
 
 | Paramètre | Type | Description | Défaut |
 |-----------|------|-------------|--------|
-| `spatialOperator` | string | Opérateur d'agrégation spatiale (sum, mean, min, max) | Défini par le paramètre* |
+| `spatialOperator` | string | Opérateur d'agrégation spatiale (sum uniquement pour volumes/débits) | Défini par le paramètre* |
 | `temporalOperator` | string | Opérateur d'agrégation temporelle (sum, mean, min, max) | Défini par le paramètre* |
-| `operator` | string | Opérateur unique (rétrocompatibilité) - utilisé si spatialOperator/temporalOperator non fournis | Défini par le paramètre* |
 | `startDate` | string | Date de début (YYYY-MM-DD) | Toutes les données |
 | `endDate` | string | Date de fin (YYYY-MM-DD) | Toutes les données |
 
 \* *Opérateurs par défaut selon le paramètre (ex: sum/sum pour "volume prélevé", sum/mean pour "débit prélevé").*
 
-**Note sur les opérateurs** :
-- Si seul `operator` est fourni, il sera utilisé pour les deux phases (spatial et temporal)
-- Si `spatialOperator` et/ou `temporalOperator` sont fournis, ils ont la priorité sur `operator`
-- La validation vérifie que chaque opérateur est autorisé dans son contexte
+**Note** : La validation vérifie que chaque opérateur est autorisé dans son contexte (spatial vs temporal).
 
 ## Architecture du code
 
@@ -413,8 +409,6 @@ const useAggregates = hasSubDailySeries && !needsRawValues
 **Solution** : Utiliser `/aggregated-series/options` pour obtenir uniquement les paramètres éligibles.
 
 **Note** : Le message d'erreur exact est généré dynamiquement par le code selon le contexte.
-
-**Solution** : Utiliser `/aggregated-series/options` pour obtenir uniquement les paramètres éligibles.
 
 ### Accès non autorisé (403)
 
