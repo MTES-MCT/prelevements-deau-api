@@ -114,6 +114,7 @@ components:
             nom: { type: string }
     PointPrelevementLight:
       type: object
+      description: Point de prélèvement (non décoré, sans usages ni préleveurs)
       properties:
         _id: { $ref: '#/components/schemas/ObjectId' }
         id_point: { type: integer }
@@ -123,6 +124,33 @@ components:
           nullable: true
           properties:
             nom: { type: string, nullable: true }
+    PointPrelevementDecorated:
+      type: object
+      description: Point de prélèvement décoré avec usages, préleveurs et statut des exploitations
+      allOf:
+        - $ref: '#/components/schemas/PointPrelevementLight'
+        - type: object
+          properties:
+            preleveurs:
+              type: array
+              description: Liste des préleveurs associés au point via les exploitations
+              items: { $ref: '#/components/schemas/PreleveurLight' }
+            exploitationsStatus:
+              type: string
+              nullable: true
+              enum: ['En activité', 'Terminée', 'Abandonnée', 'Non renseigné']
+              description: Statut agrégé des exploitations du point
+            exploitationsStartDate:
+              type: string
+              format: date
+              nullable: true
+              description: Date de début de la plus ancienne exploitation
+            usages:
+              type: array
+              description: Liste unique des usages de toutes les exploitations du point
+              items:
+                type: string
+                enum: ['Eau potable', 'Agriculture', 'Industrie', 'Eau embouteillée', 'Thermalisme', 'Hydroélectricité', 'Autre', 'Non renseigné']
     PreleveurLight:
       type: object
       properties:
@@ -1102,16 +1130,16 @@ paths:
     get:
       tags: [Points]
       summary: Lister les points de prélèvement
-      description: Retourne la liste des points de prélèvement disponibles.
+      description: Retourne la liste des points de prélèvement disponibles avec leurs usages, préleveurs et statut.
       operationId: listPoints
       responses:
         '200':
-          description: Liste de points
+          description: Liste de points décorés
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/PointPrelevementLight' }
+                items: { $ref: '#/components/schemas/PointPrelevementDecorated' }
     post:
       tags: [Points]
       summary: Créer un point de prélèvement
@@ -1130,7 +1158,7 @@ paths:
     get:
       tags: [Points]
       summary: Obtenir un point
-      description: Retourne les métadonnées d'un point de prélèvement.
+      description: Retourne les métadonnées d'un point de prélèvement avec ses usages, préleveurs et statut.
       operationId: getPoint
       parameters:
         - in: path
@@ -1139,10 +1167,10 @@ paths:
           schema: { $ref: '#/components/schemas/ObjectId' }
       responses:
         '200':
-          description: Point
+          description: Point décoré
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PointPrelevementLight' }
+              schema: { $ref: '#/components/schemas/PointPrelevementDecorated' }
         '404': { description: Introuvable }
     put:
       tags: [Points]
@@ -1478,7 +1506,7 @@ paths:
     get:
       tags: [Préleveurs]
       summary: Lister les points d'un préleveur
-      description: Liste les points rattachés à un préleveur.
+      description: Liste les points rattachés à un préleveur avec leurs usages, préleveurs et statut.
       operationId: listPreleveurPoints
       parameters:
         - in: path
@@ -1487,12 +1515,12 @@ paths:
           schema: { $ref: '#/components/schemas/ObjectId' }
       responses:
         '200':
-          description: Liste de points
+          description: Liste de points décorés
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/PointPrelevementLight' }
+                items: { $ref: '#/components/schemas/PointPrelevementDecorated' }
   /preleveurs/{preleveurId}/exploitations:
     get:
       tags: [Préleveurs]
@@ -1624,7 +1652,7 @@ paths:
     get:
       tags: [Territoires]
       summary: Points d'un territoire
-      description: Liste les points de prélèvement appartenant à un territoire.
+      description: Liste les points de prélèvement appartenant à un territoire avec leurs usages, préleveurs et statut.
       operationId: listTerritoirePoints
       parameters:
         - in: path
@@ -1633,12 +1661,12 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: Liste de points
+          description: Liste de points décorés
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/PointPrelevementLight' }
+                items: { $ref: '#/components/schemas/PointPrelevementDecorated' }
   /territoires/{codeTerritoire}/preleveurs:
     get:
       tags: [Territoires]
