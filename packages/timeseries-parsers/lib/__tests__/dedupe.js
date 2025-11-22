@@ -10,7 +10,7 @@ test('dedupe - supprime doublons journaliers et ajoute warning', t => {
         {
           pointPrelevement: 1,
           parameter: 'volume prélevé',
-          unit: 'm3',
+          unit: 'm³',
           frequency: '1 day',
           valueType: 'cumulative',
           minDate: '2025-01-01',
@@ -39,7 +39,7 @@ test('dedupe - supprime doublons sub-daily et ajoute warning', t => {
         {
           pointPrelevement: 2,
           parameter: 'volume prélevé',
-          unit: 'm3',
+          unit: 'm³',
           frequency: '15 minutes',
           valueType: 'cumulative',
           minDate: '2025-01-01',

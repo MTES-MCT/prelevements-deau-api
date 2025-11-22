@@ -37,7 +37,7 @@ La liste exhaustive des messages possibles est disponible dans [`docs/validation
 `extractCamionCiterne` renvoie une unique série par point de prélèvement détecté :
 
 - `parameter` : `volume prélevé` ;
-- `unit` : `m3` ;
+- `unit` : `m³` ;
 - `frequency` : `1 day` ;
 - `valueType` : `cumulative` ;
 - `data[]` : couples `{date, value}` sans doublon.

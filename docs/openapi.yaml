@@ -174,7 +174,7 @@ components:
           items: { $ref: '#/components/schemas/ObjectId' }
           description: "Tableau d'ObjectIds des exploitations (décorées dans les réponses)"
         parametre: { type: string, description: "Paramètre de la règle (ex: VOLUME_PRELEVE)" }
-        unite: { type: string, description: "Unité de mesure (ex: m3)" }
+        unite: { type: string, description: "Unité de mesure (ex: m³)" }
         valeur: { type: number, description: "Valeur numérique de la contrainte" }
         contrainte: { type: string, description: "Type de contrainte (ex: MAX)" }
         debut_validite: { type: string, format: date, description: "Date de début de validité" }
@@ -707,7 +707,7 @@ paths:
                         type: string
                         nullable: true
                         description: Unité du paramètre
-                        example: "m3"
+                        example: "m³"
                       operator:
                         type: string
                         enum: [sum, mean, min, max]
@@ -929,7 +929,7 @@ paths:
                         unit:
                           type: string
                           description: Unité du paramètre
-                          example: "m3"
+                          example: "m³"
                         valueType:
                           type: string
                           enum: [cumulative, instantaneous]
@@ -980,7 +980,7 @@ paths:
                         maxDate: "2024-12-31"
                         seriesCount: 3
                       - name: "volume prélevé"
-                        unit: "m3"
+                        unit: "m³"
                         valueType: "cumulative"
                         minDate: "2023-01-01"
                         maxDate: "2024-12-31"
