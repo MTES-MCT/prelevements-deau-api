@@ -105,6 +105,17 @@ Combine les valeurs de **plusieurs points à un même instant** (phase 6 du trai
 - **Volumes et débits** : `sum` uniquement (agrégation spatiale cohérente)
 - **Autres paramètres** (température, chimie, piézométrie) : **aucun opérateur spatial** (pas d'agrégation possible si overlap temporel)
 
+**Note critique sur l'agrégation des débits** : Lors de l'agrégation spatiale de débits (plusieurs captages d'une même installation), seuls les points temporels où **toutes les sources ont une valeur valide** sont conservés. Si un captage a une valeur manquante ou invalide à un instant T, ce point temporel est **rejeté de l'agrégation** pour éviter de sous-estimer le débit total.
+
+**Exemple** :
+- Installation avec 2 captages
+- Captage 1 à 10h : 50 L/s, à 11h : valeur invalide (négative), à 12h : 55 L/s
+- Captage 2 à 10h : 60 L/s, à 11h : 62 L/s, à 12h : 65 L/s
+- **Résultat agrégé** : [10h: 110 L/s, 12h: 120 L/s]
+- Le point à 11h est absent car le captage 1 n'avait pas de valeur valide
+
+Cette règle garantit l'intégrité des données mais peut réduire significativement le nombre de points disponibles si les sources ont des périodes de défaillance décalées.
+
 ### Agrégation temporelle
 
 Combine les valeurs d'une **même série sur plusieurs périodes** (phase 7 du traitement).
