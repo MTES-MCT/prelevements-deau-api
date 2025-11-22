@@ -19,7 +19,7 @@ test('extractCamionCiterne - valid file', async t => {
       {
         pointPrelevement: 412,
         parameter: 'volume prélevé',
-        unit: 'm3',
+        unit: 'm³',
         frequency: '1 day',
         valueType: 'cumulative',
         minDate: '2025-01-01',
@@ -43,7 +43,7 @@ test('extractCamionCiterne - multi points valid file', async t => {
       {
         pointPrelevement: 412,
         parameter: 'volume prélevé',
-        unit: 'm3',
+        unit: 'm³',
         frequency: '1 day',
         valueType: 'cumulative',
         minDate: '2025-01-01',
@@ -58,7 +58,7 @@ test('extractCamionCiterne - multi points valid file', async t => {
       {
         pointPrelevement: 413,
         parameter: 'volume prélevé',
-        unit: 'm3',
+        unit: 'm³',
         frequency: '1 day',
         valueType: 'cumulative',
         minDate: '2025-01-01',

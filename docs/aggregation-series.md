@@ -46,7 +46,7 @@ GET /aggregated-series/options?preleveurId=42
   "parameters": [
     {
       "name": "volume prélevé",
-      "unit": "m3",
+      "unit": "m³",
       "valueType": "cumulative",
       "spatialOperators": ["sum"],
       "temporalOperators": ["sum"],
@@ -443,7 +443,7 @@ const useAggregates = hasSubDailySeries && !needsRawValues
 {
   "metadata": {
     "parameter": "volume prélevé",
-    "unit": "m3",
+    "unit": "m³",
     "spatialOperator": "sum",
     "temporalOperator": "sum",
     "frequency": "1 month",

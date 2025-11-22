@@ -337,7 +337,7 @@ function consolidateData(rawData) {
     return {
       pointPrelevement: header.code,
       parameter: 'volume prélevé',
-      unit: 'm3',
+      unit: 'm³',
       frequency: '1 day',
       valueType: 'cumulative',
       minDate: minBy(rows, 'date').date,
