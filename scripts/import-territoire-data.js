@@ -22,7 +22,7 @@ import {
   EXPLOITATIONS_REGLES_DEFINITION,
   EXPLOITATIONS_DOCUMENTS_DEFINITION
 } from '../lib/import/mapping.js'
-import {usages} from '../lib/nomenclature.js'
+import {usages} from '../lib/import/nomenclature.js'
 import {initSequence} from '../lib/util/sequences.js'
 
 import {bulkInsertPointsPrelevement, bulkDeletePointsPrelevement} from '../lib/models/point-prelevement.js'
