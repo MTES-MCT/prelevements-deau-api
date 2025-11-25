@@ -837,6 +837,21 @@ paths:
                           nullable: true
                           description: Valeur agrégée pour la période (null si aucune donnée)
                           example: 1250.5
+                        remarks:
+                          type: array
+                          items:
+                            type: string
+                          description: |
+                            Remarques de qualité des données pour cette période (optionnel, max 10 uniques).
+                            Indique le contexte ou la qualité des données agrégées :
+                            - "Estimation" : valeur estimée
+                            - "Compteur défectueux" : mesure douteuse
+                            - "Données partielles" : période incomplète
+                            
+                            Ce champ n'apparaît que si des remarques sont présentes dans les données sources.
+                            Les remarques sont compilées depuis toutes les valeurs qui ont contribué à l'agrégation,
+                            avec déduplication automatique.
+                          example: ["Estimation", "Compteur défectueux"]
         '400':
           description: Paramètres invalides
           content:
