@@ -481,7 +481,8 @@ const useAggregates = hasSubDailySeries && !needsRawValues
     },
     {
       "date": "2024-02",
-      "value": 980.3
+      "value": 980.3,
+      "remarks": ["Estimation", "Compteur défectueux"]
     }
   ]
 }
@@ -515,6 +516,33 @@ Lorsque `preleveurId` est utilisé :
   "data": []
 }
 ```
+
+**Remarques sur les données** :
+
+Le champ `remarks` dans les valeurs agrégées contient les remarques collectées depuis les données sources (max 10 uniques par période). Ces remarques indiquent la qualité ou le contexte des données :
+- `"Estimation"` : valeur estimée
+- `"Compteur défectueux"` : mesure douteuse
+- `"Données partielles"` : période incomplète
+- etc.
+
+Exemple avec remarques :
+```json
+{
+  "values": [
+    {
+      "date": "2024-01",
+      "value": 1250.5,
+      "remarks": ["Estimation (3 jours)", "Compteur défectueux (2 jours)"]
+    },
+    {
+      "date": "2024-02",
+      "value": 980.3
+    }
+  ]
+}
+```
+
+Si aucune remarque n'est présente dans les données sources, le champ `remarks` est absent.
 
 **Points non trouvés** (mode 1 ou 3) :
 
