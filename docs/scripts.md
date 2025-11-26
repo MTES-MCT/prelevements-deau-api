@@ -194,6 +194,37 @@ Sans argument, le script affiche la liste des jobs schedulés disponibles :
 npm run trigger-scheduled-job
 ```
 
+### `run-job-with-logs`
+
+Exécute directement un job handler spécifique avec logs en temps réel, **sans passer par BullMQ**.
+
+```bash
+npm run run-job-with-logs <nom-job> <donnees-json>
+```
+
+**Jobs disponibles :**
+- `consolidate-dossier` : Consolidation d'un dossier spécifique
+- `process-attachment` : Traitement d'une pièce jointe spécifique
+
+**Exemples :**
+```bash
+# Consolider un dossier avec logs détaillés
+npm run run-job-with-logs consolidate-dossier '{"dossierId":"6908db261a6a10831363dde3"}'
+
+# Traiter une pièce jointe avec logs détaillés
+npm run run-job-with-logs process-attachment '{"attachmentId":"6908db2679a0c1d0dd5b6fbe"}'
+```
+
+**Utilisation :** Debug, investigation de problèmes sur un dossier/attachment spécifique, ou test de modifications du code de consolidation.
+
+**Avantages :**
+- Exécution synchrone avec logs en temps réel dans le terminal
+- Pas besoin de lancer le worker
+- Pas de timeout
+- Idéal pour le développement et le débogage
+
+⚠️ **Note :** Ce script exécute directement le handler sans la queue BullMQ, il ne doit pas être utilisé en production pour les traitements de masse.
+
 ---
 
 ## Workflows recommandés
