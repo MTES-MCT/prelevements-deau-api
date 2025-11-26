@@ -57,10 +57,10 @@ const jobName = process.argv[2]
 const jobDataArg = process.argv[3]
 
 if (!jobName) {
-  console.error('Usage: node scripts/run-job-with-logs.js <job-name> [job-data-json]')
+  console.error('Usage: npm run run-job-with-logs -- <job-name> [job-data-json]')
   console.error('\nExemples:')
-  console.error('  node scripts/run-job-with-logs.js consolidate-dossier \'{"dossierId":"6908db261a6a10831363dde3"}\'')
-  console.error('  node scripts/run-job-with-logs.js process-attachment \'{"attachmentId":"..."}\'')
+  console.error('  npm run run-job-with-logs -- consolidate-dossier \'{"dossierId":"6908db261a6a10831363dde3"}\'')
+  console.error('  npm run run-job-with-logs -- process-attachment \'{"attachmentId":"..."}\'')
   process.exit(1)
 }
 
