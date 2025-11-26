@@ -16,6 +16,7 @@
     "reconsolidate-all-dossiers": "node scripts/reconsolidate-all-dossiers.js",
     "reprocess-all-attachments": "node scripts/reprocess-all-attachments.js",
     "trigger-scheduled-job": "node scripts/trigger-scheduled-job.js",
+    "run-job-with-logs": "node scripts/run-job-with-logs.js",
     "lint": "xo",
     "lint:openapi": "spectral lint docs/openapi.yaml",
     "test": "ava",
