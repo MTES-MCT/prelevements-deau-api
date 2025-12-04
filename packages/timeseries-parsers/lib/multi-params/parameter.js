@@ -6,7 +6,7 @@ const DEBIT_UNITS = [
     unit: 'L/s',
     isReference: true,
     min: 0,
-    max: 60_000
+    max: 15_000
   },
   {
     unit: 'm³/h',
@@ -15,7 +15,7 @@ const DEBIT_UNITS = [
       return value / 3.6
     },
     min: 0,
-    max: 200_000
+    max: 60_000
   }
 ]
 
@@ -24,7 +24,7 @@ const VOLUME_UNITS = [
     unit: 'm³',
     isReference: true,
     min: 0,
-    max: 100_000_000
+    max: 30_000_000
   }
 ]
 
@@ -34,8 +34,8 @@ const AVAILABLE_PARAMETERS = {
       {
         unit: 'mg/L',
         isReference: true,
-        min: 0,
-        max: 30_000
+        min: 0.01,
+        max: 1000
       }
     ]
   },
@@ -45,8 +45,8 @@ const AVAILABLE_PARAMETERS = {
       {
         unit: 'µS/cm',
         isReference: true,
-        min: 0,
-        max: 200_000
+        min: 0.01,
+        max: 2000
       }
     ]
   },
@@ -105,7 +105,7 @@ const AVAILABLE_PARAMETERS = {
       {
         unit: 'mg/L',
         isReference: true,
-        min: 0,
+        min: 0.01,
         max: 5000
       }
     ]
@@ -115,8 +115,8 @@ const AVAILABLE_PARAMETERS = {
       {
         unit: 'degrés Celsius',
         isReference: true,
-        min: -5,
-        max: 60
+        min: 0.01,
+        max: 40
       }
     ]
   },
