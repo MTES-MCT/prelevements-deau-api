@@ -43,6 +43,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
     "hash-object": "^5.0.1",
     "http-errors": "^2.0.0",
     "ioredis": "^5.8.1",
