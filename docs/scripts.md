@@ -6,7 +6,6 @@ Ce document décrit l'ensemble des scripts disponibles pour gérer les données 
 
 - [Initialisation](#initialisation)
 - [Gestion des utilisateurs](#gestion-des-utilisateurs)
-- [Gestion des tokens](#gestion-des-tokens)
 - [Synchronisation des dossiers](#synchronisation-des-dossiers)
 - [Maintenance et retraitement](#maintenance-et-retraitement)
 - [Validation de fichiers](#validation-de-fichiers)
@@ -122,28 +121,6 @@ Liste tous les utilisateurs avec leurs rôles.
 ```bash
 npm run user:list
 ```
-
----
-
-## Gestion des tokens
-
-### `token:add-role`
-
-Ajoute un rôle sur un territoire à un token d'accès (système legacy).
-
-```bash
-npm run token:add-role -- --token=<token> --territoire=<code> --role=<reader|editor>
-```
-
-**Exemple :**
-```bash
-npm run token:add-role -- \
-  --token=abc123def456 \
-  --territoire=DEP-974 \
-  --role=editor
-```
-
-**Utilisation :** Migration des tokens existants pour supporter le système de rôles. Par défaut, les tokens sans rôle sont considérés comme `reader`.
 
 ---
 

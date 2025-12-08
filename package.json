@@ -21,7 +21,6 @@
     "user:add-role": "node scripts/add-user-role.js",
     "user:remove-role": "node scripts/remove-user-role.js",
     "user:list": "node scripts/list-users.js",
-    "token:add-role": "node scripts/add-token-role.js",
     "lint": "xo",
     "lint:openapi": "spectral lint docs/openapi.yaml",
     "test": "ava",
