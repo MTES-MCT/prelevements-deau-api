@@ -384,21 +384,54 @@ paths:
   /info:
     get:
       tags: [Meta]
-      summary: Informations sur le contexte utilisateur
-      description: Retourne les informations de base concernant l'utilisateur courant (rôle, territoire, etc.)
-      operationId: getUserContextInfo
+      summary: Informations sur l'utilisateur authentifié
+      description: |
+        Retourne les informations de l'utilisateur authentifié et son territoire associé. 
+        Nécessite un token de session valide ou un token legacy.
+        
+        - Avec un token de session : retourne email + rôle + territoire
+        - Avec un token legacy : retourne rôle + territoire (pas d'email)
+      operationId: getUserInfo
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Informations de base
+          description: Informations utilisateur
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  isAdmin: { type: boolean }
-                  territoire: { type: string }
+                  user:
+                    type: object
+                    nullable: true
+                    description: Présent uniquement si authentifié via session (pas token legacy)
+                    properties:
+                      _id: { type: string }
+                      email: { type: string, format: email }
+                      nom: { type: string }
+                      prenom: { type: string }
+                      structure: { type: string, nullable: true }
+                  role:
+                    type: string
+                    enum: [reader, editor]
+                  territoire:
+                    type: object
+                    properties:
+                      code: { type: string }
+                      nom: { type: string }
+        '401':
+          description: Non authentifié ou token invalide/expiré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Droits insuffisants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /dossiers:
     get:
       tags: [Dossiers]
