@@ -12,6 +12,10 @@ import errorHandler from './lib/util/error-handler.js'
 import routes from './lib/routes.js'
 import {createBullBoardRouter} from './lib/queues/board.js'
 import {ensureSeriesIndexes} from './lib/models/series.js'
+import {validateEmailConfig} from './lib/util/email.js'
+
+// Validate configuration
+validateEmailConfig()
 
 // Connect to MongoDB
 await mongo.connect()

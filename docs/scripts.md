@@ -5,6 +5,7 @@ Ce document décrit l'ensemble des scripts disponibles pour gérer les données 
 ## Table des matières
 
 - [Initialisation](#initialisation)
+- [Gestion des utilisateurs](#gestion-des-utilisateurs)
 - [Synchronisation des dossiers](#synchronisation-des-dossiers)
 - [Maintenance et retraitement](#maintenance-et-retraitement)
 - [Validation de fichiers](#validation-de-fichiers)
@@ -55,6 +56,71 @@ npm run import-territoire-data DEP-974 ./data
 **Prérequis :**
 - Variable d'environnement `S3_PUBLIC_URL` configurée (pour télécharger les documents)
 - (Optionnel) `SKIP_DOCUMENT_UPLOAD=true` pour sauter l'upload des documents vers S3
+
+---
+
+## Gestion des utilisateurs
+
+Ces scripts permettent de gérer les utilisateurs et leurs rôles d'accès aux territoires.
+
+### `user:create`
+
+Crée un nouvel utilisateur avec un rôle initial sur un territoire.
+
+```bash
+npm run user:create -- --email=<email> --nom=<nom> --prenom=<prenom> [--structure=<structure>] [--territoire=<code>] [--role=<reader|editor>]
+```
+
+**Exemple :**
+```bash
+npm run user:create -- \
+  --email=alice.dupont@example.com \
+  --nom=Dupont \
+  --prenom=Alice \
+  --structure="DREAL Réunion" \
+  --territoire=DEP-974 \
+  --role=editor
+```
+
+### `user:add-role`
+
+Ajoute un rôle sur un territoire à un utilisateur existant.
+
+```bash
+npm run user:add-role -- --email=<email> --territoire=<code> --role=<reader|editor>
+```
+
+**Exemple :**
+```bash
+npm run user:add-role -- \
+  --email=alice.dupont@example.com \
+  --territoire=DEP-971 \
+  --role=reader
+```
+
+### `user:remove-role`
+
+Retire un rôle sur un territoire d'un utilisateur.
+
+```bash
+npm run user:remove-role -- --email=<email> --territoire=<code> --role=<reader|editor>
+```
+
+**Exemple :**
+```bash
+npm run user:remove-role -- \
+  --email=alice.dupont@example.com \
+  --territoire=DEP-971 \
+  --role=reader
+```
+
+### `user:list`
+
+Liste tous les utilisateurs avec leurs rôles.
+
+```bash
+npm run user:list
+```
 
 ---
 
