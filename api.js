@@ -26,6 +26,11 @@ const DEV = process.env.NODE_ENV !== 'production'
 
 const app = express()
 
+// Trust proxy (for req.ip behind a proxy/load balancer)
+if (!DEV) {
+  app.set('trust proxy', true)
+}
+
 // Enable CORS
 app.use(cors({origin: true, maxAge: 600}))
 
