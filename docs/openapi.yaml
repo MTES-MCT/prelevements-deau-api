@@ -292,6 +292,13 @@ paths:
                   format: email
                   description: Adresse email de l'utilisateur
                   example: "alice.dupont@example.com"
+                prefixUrl:
+                  type: string
+                  pattern: '^http://localhost:'
+                  description: |
+                    URL de base pour les liens dans l'email (localhost uniquement, pour le développement).
+                    Si non fourni, utilise la variable d'environnement API_URL.
+                  example: "http://localhost:5000"
       responses:
         '200':
           description: Email envoyé avec succès (message générique pour éviter l'énumération)
@@ -315,11 +322,16 @@ paths:
   /auth/verify/{token}:
     get:
       tags: [Auth]
-      summary: Vérifier un token d'authentification
+      summary: Vérifier un token d'authentification (legacy)
       description: |
+        **Route legacy avec redirection automatique.**
+
         Vérifie un token d'authentification reçu par email et crée une session.
         Cette route redirige automatiquement vers le front-end avec le token de session.
+
+        Pour une utilisation sans redirection, préférer POST /auth/verify.
       operationId: verifyAuth
+      deprecated: true
       security: []
       parameters:
         - in: path
@@ -353,6 +365,74 @@ paths:
                 type: string
               description: URL de redirection vers une page d'erreur avec le motif
               example: "https://app.example.com/auth/error?reason=expired"
+  /auth/verify:
+    post:
+      tags: [Auth]
+      summary: Vérifier un token d'authentification
+      description: |
+        Vérifie un token d'authentification reçu par email et crée une session.
+        Retourne le token de session en JSON sans redirection.
+
+        Cette route est préférée pour les clients API. Pour les emails avec liens cliquables,
+        utiliser GET /auth/verify/{token} qui redirige automatiquement.
+      operationId: verifyAuthToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, territoire]
+              properties:
+                token:
+                  type: string
+                  format: uuid
+                  description: Token d'authentification (UUID v4)
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                territoire:
+                  type: string
+                  description: Code du territoire pour lequel se connecter
+                  example: "DEP-974"
+      responses:
+        '200':
+          description: Token de session créé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  token:
+                    type: string
+                    description: Token de session à utiliser dans l'en-tête Authorization
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '400':
+          description: Paramètres manquants ou invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token invalide, expiré ou utilisateur non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Territoire non autorisé pour cet utilisateur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Territoire non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/logout:
     post:
       tags: [Auth]
@@ -386,9 +466,9 @@ paths:
       tags: [Meta]
       summary: Informations sur l'utilisateur authentifié
       description: |
-        Retourne les informations de l'utilisateur authentifié et son territoire associé. 
+        Retourne les informations de l'utilisateur authentifié et son territoire associé.
         Nécessite un token de session valide ou un token legacy.
-        
+
         - Avec un token de session : retourne email + rôle + territoire
         - Avec un token legacy : retourne rôle + territoire (pas d'email)
       operationId: getUserInfo
@@ -1002,7 +1082,7 @@ paths:
                             - "Estimation" : valeur estimée
                             - "Compteur défectueux" : mesure douteuse
                             - "Données partielles" : période incomplète
-                            
+
                             Ce champ n'apparaît que si des remarques sont présentes dans les données sources.
                             Les remarques sont compilées depuis toutes les valeurs qui ont contribué à l'agrégation,
                             avec déduplication automatique.
