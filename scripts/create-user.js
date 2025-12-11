@@ -7,15 +7,25 @@ import {insertUser} from '../lib/models/user.js'
 
 await mongo.connect()
 
+function parseArgValue(args, argName) {
+  const arg = args.find(a => a.startsWith(`--${argName}=`))
+  if (!arg) {
+    return undefined
+  }
+
+  const value = arg.split('=').slice(1).join('=')
+  return value.replaceAll(/^["']|["']$/g, '')
+}
+
 async function main() {
   const args = argv.slice(2)
 
-  const email = args.find(a => a.startsWith('--email='))?.split('=')[1]
-  const nom = args.find(a => a.startsWith('--nom='))?.split('=')[1]
-  const prenom = args.find(a => a.startsWith('--prenom='))?.split('=')[1]
-  const structure = args.find(a => a.startsWith('--structure='))?.split('=')[1]
-  const territoire = args.find(a => a.startsWith('--territoire='))?.split('=')[1]
-  const role = args.find(a => a.startsWith('--role='))?.split('=')[1] || 'reader'
+  const email = parseArgValue(args, 'email')
+  const nom = parseArgValue(args, 'nom')
+  const prenom = parseArgValue(args, 'prenom')
+  const structure = parseArgValue(args, 'structure')
+  const territoire = parseArgValue(args, 'territoire')
+  const role = parseArgValue(args, 'role') || 'reader'
 
   if (!email || !nom || !prenom) {
     console.error('Usage: node scripts/create-user.js --email=user@example.com --nom=Dupont --prenom=Jean [--structure=DREAL] [--territoire=GUADELOUPE] [--role=reader|editor]')
