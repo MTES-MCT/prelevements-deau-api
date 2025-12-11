@@ -28,7 +28,7 @@ const app = express()
 
 // Trust proxy (for req.ip behind a proxy/load balancer)
 if (!DEV) {
-  app.set('trust proxy', true)
+  app.set('trust proxy', 1)
 }
 
 // Enable CORS
