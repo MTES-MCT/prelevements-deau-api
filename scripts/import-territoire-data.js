@@ -34,6 +34,7 @@ import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/ex
 import {bulkInsertRegles, bulkDeleteRegles} from '../lib/models/regle.js'
 import {bulkInsertDocuments, bulkDeleteDocuments} from '../lib/models/document.js'
 import {uploadDocumentToS3} from '../lib/services/document.js'
+import {SUB_DAILY_FREQUENCIES} from '../lib/parameters-config.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
@@ -599,7 +600,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
       minDate,
       maxDate,
       extras: null,
-      hasSubDaily: frequency !== '1 day',
+      hasSubDaily: SUB_DAILY_FREQUENCIES.includes(frequency),
       numberOfValues: resultatsAvecValeur.length,
       hash: null,
       computed: {
