@@ -1,0 +1,33 @@
+services:
+  mongo:
+    image: mongo:4.4.29
+    container_name: prelevement-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: prelevements-deau
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - prelevement-network
+
+  redis:
+    image: redis:alpine
+    container_name: prelevement-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - prelevement-network
+
+networks:
+  prelevement-network:
+    name: prelevement-network
+
+volumes:
+  mongo_data:
+  redis_data:

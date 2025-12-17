@@ -7,12 +7,10 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 ## Prérequis
 
 - Node.js version 24 LTS (24.11+)
-- MongoDB version 4.4.29
-- Redis (pour les tâches planifiées via BullMQ)
+- `npm`
+- Docker version >= 28
 
 ## Installation
-
-Ce projet utilise `npm` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 24.0) installé avant de commencer.
 
 1. Installez les dépendances :
 
@@ -22,7 +20,30 @@ Ce projet utilise `npm` comme gestionnaire de paquets. Assurez-vous d'avoir Node
 
 2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez les variables obligatoires.
 
-## Initialisation
+## Démarrage des conteneurs
+
+   ```bash
+   docker compose up -d
+   ```
+
+## Initialisation des données
+
+### (Option A) À partir d'un dump de la base de données
+
+Télécharger le fichier de dump de la base de données et placer le dans : `dump/dump_mongodb.zip`
+
+Lancer l'importation des données :
+
+   ``` bash
+   unzip -q dump/dump_mongodb.zip -d /tmp/dump_mongo && docker run --rm \
+     --network prelevement-network \
+     -v /tmp/dump_mongo:/dump:ro \
+     mongo:4.4.29 \
+     mongorestore --host prelevement-mongo --drop --db "prelevements-deau" "/dump/dump_mongodb/prelevements-deau" \
+     && rm -rf /tmp/dump_mongo
+   ```
+
+### (Option B) À partir d'une base de données vide
 
 - Les données initiales doivent être ajoutées à la base MongoDB _("à la main" pour l'instant).
 
@@ -84,24 +105,13 @@ Le projet dispose de nombreux scripts pour la gestion, la synchronisation et la 
 
 ## Lancer l'application
 
-### 1. Démarrer Redis
-
-```bash
-# Option 1 : Homebrew
-brew install redis
-brew services start redis
-
-# Option 2 : Docker
-docker run -d -p 6379:6379 redis:alpine
-```
-
-### 2. Démarrer l'API HTTP
+### 1. Démarrer l'API HTTP
 
 ```bash
 npm start
 ```
 
-### 3. Démarrer les workers BullMQ (dans un autre terminal)
+### 2. Démarrer les workers BullMQ (dans un autre terminal)
 
 ```bash
 npm run start:worker
