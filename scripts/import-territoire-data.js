@@ -150,7 +150,14 @@ async function preparePoint(point) {
     if (commune) {
       pointToInsert.commune = {
         code: point.insee_com,
-        nom: getCommune(point.insee_com).nom
+        nom: commune.nom
+      }
+    } else {
+      console.warn(`Commune non trouvée pour le code INSEE ${point.insee_com} (point ${point.id_point})`)
+      // On crée quand même l'objet avec le code pour ne pas perdre l'information
+      pointToInsert.commune = {
+        code: point.insee_com,
+        nom: null
       }
     }
   }
@@ -484,19 +491,6 @@ async function importRegles(csvData, codeTerritoire) {
   )
 }
 
-function mapGranulariteToFrequency(granularite) {
-  // granularite est une string comme "quotidienne", "mensuelle", etc.
-  // Mapper directement vers les formats de fréquence attendus
-  const mapping = {
-    'quotidienne': '1 day',
-    'hebdomadaire': '1 day', // On traite hebdomadaire comme journalier pour simplifier
-    'mensuelle': '1 month',
-    'annuelle': '1 year'
-  }
-  
-  return mapping[granularite] || '1 day'
-}
-
 async function importSeries(csvData, codeTerritoire, nomTerritoire) {
   console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des séries de volumes pour : ' + nomTerritoire)
 
@@ -541,7 +535,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
       continue
     }
 
-    const frequency = mapGranulariteToFrequency(serie.granularite)
+    const frequency = serie.frequency || '1 day'
     const resultats = resultatsBySerie[serie.id_serie] || []
 
     if (resultats.length === 0) {
