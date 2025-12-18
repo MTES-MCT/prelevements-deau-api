@@ -101,6 +101,14 @@ Le projet dispose de nombreux scripts pour la gestion, la synchronisation et la 
 - `trigger-scheduled-job` : lance manuellement un job schedulé (cron)
 - `validate-declaration-file` : valide un fichier avant import
 
+### Emails
+
+Sur l'environnement local, les emails sont capturés par `Mailpit`
+
+```
+http://localhost:8025/
+```
+
 📖 **Documentation complète :** Voir [docs/scripts.md](docs/scripts.md) pour la liste exhaustive des scripts, leurs usages et workflows recommandés.
 
 ## Lancer l'application

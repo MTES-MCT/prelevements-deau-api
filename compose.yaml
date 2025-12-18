@@ -24,6 +24,16 @@ services:
     networks:
       - prelevement-network
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: prelevement-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - prelevement-network
+
 networks:
   prelevement-network:
     name: prelevement-network
