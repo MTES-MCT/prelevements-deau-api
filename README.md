@@ -37,7 +37,7 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 ## Initialisation des données
 
 **Note**
-Sur Scalingo, MongoDB est limité à la version 4.4, les versions 5+ ne sont pas disponibles en raison des restrictions de licences (SSPL).
+Sur Scalingo, MongoDB est limité à la version 4.0.4, les versions 5+ ne sont pas disponibles en raison des restrictions de licences (SSPL).
 
 ### (Option A) À partir d'un dump de la base de données
 
