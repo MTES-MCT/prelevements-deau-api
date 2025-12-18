@@ -34,6 +34,23 @@ services:
     networks:
       - prelevement-network
 
+  minio:
+    image: minio/minio:latest
+    container_name: prelevement-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minio123}
+      MINIO_LOG_LEVEL: debug
+    volumes:
+      - minio_data:/data
+    networks:
+      - prelevement-network
+
 networks:
   prelevement-network:
     name: prelevement-network
@@ -41,3 +58,4 @@ networks:
 volumes:
   mongo_data:
   redis_data:
+  minio_data:

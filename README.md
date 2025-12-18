@@ -26,6 +26,14 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
    docker compose up -d
    ```
 
+## Création des buckets
+
+  ```bash
+  docker compose exec minio mc alias set local http://localhost:9000 minio minio123
+  docker compose exec minio mc mb local/prelevements-deau-documents
+  docker compose exec minio mc mb local/prelevements-deau-ds
+  ```
+
 ## Initialisation des données
 
 **Note**
