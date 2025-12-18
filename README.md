@@ -41,17 +41,12 @@ Sur Scalingo, MongoDB est limité à la version 4.4, les versions 5+ ne sont pas
 
 ### (Option A) À partir d'un dump de la base de données
 
-Télécharger le fichier de dump de la base de données et placer le dans : `dump/dump_mongodb.zip`
+Télécharger le fichier de dump de la base de données et placer le dans : `dump/mongo_dump.archive`
 
 Lancer l'importation des données :
 
    ``` bash
-   unzip -q dump/dump_mongodb.zip -d /tmp/dump_mongo && docker run --rm \
-     --network prelevement-network \
-     -v /tmp/dump_mongo:/dump:ro \
-     mongo:4.4.29 \
-     mongorestore --host prelevement-mongo --drop --db "prelevements-deau" "/dump/dump_mongodb/prelevements-deau" \
-     && rm -rf /tmp/dump_mongo
+   docker compose exec -T mongo mongorestore --archive --drop < ./dump/mongo_dump.archive
    ```
 
 ### (Option B) À partir d'une base de données vide
