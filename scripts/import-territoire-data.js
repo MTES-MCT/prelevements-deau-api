@@ -457,6 +457,11 @@ async function importRegles(csvData, codeTerritoire) {
         remarque: regle.remarque
       }
 
+      // Ajouter la fréquence si présente (pour volumes prélevés)
+      if (regle.frequence) {
+        regleToInsert.frequence = regle.frequence
+      }
+
       // Ajouter le document si présent
       if (regle.id_document) {
         const documentId = getDocumentId(regle.id_document)
