@@ -207,7 +207,11 @@ async function importPreleveurs(preleveurs, codeTerritoire, nomTerritoire) {
   // Temporary fix for multiple emails in the same field
   for (const preleveur of preleveurs) {
     if (preleveur.email) {
-      const emails = preleveur.email.split('|').map(email => email.trim().toLowerCase())
+      // Split sur | et , pour gérer les différents formats de séparation
+      const emails = preleveur.email
+        .split(/[|,]/)
+        .map(email => email.trim().toLowerCase())
+        .filter(email => email.length > 0)
       preleveur.email = emails[0] // Keep only the first email
       preleveur.autresEmails = emails.slice(1) // Store the rest in a separate field
     }
