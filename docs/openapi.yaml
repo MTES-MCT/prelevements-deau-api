@@ -159,6 +159,7 @@ components:
         _id: { $ref: '#/components/schemas/ObjectId' }
         nom: { type: string, nullable: true }
         raison_sociale: { type: string, nullable: true }
+        siret: { type: string, nullable: true, description: "Numéro SIRET (14 caractères)" }
         email: { type: string, nullable: true }
     Exploitation:
       type: object
