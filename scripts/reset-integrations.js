@@ -38,7 +38,7 @@ async function main() {
   console.log('✅ Réinitialisation terminée avec succès !')
   console.log('')
   console.log('💡 Pour reconsolider les dossiers, lancez :')
-  console.log('   npm run script scripts/reconsolidate-all-dossiers.js')
+  console.log('   npm run reconsolidate-all-dossiers')
 }
 
 // Call the main function and ensure MongoDB is disconnected afterwards
