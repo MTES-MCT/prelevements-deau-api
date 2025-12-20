@@ -204,10 +204,24 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ObjectId' }
           description: "Tableau d'ObjectIds des exploitations (décorées dans les réponses)"
-        parametre: { type: string, description: "Paramètre de la règle (ex: VOLUME_PRELEVE)" }
-        unite: { type: string, description: "Unité de mesure (ex: m³)" }
+        parametre:
+          type: string
+          description: "Paramètre de la règle (volume prélevé, débit prélevé, débit réservé, température, etc.)"
+          enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH]
+        frequence:
+          type: string
+          nullable: true
+          description: "Fréquence de la règle (uniquement pour les volumes prélevés : 1 day, 1 month, 1 year)"
+          enum: [1 day, 1 month, 1 year]
+        unite:
+          type: string
+          description: "Unité de mesure"
+          enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm]
         valeur: { type: number, description: "Valeur numérique de la contrainte" }
-        contrainte: { type: string, description: "Type de contrainte (ex: MAX)" }
+        contrainte:
+          type: string
+          description: "Opérateur de comparaison : min (valeur minimale), max (valeur maximale à ne pas dépasser)"
+          enum: [min, max]
         debut_validite: { type: string, format: date, description: "Date de début de validité" }
         fin_validite: { type: string, format: date, nullable: true, description: "Date de fin de validité" }
         debut_periode: { type: string, format: date, nullable: true, description: "Début de période (ex: début saison)" }
@@ -1650,10 +1664,11 @@ paths:
               properties:
                 document: { $ref: '#/components/schemas/ObjectId', nullable: true }
                 exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' } }
-                parametre: { type: string }
-                unite: { type: string }
+                parametre: { type: string, enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH] }
+                frequence: { type: string, nullable: true, enum: [1 day, 1 month, 1 year] }
+                unite: { type: string, enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm] }
                 valeur: { type: number }
-                contrainte: { type: string }
+                contrainte: { type: string, enum: [min, max] }
                 debut_validite: { type: string, format: date }
                 fin_validite: { type: string, format: date, nullable: true }
                 debut_periode: { type: string, format: date, nullable: true }
@@ -1830,10 +1845,11 @@ paths:
               properties:
                 document: { $ref: '#/components/schemas/ObjectId', nullable: true }
                 exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' }, minItems: 1 }
-                parametre: { type: string }
-                unite: { type: string }
+                parametre: { type: string, enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH] }
+                frequence: { type: string, nullable: true, enum: [1 day, 1 month, 1 year], description: "Fréquence (uniquement pour volume prélevé)" }
+                unite: { type: string, enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm] }
                 valeur: { type: number }
-                contrainte: { type: string }
+                contrainte: { type: string, enum: [min, max] }
                 debut_validite: { type: string, format: date }
                 fin_validite: { type: string, format: date, nullable: true }
                 debut_periode: { type: string, format: date, nullable: true }
