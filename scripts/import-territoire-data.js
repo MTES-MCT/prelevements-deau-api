@@ -20,7 +20,10 @@ import {
   PRELEVEURS_DEFINITION,
   EXPLOITATIONS_USAGES_DEFINITION,
   EXPLOITATIONS_REGLES_DEFINITION,
-  EXPLOITATIONS_DOCUMENTS_DEFINITION
+  EXPLOITATIONS_DOCUMENTS_DEFINITION,
+  EXPLOITATIONS_SERIES_DEFINITION,
+  SERIES_DEFINITION,
+  RESULTATS_SUIVI_DEFINITION
 } from '../lib/import/mapping.js'
 import {usages} from '../lib/import/nomenclature.js'
 import {initSequence} from '../lib/util/sequences.js'
@@ -31,12 +34,14 @@ import {bulkInsertExploitations, bulkDeleteExploitations} from '../lib/models/ex
 import {bulkInsertRegles, bulkDeleteRegles} from '../lib/models/regle.js'
 import {bulkInsertDocuments, bulkDeleteDocuments} from '../lib/models/document.js'
 import {uploadDocumentToS3} from '../lib/services/document.js'
+import {SUB_DAILY_FREQUENCIES} from '../lib/parameters-config.js'
 
 const pointsIds = new Map()
 const preleveursIds = new Map()
 const exploitationsIds = new Map()
 const exploitationsPreleveursIds = new Map()
 const documentsIds = new Map()
+const seriesIds = new Map() // id_serie (hash) -> ObjectId de la série
 
 function getPointId(idPoint) {
   return pointsIds.get(idPoint)
@@ -52,6 +57,10 @@ function getExploitationId(idExploitation) {
 
 function getDocumentId(idDocument) {
   return documentsIds.get(idDocument)
+}
+
+function getSeriesId(idSerie) {
+  return seriesIds.get(idSerie)
 }
 
 function parseAutresNoms(autresNoms) {
@@ -137,9 +146,19 @@ async function preparePoint(point) {
   delete pointToInsert.code_bv_bdcarthage
 
   if (point.insee_com) {
-    pointToInsert.commune = {
-      code: point.insee_com,
-      nom: getCommune(point.insee_com).nom
+    const commune = getCommune(point.insee_com)
+    if (commune) {
+      pointToInsert.commune = {
+        code: point.insee_com,
+        nom: commune.nom
+      }
+    } else {
+      console.warn(`Commune non trouvée pour le code INSEE ${point.insee_com} (point ${point.id_point})`)
+      // On crée quand même l'objet avec le code pour ne pas perdre l'information
+      pointToInsert.commune = {
+        code: point.insee_com,
+        nom: null
+      }
     }
   }
 
@@ -481,6 +500,243 @@ async function importRegles(csvData, codeTerritoire) {
   )
 }
 
+async function importSeries(csvData, codeTerritoire, nomTerritoire) {
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Importation des séries de volumes pour : ' + nomTerritoire)
+
+  const {series, resultatsSuivi} = csvData
+
+  if (!series || series.length === 0) {
+    console.log('Aucune série à importer')
+    return
+  }
+
+  if (!resultatsSuivi || resultatsSuivi.length === 0) {
+    console.log('Aucun résultat de suivi à importer')
+    return
+  }
+
+  console.log('\n=> Nettoyage des collections series et series_values...')
+  // Supprimer les séries existantes pour ce territoire (sans attachmentId/dossierId)
+  const seriesToDelete = await mongo.db.collection('series')
+    .find({territoire: codeTerritoire, attachmentId: null, dossierId: null})
+    .project({_id: 1})
+    .toArray()
+  if (seriesToDelete.length > 0) {
+    const seriesIds = seriesToDelete.map(s => s._id)
+    await mongo.db.collection('series_values').deleteMany({seriesId: {$in: seriesIds}})
+    await mongo.db.collection('series').deleteMany({_id: {$in: seriesIds}})
+  }
+  console.log('...Ok !')
+
+  // Grouper les résultats par série (id_serie)
+  const resultatsBySerie = chain(resultatsSuivi)
+    .groupBy('id_serie')
+    .value()
+
+  const seriesDocs = []
+  const valueDocs = []
+  const now = new Date()
+
+  for (const serie of series) {
+    const pointId = getPointId(serie.id_point)
+    if (!pointId) {
+      console.warn(`Point ${serie.id_point} non trouvé pour la série ${serie.id_serie} (id_point dans série: ${serie.id_point})`)
+      continue
+    }
+
+    const frequency = serie.frequency || '1 day'
+    const resultats = resultatsBySerie[serie.id_serie] || []
+
+    if (resultats.length === 0) {
+      console.warn(`Aucun résultat trouvé pour la série ${serie.id_serie}`)
+      continue
+    }
+
+    // Filtrer les résultats qui ont une valeur (prélevée ou rejetée)
+    const resultatsAvecValeur = resultats.filter(r => r.valeur !== undefined && r.valeur !== null)
+
+    if (resultatsAvecValeur.length === 0) {
+      console.warn(`Aucun résultat avec valeur pour la série ${serie.id_serie}`)
+      continue
+    }
+
+    // Calculer minDate et maxDate à partir des résultats filtrés
+    const dateStrings = resultatsAvecValeur
+      .map(r => {
+        if (!r.date_heure_mesure) return null
+        let dateStr = r.date_heure_mesure
+        // Gérer les différents formats de date
+        if (dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0]
+        } else if (dateStr.includes(' ')) {
+          dateStr = dateStr.split(' ')[0]
+        }
+        return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : null
+      })
+      .filter(Boolean)
+
+    if (dateStrings.length === 0) {
+      console.warn(`Aucune date valide pour la série ${serie.id_serie}`)
+      continue
+    }
+
+    // Trier les dates pour trouver min et max
+    dateStrings.sort()
+    const minDate = dateStrings[0]
+    const maxDate = dateStrings[dateStrings.length - 1]
+
+    // Extraire les dates uniques pour computed.integratedDays
+    const integratedDays = [...new Set(dateStrings)].sort()
+
+    // Créer le document série avec l'ObjectId du point
+    const seriesDoc = {
+      _id: new ObjectId(),
+      attachmentId: null,
+      dossierId: null,
+      territoire: codeTerritoire,
+      pointPrelevement: pointId, // Utiliser l'ObjectId, pas l'id_point
+      parameter: "volume prélevé", // Déjà converti en libellé par le mapping CSV
+      unit: serie.unite,
+      frequency,
+      valueType: 'cumulative', // Les volumes sont toujours cumulatifs
+      originalFrequency: null,
+      minDate,
+      maxDate,
+      extras: null,
+      hasSubDaily: SUB_DAILY_FREQUENCIES.includes(frequency),
+      numberOfValues: resultatsAvecValeur.length,
+      hash: null,
+      computed: {
+        point: pointId, // Important : mettre à jour computed.point pour que les requêtes fonctionnent
+        integratedDays // Dates intégrées pour le filtrage onlyIntegratedDays
+      },
+      createdAt: now,
+      updatedAt: now
+    }
+
+    seriesDocs.push(seriesDoc)
+
+    // Stocker le mapping id_serie -> ObjectId pour les relations exploitation-serie
+    seriesIds.set(serie.id_serie, seriesDoc._id)
+
+    // Créer les documents de valeurs
+    for (const resultat of resultatsAvecValeur) {
+      if (!resultat.date_heure_mesure) {
+        console.warn(`Date manquante pour le résultat ${resultat.id_resultat}`)
+        continue
+      }
+
+      // Extraire la date au format YYYY-MM-DD
+      let dateStr = resultat.date_heure_mesure
+      if (dateStr.includes('T')) {
+        dateStr = dateStr.split('T')[0]
+      } else if (dateStr.includes(' ')) {
+        dateStr = dateStr.split(' ')[0]
+      }
+
+      // Valider le format de date
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      if (!dateRegex.test(dateStr)) {
+        console.warn(`Format de date invalide pour le résultat ${resultat.id_resultat}: ${resultat.date_heure_mesure}`)
+        continue
+      }
+
+      // Ignorer si la valeur est null/undefined
+      if (resultat.valeur === undefined || resultat.valeur === null) {
+        continue
+      }
+
+      // Format des valeurs selon la fréquence
+      if (frequency === '1 day') {
+        // Séries journalières : format simple
+        valueDocs.push({
+          seriesId: seriesDoc._id,
+          date: dateStr,
+          values: {
+            value: resultat.valeur,
+            ...(resultat.remarque ? {remark: resultat.remarque} : {})
+          }
+        })
+      } else if (['1 month', '1 year'].includes(frequency)) {
+        // Fréquences super-daily : format simple
+        valueDocs.push({
+          seriesId: seriesDoc._id,
+          date: dateStr,
+          values: {
+            value: resultat.valeur,
+            ...(resultat.remarque ? {remark: resultat.remarque} : {})
+          }
+        })
+      }
+    }
+  }
+
+  if (seriesDocs.length === 0) {
+    console.log('Aucune série valide à insérer')
+    return
+  }
+
+  // Insérer les séries
+  const {insertedCount: seriesCount} = await mongo.db.collection('series').insertMany(seriesDocs)
+  console.log(`\n=> ${seriesCount} séries insérées dans la collection series`)
+
+  // Insérer les valeurs
+  if (valueDocs.length > 0) {
+    // Insérer par batch de 1000 pour éviter les problèmes de mémoire
+    const batchSize = 1000
+    let insertedValues = 0
+    for (let i = 0; i < valueDocs.length; i += batchSize) {
+      const batch = valueDocs.slice(i, i + batchSize)
+      await mongo.db.collection('series_values').insertMany(batch)
+      insertedValues += batch.length
+    }
+    console.log(`=> ${insertedValues} valeurs insérées dans la collection series_values`)
+  }
+
+  console.log('\u001B[32;1m%s\u001B[0m', '\n=> Importation des séries terminée\n\n')
+}
+
+async function updateExploitationsWithSeries(csvData, codeTerritoire) {
+  const {exploitationsSeries} = csvData
+
+  if (!exploitationsSeries || exploitationsSeries.length === 0) {
+    return
+  }
+
+  console.log('\n\u001B[35;1;4m%s\u001B[0m', '=> Mise à jour des exploitations avec les séries')
+
+  // Grouper les séries par exploitation
+  const seriesByExploitation = chain(exploitationsSeries)
+    .groupBy('id_exploitation')
+    .mapValues(items => items.map(item => item.id_serie))
+    .value()
+
+  let updatedCount = 0
+
+  // Mettre à jour chaque exploitation avec ses séries
+  for (const [idExploitation, serieIds] of Object.entries(seriesByExploitation)) {
+    const exploitationObjectId = exploitationsIds.get(Number.parseInt(idExploitation, 10))
+    if (!exploitationObjectId) {
+      continue
+    }
+
+    // Convertir les id_serie en ObjectIds
+    const seriesObjectIds = serieIds
+      .map(idSerie => getSeriesId(idSerie))
+      .filter(Boolean) // Filtrer les séries non trouvées
+
+    if (seriesObjectIds.length > 0) {
+      await mongo.db.collection('exploitations').updateOne(
+        {_id: exploitationObjectId},
+        {$set: {series: seriesObjectIds}}
+      )
+      updatedCount++
+    }
+  }
+
+  console.log(`\n=> ${updatedCount} exploitations mises à jour avec leurs séries\n`)
+}
+
 async function importData(folderPath, codeTerritoire) {
   if (!codeTerritoire) {
     console.error(
@@ -556,7 +812,22 @@ async function importData(folderPath, codeTerritoire) {
       `${folderPath}/exploitation-regle.csv`,
       EXPLOITATIONS_REGLES_DEFINITION,
       false
-    )
+    ),
+    exploitationsSeries: await readDataFromCsvFile(
+      `${folderPath}/exploitation-serie.csv`,
+      EXPLOITATIONS_SERIES_DEFINITION,
+      false
+    ).catch(() => []), // Optionnel, peut ne pas exister
+    series: await readDataFromCsvFile(
+      `${folderPath}/serie-donnees.csv`,
+      SERIES_DEFINITION,
+      false
+    ).catch(() => []), // Optionnel, peut ne pas exister
+    resultatsSuivi: await readDataFromCsvFile(
+      `${folderPath}/resultat-suivi.csv`,
+      RESULTATS_SUIVI_DEFINITION,
+      false
+    ).catch(() => []) // Optionnel, peut ne pas exister
   }
   console.log('\u001B[32;1m%s\u001B[0m', '=> Fichiers CSV chargés en mémoire\n')
 
@@ -565,6 +836,8 @@ async function importData(folderPath, codeTerritoire) {
   await importPoints(csvData.points, codeTerritoire, validTerritoire.nom)
   await importExploitations(csvData, codeTerritoire, validTerritoire.nom)
   await importRegles(csvData, codeTerritoire)
+  await importSeries(csvData, codeTerritoire, validTerritoire.nom)
+  await updateExploitationsWithSeries(csvData, codeTerritoire)
 
   if (pointsIds.size > 0) {
     const latestPointId = Math.max(...pointsIds.keys())
