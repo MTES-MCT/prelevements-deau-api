@@ -226,7 +226,11 @@ async function importPreleveurs(preleveurs, codeTerritoire, nomTerritoire) {
   // Temporary fix for multiple emails in the same field
   for (const preleveur of preleveurs) {
     if (preleveur.email) {
-      const emails = preleveur.email.split('|').map(email => email.trim().toLowerCase())
+      // Split sur | et , pour gérer les différents formats de séparation
+      const emails = preleveur.email
+        .split(/[|,]/)
+        .map(email => email.trim().toLowerCase())
+        .filter(email => email.length > 0)
       preleveur.email = emails[0] // Keep only the first email
       preleveur.autresEmails = emails.slice(1) // Store the rest in a separate field
     }
@@ -470,6 +474,11 @@ async function importRegles(csvData, codeTerritoire) {
         debut_periode: regle.debut_periode,
         fin_periode: regle.fin_periode,
         remarque: regle.remarque
+      }
+
+      // Ajouter la fréquence si présente (pour volumes prélevés)
+      if (regle.frequence) {
+        regleToInsert.frequence = regle.frequence
       }
 
       // Ajouter le document si présent

@@ -159,6 +159,7 @@ components:
         _id: { $ref: '#/components/schemas/ObjectId' }
         nom: { type: string, nullable: true }
         raison_sociale: { type: string, nullable: true }
+        siret: { type: string, nullable: true, description: "Numéro SIRET (14 caractères)" }
         email: { type: string, nullable: true }
     Exploitation:
       type: object
@@ -203,10 +204,24 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ObjectId' }
           description: "Tableau d'ObjectIds des exploitations (décorées dans les réponses)"
-        parametre: { type: string, description: "Paramètre de la règle (ex: VOLUME_PRELEVE)" }
-        unite: { type: string, description: "Unité de mesure (ex: m³)" }
+        parametre:
+          type: string
+          description: "Paramètre de la règle (volume prélevé, débit prélevé, débit réservé, température, etc.)"
+          enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH]
+        frequence:
+          type: string
+          nullable: true
+          description: "Fréquence de la règle (uniquement pour les volumes prélevés : 1 day, 1 month, 1 year)"
+          enum: [1 day, 1 month, 1 year]
+        unite:
+          type: string
+          description: "Unité de mesure"
+          enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm]
         valeur: { type: number, description: "Valeur numérique de la contrainte" }
-        contrainte: { type: string, description: "Type de contrainte (ex: MAX)" }
+        contrainte:
+          type: string
+          description: "Opérateur de comparaison : min (valeur minimale), max (valeur maximale à ne pas dépasser)"
+          enum: [min, max]
         debut_validite: { type: string, format: date, description: "Date de début de validité" }
         fin_validite: { type: string, format: date, nullable: true, description: "Date de fin de validité" }
         debut_periode: { type: string, format: date, nullable: true, description: "Début de période (ex: début saison)" }
@@ -292,6 +307,13 @@ paths:
                   format: email
                   description: Adresse email de l'utilisateur
                   example: "alice.dupont@example.com"
+                prefixUrl:
+                  type: string
+                  pattern: '^http://localhost:'
+                  description: |
+                    URL de base pour les liens dans l'email (localhost uniquement, pour le développement).
+                    Si non fourni, utilise la variable d'environnement API_URL.
+                  example: "http://localhost:5000"
       responses:
         '200':
           description: Email envoyé avec succès (message générique pour éviter l'énumération)
@@ -315,11 +337,16 @@ paths:
   /auth/verify/{token}:
     get:
       tags: [Auth]
-      summary: Vérifier un token d'authentification
+      summary: Vérifier un token d'authentification (legacy)
       description: |
+        **Route legacy avec redirection automatique.**
+
         Vérifie un token d'authentification reçu par email et crée une session.
         Cette route redirige automatiquement vers le front-end avec le token de session.
+
+        Pour une utilisation sans redirection, préférer POST /auth/verify.
       operationId: verifyAuth
+      deprecated: true
       security: []
       parameters:
         - in: path
@@ -353,6 +380,74 @@ paths:
                 type: string
               description: URL de redirection vers une page d'erreur avec le motif
               example: "https://app.example.com/auth/error?reason=expired"
+  /auth/verify:
+    post:
+      tags: [Auth]
+      summary: Vérifier un token d'authentification
+      description: |
+        Vérifie un token d'authentification reçu par email et crée une session.
+        Retourne le token de session en JSON sans redirection.
+
+        Cette route est préférée pour les clients API. Pour les emails avec liens cliquables,
+        utiliser GET /auth/verify/{token} qui redirige automatiquement.
+      operationId: verifyAuthToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, territoire]
+              properties:
+                token:
+                  type: string
+                  format: uuid
+                  description: Token d'authentification (UUID v4)
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                territoire:
+                  type: string
+                  description: Code du territoire pour lequel se connecter
+                  example: "DEP-974"
+      responses:
+        '200':
+          description: Token de session créé avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  token:
+                    type: string
+                    description: Token de session à utiliser dans l'en-tête Authorization
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '400':
+          description: Paramètres manquants ou invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token invalide, expiré ou utilisateur non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Territoire non autorisé pour cet utilisateur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Territoire non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/logout:
     post:
       tags: [Auth]
@@ -386,9 +481,9 @@ paths:
       tags: [Meta]
       summary: Informations sur l'utilisateur authentifié
       description: |
-        Retourne les informations de l'utilisateur authentifié et son territoire associé. 
+        Retourne les informations de l'utilisateur authentifié et son territoire associé.
         Nécessite un token de session valide ou un token legacy.
-        
+
         - Avec un token de session : retourne email + rôle + territoire
         - Avec un token legacy : retourne rôle + territoire (pas d'email)
       operationId: getUserInfo
@@ -1002,7 +1097,7 @@ paths:
                             - "Estimation" : valeur estimée
                             - "Compteur défectueux" : mesure douteuse
                             - "Données partielles" : période incomplète
-                            
+
                             Ce champ n'apparaît que si des remarques sont présentes dans les données sources.
                             Les remarques sont compilées depuis toutes les valeurs qui ont contribué à l'agrégation,
                             avec déduplication automatique.
@@ -1569,10 +1664,11 @@ paths:
               properties:
                 document: { $ref: '#/components/schemas/ObjectId', nullable: true }
                 exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' } }
-                parametre: { type: string }
-                unite: { type: string }
+                parametre: { type: string, enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH] }
+                frequence: { type: string, nullable: true, enum: [1 day, 1 month, 1 year] }
+                unite: { type: string, enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm] }
                 valeur: { type: number }
-                contrainte: { type: string }
+                contrainte: { type: string, enum: [min, max] }
                 debut_validite: { type: string, format: date }
                 fin_validite: { type: string, format: date, nullable: true }
                 debut_periode: { type: string, format: date, nullable: true }
@@ -1749,10 +1845,11 @@ paths:
               properties:
                 document: { $ref: '#/components/schemas/ObjectId', nullable: true }
                 exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' }, minItems: 1 }
-                parametre: { type: string }
-                unite: { type: string }
+                parametre: { type: string, enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH] }
+                frequence: { type: string, nullable: true, enum: [1 day, 1 month, 1 year], description: "Fréquence (uniquement pour volume prélevé)" }
+                unite: { type: string, enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm] }
                 valeur: { type: number }
-                contrainte: { type: string }
+                contrainte: { type: string, enum: [min, max] }
                 debut_validite: { type: string, format: date }
                 fin_validite: { type: string, format: date, nullable: true }
                 debut_periode: { type: string, format: date, nullable: true }

@@ -180,6 +180,27 @@ npm run reconsolidate-all-dossiers
 - Crée un job `consolidate-dossier` pour chaque dossier
 - Les jobs sont traités par le worker BullMQ
 
+### `reset-integrations`
+
+Réinitialise complètement toutes les intégrations journalières.
+
+```bash
+npm run reset-integrations --force
+```
+
+**⚠️ Opération destructive** : Nécessite le flag `--force` pour confirmer.
+
+**Actions effectuées :**
+1. Vide complètement la collection `integrations_journalieres`
+2. Réinitialise le champ `computed.integratedDays` de toutes les séries (mis à `[]`)
+
+**Utilisation :**
+- Après modification de la logique d'intégration
+- Pour résoudre des problèmes d'intégrité des données d'intégration
+- Pour repartir à zéro sur les intégrations
+
+**Étape suivante :** Lancer `npm run reconsolidate-all-dossiers` pour reconsolider tous les dossiers et recalculer les intégrations.
+
 ### `reprocess-all-attachments`
 
 Force le retraitement de **tous** les attachments.
@@ -317,6 +338,16 @@ npm run resync-all-dossiers
 ```bash
 npm run reprocess-all-attachments
 npm run reconsolidate-all-dossiers  # Si nécessaire
+```
+
+### Après modification de la logique d'intégration
+
+1. Réinitialiser toutes les intégrations
+2. Reconsolider tous les dossiers pour recalculer les intégrations
+
+```bash
+npm run reset-integrations -- --force
+npm run reconsolidate-all-dossiers
 ```
 
 ### Après modification majeure de la logique de traitement

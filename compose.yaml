@@ -1,0 +1,61 @@
+services:
+  mongo:
+    image: mongo:4.0.3
+    container_name: prelevement-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: prelevements-deau
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - prelevement-network
+
+  redis:
+    image: redis:alpine
+    container_name: prelevement-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - prelevement-network
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: prelevement-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - prelevement-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: prelevement-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minio123}
+      MINIO_LOG_LEVEL: debug
+    volumes:
+      - minio_data:/data
+    networks:
+      - prelevement-network
+
+networks:
+  prelevement-network:
+    name: prelevement-network
+
+volumes:
+  mongo_data:
+  redis_data:
+  minio_data:

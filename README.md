@@ -7,12 +7,10 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 ## Prérequis
 
 - Node.js version 24 LTS (24.11+)
-- MongoDB version 4.4.29
-- Redis (pour les tâches planifiées via BullMQ)
+- `npm`
+- Docker version >= 28
 
 ## Installation
-
-Ce projet utilise `npm` comme gestionnaire de paquets. Assurez-vous d'avoir Node.js (version ≥ 24.0) installé avant de commencer.
 
 1. Installez les dépendances :
 
@@ -22,7 +20,36 @@ Ce projet utilise `npm` comme gestionnaire de paquets. Assurez-vous d'avoir Node
 
 2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez les variables obligatoires.
 
-## Initialisation
+## Démarrage des conteneurs
+
+   ```bash
+   docker compose up -d
+   ```
+
+## Création des buckets
+
+  ```bash
+  docker compose exec minio mc alias set local http://localhost:9000 minio minio123
+  docker compose exec minio mc mb local/prelevements-deau-documents
+  docker compose exec minio mc mb local/prelevements-deau-ds
+  ```
+
+## Initialisation des données
+
+**Note**
+Sur Scalingo, MongoDB est limité à la version 4.0.4, les versions 5+ ne sont pas disponibles en raison des restrictions de licences (SSPL).
+
+### (Option A) À partir d'un dump de la base de données
+
+Télécharger le fichier de dump de la base de données et placer le dans : `dump/mongo_dump.archive`
+
+Lancer l'importation des données :
+
+   ``` bash
+   docker compose exec -T mongo mongorestore --archive --drop < ./dump/mongo_dump.archive
+   ```
+
+### (Option B) À partir d'une base de données vide
 
 - Les données initiales doivent être ajoutées à la base MongoDB _("à la main" pour l'instant).
 
@@ -80,28 +107,25 @@ Le projet dispose de nombreux scripts pour la gestion, la synchronisation et la 
 - `trigger-scheduled-job` : lance manuellement un job schedulé (cron)
 - `validate-declaration-file` : valide un fichier avant import
 
+### Emails
+
+Sur l'environnement local, les emails sont capturés par `Mailpit`
+
+```
+http://localhost:8025/
+```
+
 📖 **Documentation complète :** Voir [docs/scripts.md](docs/scripts.md) pour la liste exhaustive des scripts, leurs usages et workflows recommandés.
 
 ## Lancer l'application
 
-### 1. Démarrer Redis
-
-```bash
-# Option 1 : Homebrew
-brew install redis
-brew services start redis
-
-# Option 2 : Docker
-docker run -d -p 6379:6379 redis:alpine
-```
-
-### 2. Démarrer l'API HTTP
+### 1. Démarrer l'API HTTP
 
 ```bash
 npm start
 ```
 
-### 3. Démarrer les workers BullMQ (dans un autre terminal)
+### 2. Démarrer les workers BullMQ (dans un autre terminal)
 
 ```bash
 npm run start:worker
