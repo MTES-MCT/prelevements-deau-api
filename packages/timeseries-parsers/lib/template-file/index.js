@@ -671,12 +671,31 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors) {
       continue
     }
 
-    rows.push({
-      pointId: String(pointId).trim(),
-      dateDebut,
-      dateFin,
-      volume: numericVolume
-    })
+    // Gérer les points de prélèvement séparés par une virgule
+    // Si plusieurs points partagent le volume, on divise le volume entre eux
+    const pointIdStr = String(pointId).trim()
+    const pointIds = pointIdStr.split(',').map(p => p.trim()).filter(Boolean)
+
+    if (pointIds.length === 0) {
+      errors.push({
+        message: `Ligne ${r + 1}: Point de prélèvement manquant.`,
+        severity: 'error'
+      })
+      continue
+    }
+
+    // Si plusieurs points, diviser le volume entre eux
+    const volumePerPoint = pointIds.length > 1 ? numericVolume / pointIds.length : numericVolume
+
+    // Créer une entrée par point de prélèvement
+    for (const singlePointId of pointIds) {
+      rows.push({
+        pointId: singlePointId,
+        dateDebut,
+        dateFin,
+        volume: volumePerPoint
+      })
+    }
   }
 }
 
