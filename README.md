@@ -10,6 +10,16 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 - `npm`
 - Docker version >= 28
 
+## Sous-module `data`
+
+Le projet utilise un sous-module Git nommé `data` pour accéder à des ressources privées
+(données relatives à des structures non versionnées dans ce dépôt principal).
+
+```
+git submodule init
+git submodule update
+```
+
 ## Installation
 
 1. Installez les dépendances :
