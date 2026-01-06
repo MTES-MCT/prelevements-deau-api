@@ -2,7 +2,6 @@
 Node.js 24 (ESM), MongoDB 4.4, Redis, BullMQ v5, Express v5, AVA, XO, c8
 
 Internal packages:
-- `@fabnum/demarches-simplifiees`: DS API client
 - `@fabnum/prelevements-deau-timeseries-parsers`: file validation & timeseries extraction
 
 ## Code Style (XO)

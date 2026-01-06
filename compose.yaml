@@ -1,6 +1,6 @@
 services:
   mongo:
-    image: mongo:4.0.3
+    image: mongo:7.0
     container_name: prelevement-mongo
     restart: unless-stopped
     ports:

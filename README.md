@@ -26,6 +26,7 @@ git submodule update
 
    ```bash
    npm install
+   npm install -g migrate-mongo
    ```
 
 2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez les variables obligatoires.
