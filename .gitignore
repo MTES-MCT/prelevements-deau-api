@@ -192,6 +192,4 @@ dist
 # .pnp.*
 
 # Scripts
-/data
-
 /dump

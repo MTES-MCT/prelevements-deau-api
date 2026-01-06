@@ -28,12 +28,12 @@ async function main() {
   const role = parseArgValue(args, 'role') || 'reader'
 
   if (!email || !nom || !prenom) {
-    console.error('Usage: node scripts/create-user.js --email=user@example.com --nom=Dupont --prenom=Jean [--structure=DREAL] [--territoire=GUADELOUPE] [--role=reader|editor]')
+    console.error('Usage: node scripts/create-user.js --email=user@example.com --nom=Dupont --prenom=Jean [--structure=DREAL] [--territoire=GUADELOUPE] [--role=reader|editor|preleveur]')
     process.exit(1)
   }
 
-  if (role !== 'reader' && role !== 'editor') {
-    console.error('Le rôle doit être "reader" ou "editor"')
+  if (role !== 'reader' && role !== 'editor' && role !== 'preleveur') {
+    console.error('Le rôle doit être "reader", "editor" ou "preleveur"')
     process.exit(1)
   }
 
