@@ -15,12 +15,12 @@ async function main() {
   const role = args.find(a => a.startsWith('--role='))?.split('=')[1] || 'reader'
 
   if (!email || !territoire) {
-    console.error('Usage: node scripts/add-user-role.js --email=user@example.com --territoire=GUADELOUPE [--role=reader|editor]')
+    console.error('Usage: node scripts/add-user-role.js --email=user@example.com --territoire=GUADELOUPE [--role=reader|editor|preleveur]')
     process.exit(1)
   }
 
-  if (role !== 'reader' && role !== 'editor') {
-    console.error('Le rôle doit être "reader" ou "editor"')
+  if (role !== 'reader' && role !== 'editor' && role !== 'preleveur') {
+    console.error('Le rôle doit être "reader", "editor" ou "preleveur"')
     process.exit(1)
   }
 

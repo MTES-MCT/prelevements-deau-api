@@ -40,23 +40,6 @@ npm run import-reference-data <chemin-dossier-csv>
 npm run import-reference-data ./data
 ```
 
-### `import-territoire-data`
-
-Importe les données spécifiques à un territoire (points de prélèvement, préleveurs, exploitations, règles, documents).
-
-```bash
-npm run import-territoire-data <code-territoire> <chemin-dossier-csv>
-```
-
-**Exemple :**
-```bash
-npm run import-territoire-data DEP-974 ./data
-```
-
-**Prérequis :**
-- Variable d'environnement `S3_PUBLIC_URL` configurée (pour télécharger les documents)
-- (Optionnel) `SKIP_DOCUMENT_UPLOAD=true` pour sauter l'upload des documents vers S3
-
 ---
 
 ## Gestion des utilisateurs
@@ -121,22 +104,6 @@ Liste tous les utilisateurs avec leurs rôles.
 ```bash
 npm run user:list
 ```
-
----
-
-## Synchronisation des dossiers
-
-### `sync-updated-dossiers`
-
-Synchronise **uniquement** les dossiers modifiés sur Démarches Simplifiées depuis la dernière synchronisation.
-
-```bash
-npm run sync-updated-dossiers
-```
-
-**Usage recommandé :** Mise à jour incrémentale après une première synchronisation complète, ou exécution manuelle entre les synchronisations horaires automatiques.
-
-**Note :** Ce script est aussi exécuté automatiquement toutes les heures par le worker BullMQ (job `sync-updated-dossiers`).
 
 ---
 
@@ -256,15 +223,11 @@ npm run trigger-scheduled-job <nom-du-job>
 ```
 
 **Jobs disponibles :**
-- `sync-updated-dossiers` : Synchronisation des dossiers modifiés depuis DS
 - `process-attachments-maintenance` : Retraitement des attachments en erreur
 - `consolidate-dossiers-maintenance` : Reconsolidation des dossiers non consolidés
 
 **Exemples :**
 ```bash
-# Lancer la synchronisation DS immédiatement
-npm run trigger-scheduled-job sync-updated-dossiers
-
 # Lancer la maintenance des attachments
 npm run trigger-scheduled-job process-attachments-maintenance
 
@@ -326,7 +289,6 @@ npm run run-job-with-logs process-attachment '{"attachmentId":"6908db2679a0c1d0d
 ```bash
 npm run download-csv
 npm run import-reference-data ./data
-npm run import-territoire-data DEP-974 ./data
 npm run resync-all-dossiers
 ```
 

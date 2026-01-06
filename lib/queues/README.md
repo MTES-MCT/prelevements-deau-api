@@ -40,8 +40,6 @@ Configuration centrale : connexion Redis, définition des files d'attente et des
 **Jobs configurés :**
 | Nom | Type | Fréquence | Description |
 |-----|------|-----------|-------------|
-| `sync-updated-dossiers` | Cron | Toutes les heures | Synchronise les dossiers modifiés depuis DS |
-| `process-attachments-maintenance` | Cron | 1x/jour à 3h | Retraite les attachments en erreur |
 | `consolidate-dossiers-maintenance` | Cron | 1x/jour à 4h | Reconsolide les dossiers marqués |
 | `process-attachment` | On-demand | - | Traite une pièce jointe spécifique |
 | `consolidate-dossier` | On-demand | - | Consolide un dossier spécifique |
@@ -64,7 +62,6 @@ Démarrage des workers qui consomment les jobs des queues.
 Chaque job est mappé à une fonction de traitement :
 ```javascript
 {
-  'sync-updated-dossiers': syncUpdatedDossiers,
   'process-attachment': async job => processAttachment(job.data.attachmentId),
   // ...
 }
@@ -114,42 +111,6 @@ await addJobProcessAttachment('67890abcdef')
 ### Mode test
 
 En mode test (`NODE_ENV=test`), `getConnection()` retourne `null` et les jobs ne sont pas créés (évite les dépendances Redis).
-
-## Flux de traitement
-
-### 1. Synchronisation DS → Traitement → Consolidation
-
-```
-sync-updated-dossiers (cron)
-    ↓
-Récupère dossiers modifiés depuis DS
-    ↓
-Pour chaque attachment nouveau/modifié
-    ↓
-addJobProcessAttachment(attachmentId)
-    ↓
-Worker process-attachment
-    ↓
-Parse fichier → Crée series/series_values
-    ↓
-addJobConsolidateDossier(dossierId)
-    ↓
-Worker consolidate-dossier
-    ↓
-Crée integrations_journalieres
-```
-
-### 2. Maintenance nocturne
-
-```
-3h : process-attachments-maintenance
-    ↓
-Retraite tous les attachments en erreur/warning
-    ↓
-4h : consolidate-dossiers-maintenance
-    ↓
-Reconsolide tous les dossiers non consolidés
-```
 
 ## Retry & Gestion d'erreurs
 
@@ -222,9 +183,6 @@ Authentification Basic Auth requise (username libre, password = `BULLBOARD_PASSW
 ```bash
 # Installer l'outil (optionnel)
 npm install -g bullmq-cli
-
-# Voir les jobs en attente
-bullmq jobs sync-updated-dossiers waiting
 
 # Voir les jobs échoués
 bullmq jobs process-attachment failed

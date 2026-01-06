@@ -39,7 +39,7 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 **Note**
 Sur Scalingo, MongoDB est limité à la version 4.0.4, les versions 5+ ne sont pas disponibles en raison des restrictions de licences (SSPL).
 
-### (Option A) À partir d'un dump de la base de données
+### À partir d'un dump de la base de données
 
 Télécharger le fichier de dump de la base de données et placer le dans : `dump/mongo_dump.archive`
 
@@ -49,59 +49,11 @@ Lancer l'importation des données :
    docker compose exec -T mongo mongorestore --archive --drop < ./dump/mongo_dump.archive
    ```
 
-### (Option B) À partir d'une base de données vide
-
-- Les données initiales doivent être ajoutées à la base MongoDB _("à la main" pour l'instant).
-
-```mongo
-db.territoires.insertOne({nom: 'La Réunion', bbox: [[55.25, -21.45], [55.8, -20.85]], code: 'DEP-974', demarcheNumber: <number>})
-```
-
-Remplacez <number> par le demarcheNumber correspondant à l’identifiant sur démarches simplifiées.
-
-- Ajoutez un jeton d'accès dans la collection `tokens` :
-
-```mongo
-db.tokens.insertOne({token: '<votre_token>', territoire: 'DEP-974'})
-```
-
-Ce jeton sera utilisé en tant que mot de passe pour se connecter à l'application.
-
-- Téléchargez les CSV de référence. Assurez-vous d'avoir rempli la variable d'environnement `CSV_SOURCE_URL` avant.
-
-```bash
-npm run download-csv
-```
-
-- Importez ensuite ces fichiers en base, le dernier paramètre correspond à l'emplacement des CSV.
-
-```bash
-npm run import-reference-data ./data
-```
-
-- Importez les points / préleveurs / exploitations / règles / documents :
-  _(Il faut préciser le code du territoire ainsi que le chemin du dossier contenant les fichiers CSV)_
-
-```bash
-npm run import-territoire-data DEP-974 ./data
-```
-
-- Enfin, récupérez les dossiers déposés sur Démarches Simplifiées. Ces dossiers seront traités :
-1. Validation des données
-2. Stockage en ligne des fichiers en pièce jointe
-3. Enregistrement en base de donnée des dossiers
-
-```bash
-npm run resync-all-dossiers
-```
-
 ### Scripts utilitaires
 
 Le projet dispose de nombreux scripts pour la gestion, la synchronisation et la maintenance des données.
 
 **Principaux scripts :**
-- `resync-all-dossiers` : resynchronise tous les dossiers depuis DS (première sync ou resync complète)
-- `sync-updated-dossiers` : synchronise uniquement les dossiers modifiés
 - `reprocess-all-attachments` : retraite tous les attachments
 - `reconsolidate-all-dossiers` : force la reconsolidation de tous les dossiers
 - `trigger-scheduled-job` : lance manuellement un job schedulé (cron)
@@ -134,8 +86,6 @@ npm run start:worker
 Les workers gèrent les tâches planifiées et à la demande :
 
 **Tâches planifiées (cron) :**
-- **sync-updated-dossiers** : Synchronisation des dossiers depuis Démarches Simplifiées (toutes les heures)
-- **process-attachments-maintenance** : Retraitement des pièces jointes en erreur (1x/jour à 3h)
 - **consolidate-dossiers-maintenance** : Reconsolidation des dossiers marqués (1x/jour à 4h)
 
 **Tâches à la demande (déclenchées par l'API) :**

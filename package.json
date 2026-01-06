@@ -7,9 +7,7 @@
   "scripts": {
     "start": "node api.js",
     "start:worker": "node worker.js",
-    "sync-updated-dossiers": "node scripts/sync-updated-dossiers.js",
     "resync-all-dossiers": "node scripts/resync-all-dossiers.js",
-    "import-territoire-data": "node scripts/import-territoire-data.js",
     "import-reference-data": "node scripts/import-reference-data.js",
     "download-csv": "node scripts/download-csv.js",
     "validate-declaration-file": "node scripts/validate-declaration-file.js",

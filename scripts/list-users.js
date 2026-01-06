@@ -3,7 +3,6 @@
 import 'dotenv/config'
 import {argv} from 'node:process'
 import mongo from '../lib/util/mongo.js'
-import {getUsersByTerritoire} from '../lib/models/user.js'
 
 await mongo.connect()
 
@@ -21,13 +20,9 @@ async function main() {
   try {
     let users
 
-    if (territoire) {
-      users = await getUsersByTerritoire(territoire)
-    } else {
-      users = await mongo.db.collection('users').find({
-        deletedAt: {$exists: false}
-      }).toArray()
-    }
+    users = await mongo.db.collection('users').find({
+      deletedAt: {$exists: false}
+    }).toArray()
 
     // Filtrer par rôle si demandé
     if (roleFilter) {
