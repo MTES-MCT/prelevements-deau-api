@@ -91,4 +91,5 @@ jobs:
         run: |
           scw container container update "$SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER" \
             registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:testing-latest" \
-            command="node worker.js"
+            command.0=node \
+            command.1=worker.js
