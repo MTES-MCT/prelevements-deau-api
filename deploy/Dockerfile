@@ -14,6 +14,9 @@ FROM base AS runner
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+COPY deploy/testing-scaleway-mongodb-ca.pem /usr/local/share/ca-certificates/scw-mongodb-ca.crt
+RUN update-ca-certificates
+
 ENV PORT=8080
 EXPOSE 8080
 
