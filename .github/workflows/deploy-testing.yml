@@ -1,0 +1,94 @@
+name: Deploy (testing) to Scaleway
+
+on:
+  push:
+    branches: ["testing"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-testing
+  cancel-in-progress: true
+
+jobs:
+  test_build_deploy:
+    runs-on: ubuntu-latest
+    environment: testing
+
+    env:
+      TZ: Europe/Paris
+      SCW_REGION: ${{ vars.SCW_REGION }}
+      SCW_REGISTRY_ENDPOINT: ${{ vars.SCW_REGISTRY_ENDPOINT }}
+      SCW_IMAGE_NAME: ${{ vars.SCW_IMAGE_NAME }}
+      SCW_SERVERLESS_CONTAINER_ID_TESTING_API: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_TESTING_API }}
+      SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Test (if present)
+        run: npm test --if-present
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Scaleway Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.SCW_REGISTRY_ENDPOINT }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+
+      - name: Build & push image (testing-latest + sha)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./deploy/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:testing-latest
+            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:testing-${{ github.sha }}
+
+      - name: Install Scaleway CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
+          scw version
+
+      - name: Deploy API to Scaleway Serverless Container (testing)
+        env:
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
+          SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
+          SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
+          SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
+        run: |
+          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_TESTING_API" \
+            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:testing-latest"
+
+      - name: Deploy WORKER to Scaleway Serverless Container (testing)
+        env:
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
+          SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
+          SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
+          SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
+        run: |
+          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER" \
+            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:testing-latest" \
+            command="node worker.js"
