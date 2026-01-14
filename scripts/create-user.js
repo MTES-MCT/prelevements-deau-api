@@ -24,11 +24,10 @@ async function main() {
   const nom = parseArgValue(args, 'nom')
   const prenom = parseArgValue(args, 'prenom')
   const structure = parseArgValue(args, 'structure')
-  const territoire = parseArgValue(args, 'territoire')
   const role = parseArgValue(args, 'role') || 'reader'
 
   if (!email || !nom || !prenom) {
-    console.error('Usage: node scripts/create-user.js --email=user@example.com --nom=Dupont --prenom=Jean [--structure=DREAL] [--territoire=GUADELOUPE] [--role=reader|editor|preleveur]')
+    console.error('Usage: node scripts/create-user.js --email=user@example.com --nom=Dupont --prenom=Jean [--structure=DREAL] [--role=reader|editor|preleveur]')
     process.exit(1)
   }
 
@@ -45,10 +44,7 @@ async function main() {
     roles: []
   }
 
-  // Si un territoire est fourni, ajouter le rôle
-  if (territoire) {
-    user.roles.push({territoire, role})
-  }
+  user.roles.push({role})
 
   try {
     const createdUser = await insertUser(user)
@@ -63,7 +59,7 @@ async function main() {
     if (createdUser.roles.length > 0) {
       console.log('\nRôles:')
       for (const r of createdUser.roles) {
-        console.log(`  - ${r.territoire}: ${r.role}`)
+        console.log(`  - ${r.role}`)
       }
     } else {
       console.log('\nAucun rôle assigné. Utilisez add-user-role.js pour ajouter des rôles.')
