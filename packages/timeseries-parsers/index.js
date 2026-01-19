@@ -1,2 +1,5 @@
 export {extractCamionCiterne} from './lib/camion-citerne/index.js'
 export {extractMultiParamFile, convertToReferenceValue} from './lib/multi-params/index.js'
+export {extractTemplateFile} from './lib/template-file/index.js'
+export {extractAquasys} from './lib/aquasys/index.js'
+export {extractGidaf} from './lib/gidaf/index.js'
