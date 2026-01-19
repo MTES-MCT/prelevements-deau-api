@@ -15,9 +15,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 COPY deploy/testing-scaleway-mongodb-ca.pem /usr/local/share/ca-certificates/scw-mongodb-ca.crt
+COPY deploy/testing-scaleway-redis-ca.pem /usr/local/share/ca-certificates/scw-redis-ca.crt
 RUN update-ca-certificates
 
-ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/scw-mongodb-ca.crt
 ENV NODE_OPTIONS=--use-openssl-ca
 
 ENV PORT=8080
