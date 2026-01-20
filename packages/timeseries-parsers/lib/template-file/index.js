@@ -139,10 +139,15 @@ export async function extractTemplateFile(buffer) {
     workbook = await readSheet(buffer)
     validateStructure(workbook)
   } catch (error) {
-    return {errors: [formatError(error)], data: {series: []}}
+    return {
+      errors: [formatError(error)],
+      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+    }
   }
 
-  const data = {}
+  const data = {
+    metadata: {pointsPrelevement: [], preleveurs: []}
+  }
   const errors = []
 
   // Traiter la feuille de métadonnées (point_de_prelevement)
@@ -182,7 +187,10 @@ export async function extractTemplateFile(buffer) {
       message: 'La feuille "declaration_de_volume" est requise.',
       severity: 'error'
     })
-    return {errors, data: {series: []}}
+    return {
+      errors,
+      data: {series: [], metadata: data.metadata}
+    }
   }
 
   const dataResult = validateAndExtractData(dataSheet, errors)
@@ -197,6 +205,8 @@ export async function extractTemplateFile(buffer) {
     errors.push({message: error.message, severity: 'error'})
     consolidatedData = {series: []}
   }
+
+  consolidatedData.metadata = data.metadata
 
   const result = {
     rawData: data,
@@ -348,6 +358,7 @@ function mapMetadataColumns(sheet, headerRow, range, errors) {
 function extractPointsPrelevement(sheet, headerRow, range, columnMap, errors) {
   const points = []
   const seenPointIds = new Set()
+  const siretCol = PRELEVEUR_COLUMNS.find(col => col.key === 'siret')
 
   for (let r = headerRow + 1; r <= range.e.r; r++) {
     const pointIdCol = POINT_COLUMNS.find(col => col.key === 'pointId')
@@ -368,6 +379,17 @@ function extractPointsPrelevement(sheet, headerRow, range, columnMap, errors) {
 
     const point = {
       [pointIdCol.outputKey]: pointIdStr
+    }
+
+    // Si la colonne SIRET est présente, rattacher le point au préleveur
+    if (columnMap.siret !== undefined) {
+      const siretValue = readAsString(sheet, r, columnMap.siret)
+      if (siretValue) {
+        const siretStr = String(siretValue).trim().replace(/\s+/g, '')
+        if (siretStr.length === 14) {
+          point[siretCol.outputKey] = siretStr
+        }
+      }
     }
 
     // Extraire toutes les colonnes des points de prélèvement
