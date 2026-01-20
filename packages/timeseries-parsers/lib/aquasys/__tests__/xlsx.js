@@ -20,17 +20,26 @@ test('extractAquasys - valid file', async t => {
   t.truthy(data.series)
   t.true(data.series.length > 0, 'Aucune série extraite')
 
-  const serie = data.series[0]
-  t.is(serie.pointPrelevement, 'P1')
-  t.is(serie.parameter, 'Volume prélevé')
-  t.is(serie.unit, 'm³')
-  t.truthy(serie.data)
-  t.true(Array.isArray(serie.data))
+  const volumeSerie = data.series.find(serie => serie.parameter === 'Volume prélevé')
+  t.truthy(volumeSerie)
+  t.is(volumeSerie.pointPrelevement, 'P1')
+  t.is(volumeSerie.unit, 'm³')
+  t.truthy(volumeSerie.data)
+  t.true(Array.isArray(volumeSerie.data))
 
-  const valuesByDate = new Map(serie.data.map(entry => [entry.date, entry.value]))
+  const valuesByDate = new Map(volumeSerie.data.map(entry => [entry.date, entry.value]))
   t.is(valuesByDate.get('2024-02-01'), 100, 'Index 100->150 avec coef 2')
   t.is(valuesByDate.get('2024-03-01'), 20, 'Remise à zéro: 10 * coef 2')
   t.is(valuesByDate.get('2024-04-30'), 20, 'Volume direct')
+
+  const indexSerie = data.series.find(serie => serie.parameter === 'Index compteur C1')
+  t.truthy(indexSerie)
+  t.is(indexSerie.pointPrelevement, 'P1')
+  t.is(indexSerie.unit, 'm³')
+  const indexByDate = new Map(indexSerie.data.map(entry => [entry.date, entry.value]))
+  t.is(indexByDate.get('2024-01-01'), 200, 'Index 100 * coef 2')
+  t.is(indexByDate.get('2024-02-01'), 300, 'Index 150 * coef 2')
+  t.is(indexByDate.get('2024-03-01'), 20, 'Index 10 * coef 2')
 
   t.truthy(rawData)
   t.truthy(rawData.metadata)

@@ -18,6 +18,10 @@ const CADRES_COLUMNS = [
   {key: 'volumeMax', matchers: ['volume_max_autorise_(m3)', 'volume_max_autorisé_(m3)', 'volume_max_autorise', 'volume_max_autorisé']}
 ]
 
+// Colonnes des mesures (volumes) issues de GIDAF.
+// Si on ajoute des index de compteurs un jour, la logique devra :
+// - stocker les index bruts (ou convertis) en série séparée
+// - calculer les volumes par différence d'index (comme pour Aquasys)
 const PRELEVEMENTS_COLUMNS = [
   {key: 'codeInspection', matchers: ['code_inspection']},
   {key: 'pointSurveillance', matchers: ['point_de_surveillance']},
@@ -235,6 +239,9 @@ function extractCadresData(sheet) {
   return {data, errors}
 }
 
+// Extraction des volumes GIDAF.
+// Note métier : GIDAF ne fournit pas d'index aujourd'hui, uniquement des volumes.
+// On conserve une structure simple pour rester compatible avec un futur ajout d'index.
 function extractPrelevementsData(sheet) {
   const data = {rows: []}
   const errors = []
@@ -310,6 +317,10 @@ function extractPrelevementsData(sheet) {
   return {data, errors}
 }
 
+// Consolidation des séries :
+// - on agrège par point et par paramètre
+// - la sortie est compatible avec un futur ajout d'une série d'index
+//   (qui viendrait s'ajouter à `series` sans casser l'existant).
 function consolidateData(rawData) {
   const series = []
   const volumeRows = rawData.volumeData?.rows || []

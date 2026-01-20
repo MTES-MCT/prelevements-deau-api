@@ -5,6 +5,8 @@ import {readSheet, readAsString, readAsDateString, readAsNumber} from '../xlsx.j
 import {validateNumericValue} from '../validate.js'
 import {dedupe} from '../dedupe.js'
 
+// Mapping des colonnes Aquasys vers les champs utilisés pour l'extraction.
+// L'export Aquasys mélange métadonnées (points/préleveurs) et mesures (index/volumes).
 const COLUMN_DEFS = [
   {key: 'pointId', matchers: ['point_de_prelevement', 'point_de_prélèvement']},
   {key: 'siret', matchers: ['siret']},
@@ -20,6 +22,7 @@ const COLUMN_DEFS = [
   {key: 'mesure', matchers: ['mesure']}
 ]
 
+// Colonnes minimales nécessaires pour interpréter la donnée (index/volume).
 const REQUIRED_HEADERS = ['point_de_prelevement', 'date_de_mesure', 'mesure']
 
 export async function extractAquasys(buffer) {
@@ -72,15 +75,24 @@ export async function extractAquasys(buffer) {
     }
   }
 
+  // Aquasys fournit des "index" de compteurs et parfois des "volumes".
+  // On conserve à la fois :
+  // - des séries de volumes (compatibles avec le reste du système)
+  // - des séries d'index (indispensables pour recalculer un volume en
+  //   différence avec un index déjà présent en base).
   const {rawRows, metadata} = extractRows(sheet, headerRow, range, columnMap, errors)
-  const volumeRows = buildVolumeRows(rawRows, errors)
-  const consolidated = consolidateData(volumeRows)
+  const {volumeRows, indexRows} = buildVolumeRows(rawRows, errors)
+  const consolidated = consolidateData(volumeRows, indexRows)
   consolidated.metadata = metadata
 
   const result = {
-    rawData: {volumeData: {rows: volumeRows}, metadata},
+    rawData: {
+      volumeData: {rows: volumeRows},
+      indexData: {rows: indexRows},
+      metadata
+    },
     data: consolidated,
-    errors: errors.map(formatError)
+    errors: [...errors, ...(consolidated.warnings || [])].map(formatError)
   }
 
   return dedupe(result)
@@ -144,6 +156,9 @@ function mapColumns(sheet, headerRow, range) {
   return columnMap
 }
 
+// Extraction des lignes brutes :
+// - métadonnées points/préleveurs
+// - mesures (index/volume) avec date de mesure
 function extractRows(sheet, headerRow, range, columnMap, errors) {
   const rawRows = []
   const pointsById = new Map()
@@ -309,6 +324,10 @@ function normalizeCodeCommune(value) {
   return String(value).replace(/\.0$/, '').trim().padStart(5, '0')
 }
 
+// Normalise les mesures Aquasys :
+// - si "Index", on stocke l'index et on calcule ensuite les volumes par différence
+// - si "Volume", on garde le volume tel quel
+// Les index sont "ramenés" en m³ via le coefficient de lecture (mesure * coefficient).
 function buildVolumeRows(rawRows, errors) {
   const indexRows = []
   const volumeRows = []
@@ -331,18 +350,24 @@ function buildVolumeRows(rawRows, errors) {
         volumePreleve: mesureValue
       })
     } else {
+      const coefficient = row.coefficientLecture ?? 1
       indexRows.push({
         pointId: row.pointId,
         compteur: row.compteur || 'default',
         dateMesure: row.dateMesure,
         mesure: mesureValue,
-        coefficient: row.coefficientLecture ?? 1
+        coefficient,
+        scaledMesure: mesureValue * coefficient
       })
     }
   }
 
+  // Les volumes calculés par différence d'index s'ajoutent aux volumes directs.
   const computedRows = computeVolumesFromIndex(indexRows)
-  return [...computedRows, ...volumeRows].filter(row => row.dateDebut && row.dateFin)
+  return {
+    volumeRows: [...computedRows, ...volumeRows].filter(row => row.dateDebut && row.dateFin),
+    indexRows
+  }
 }
 
 function safeNumericValue(value, errors, pointId, dateMesure) {
@@ -357,6 +382,9 @@ function safeNumericValue(value, errors, pointId, dateMesure) {
   }
 }
 
+// Calcul des volumes à partir d'index successifs par point+compteur.
+// - cas normal : (index courant - index précédent) * coefficient
+// - remise à zéro : index courant * coefficient
 function computeVolumesFromIndex(indexRows) {
   const byKey = new Map()
   for (const row of indexRows) {
@@ -391,62 +419,158 @@ function computeVolumesFromIndex(indexRows) {
   return computed
 }
 
-function consolidateData(volumeRows) {
+// Consolide en séries temporelles :
+// - Volume prélevé (m³) pour l'intégration standard
+// - Index compteur (m³ après coefficient) pour recaler avec l'historique en base
+function consolidateData(volumeRows, indexRows) {
   const series = []
-  if (!Array.isArray(volumeRows) || volumeRows.length === 0) {
-    return {series}
-  }
+  const warnings = []
 
-  const rowsByPoint = new Map()
-  for (const row of volumeRows) {
-    if (!row.pointId) {
-      continue
+  if (Array.isArray(volumeRows) && volumeRows.length > 0) {
+    const rowsByPoint = new Map()
+    for (const row of volumeRows) {
+      if (!row.pointId) {
+        continue
+      }
+      if (!rowsByPoint.has(row.pointId)) {
+        rowsByPoint.set(row.pointId, [])
+      }
+      rowsByPoint.get(row.pointId).push(row)
     }
-    if (!rowsByPoint.has(row.pointId)) {
-      rowsByPoint.set(row.pointId, [])
-    }
-    rowsByPoint.get(row.pointId).push(row)
-  }
 
-  for (const [pointId, rows] of rowsByPoint.entries()) {
-    const byDate = new Map()
-    const durations = []
-    let minDate = null
-    let maxDate = null
+    for (const [pointId, rows] of rowsByPoint.entries()) {
+      const byDate = new Map()
+      const durations = []
+      let minDate = null
+      let maxDate = null
 
-    for (const row of rows) {
-      if (!row.dateFin || row.volumePreleve === undefined || row.volumePreleve === null) {
+      for (const row of rows) {
+        if (!row.dateFin || row.volumePreleve === undefined || row.volumePreleve === null) {
+          continue
+        }
+
+        if (row.dateDebut && row.dateFin) {
+          const duration = diffInDays(row.dateDebut, row.dateFin)
+          if (Number.isFinite(duration) && duration >= 0) {
+            durations.push(duration)
+          }
+        }
+
+        if (!minDate || row.dateDebut < minDate) {
+          minDate = row.dateDebut
+        }
+        if (!maxDate || row.dateFin > maxDate) {
+          maxDate = row.dateFin
+        }
+
+        byDate.set(row.dateFin, (byDate.get(row.dateFin) || 0) + row.volumePreleve)
+      }
+
+      const dataEntries = [...byDate.entries()]
+        .map(([date, value]) => ({date, value}))
+        .sort((a, b) => a.date.localeCompare(b.date))
+
+      if (dataEntries.length === 0) {
         continue
       }
 
-      if (row.dateDebut && row.dateFin) {
-        const duration = diffInDays(row.dateDebut, row.dateFin)
-        if (Number.isFinite(duration) && duration >= 0) {
-          durations.push(duration)
-        }
-      }
+      series.push({
+        pointPrelevement: pointId,
+        parameter: 'Volume prélevé',
+        unit: 'm³',
+        frequency: inferFrequency(durations),
+        valueType: 'cumulative',
+        minDate,
+        maxDate,
+        data: dataEntries
+      })
+    }
+  }
 
-      if (!minDate || row.dateDebut < minDate) {
-        minDate = row.dateDebut
-      }
-      if (!maxDate || row.dateFin > maxDate) {
-        maxDate = row.dateFin
-      }
+  const {series: indexSeries, warnings: indexWarnings} = consolidateIndexSeries(indexRows)
+  series.push(...indexSeries)
+  warnings.push(...indexWarnings)
 
-      byDate.set(row.dateFin, (byDate.get(row.dateFin) || 0) + row.volumePreleve)
+  return {series, warnings}
+}
+
+// Regroupe les index par point+compteur pour créer une série d'index.
+// Ces séries permettent de recalculer les volumes sur des périodes
+// où l'index de départ est déjà connu en base.
+function consolidateIndexSeries(indexRows) {
+  if (!Array.isArray(indexRows) || indexRows.length === 0) {
+    return {series: [], warnings: []}
+  }
+
+  const rowsByKey = new Map()
+  for (const row of indexRows) {
+    if (!row.pointId || !row.dateMesure) {
+      continue
     }
 
-    const dataEntries = [...byDate.entries()]
-      .map(([date, value]) => ({date, value}))
-      .sort((a, b) => a.date.localeCompare(b.date))
+    const compteur = row.compteur || 'default'
+    const key = `${row.pointId}__${compteur}`
+    if (!rowsByKey.has(key)) {
+      rowsByKey.set(key, [])
+    }
+    rowsByKey.get(key).push(row)
+  }
+
+  const series = []
+  const warnings = []
+  for (const [key, rows] of rowsByKey.entries()) {
+    rows.sort((a, b) => a.dateMesure.localeCompare(b.dateMesure))
+    const durations = []
+    let minDate = null
+    let maxDate = null
+    const byDate = new Map()
+    const duplicateDates = []
+
+    for (const row of rows) {
+      if (row.scaledMesure === undefined || row.scaledMesure === null || Number.isNaN(row.scaledMesure)) {
+        continue
+      }
+
+      const existing = byDate.get(row.dateMesure)
+      if (existing !== undefined && row.scaledMesure !== existing) {
+        duplicateDates.push(row.dateMesure)
+      }
+
+      if (existing === undefined || row.scaledMesure > existing) {
+        byDate.set(row.dateMesure, row.scaledMesure)
+      }
+    }
+
+    const uniqueDates = [...byDate.keys()].sort()
+    for (let i = 1; i < uniqueDates.length; i++) {
+      const duration = diffInDays(uniqueDates[i - 1], uniqueDates[i])
+      if (Number.isFinite(duration) && duration >= 0) {
+        durations.push(duration)
+      }
+    }
+
+    if (uniqueDates.length > 0) {
+      minDate = uniqueDates[0]
+      maxDate = uniqueDates[uniqueDates.length - 1]
+    }
+
+    const dataEntries = uniqueDates.map(date => ({
+      date,
+      value: byDate.get(date)
+    }))
 
     if (dataEntries.length === 0) {
       continue
     }
 
+    const [pointId, compteur] = key.split('__')
+    const parameter = compteur && compteur !== 'default'
+      ? `Index compteur ${compteur}`
+      : 'Index compteur'
+
     series.push({
       pointPrelevement: pointId,
-      parameter: 'Volume prélevé',
+      parameter,
       unit: 'm³',
       frequency: inferFrequency(durations),
       valueType: 'cumulative',
@@ -454,9 +578,17 @@ function consolidateData(volumeRows) {
       maxDate,
       data: dataEntries
     })
+
+    if (duplicateDates.length > 0) {
+      const uniqueDates = [...new Set(duplicateDates)].sort()
+      warnings.push({
+        message: `Doublons d'index détectés pour ${parameter} (point ${pointId}) aux dates: ${uniqueDates.join(', ')}`,
+        severity: 'warning'
+      })
+    }
   }
 
-  return {series}
+  return {series, warnings}
 }
 
 function diffInDays(start, end) {
