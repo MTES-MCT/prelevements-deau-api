@@ -193,3 +193,5 @@ dist
 
 # Scripts
 /dump
+
+/lib/generated/prisma

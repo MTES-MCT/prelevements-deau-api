@@ -1,0 +1,63 @@
+enum UserRole {
+  DECLARANT
+  INSTRUCTOR
+  ADMIN
+}
+
+model User {
+  id    Int      @id @default(autoincrement())
+  email String   @unique @db.Citext
+  role  UserRole
+
+  firstName String?
+  lastName  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  declarant  Declarant?  @relation("UserDeclarant")
+  instructor Instructor? @relation("UserInstructor")
+
+  authTokens    AuthToken[]
+  sessionTokens SessionToken[]
+}
+
+model Declarant {
+  userId Int  @id
+  user   User @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Instructor {
+  userId Int  @id
+  user   User @relation("UserInstructor", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthToken {
+  id    Int    @id @default(autoincrement())
+  token String @unique
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model SessionToken {
+  id    Int    @id @default(autoincrement())
+  token String @unique
+
+  role UserRole
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}

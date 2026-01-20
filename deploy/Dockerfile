@@ -16,6 +16,7 @@ COPY . .
 
 COPY deploy/testing-scaleway-mongodb-ca.pem /usr/local/share/ca-certificates/scw-mongodb-ca.crt
 COPY deploy/testing-scaleway-redis-ca.pem /usr/local/share/ca-certificates/scw-redis-ca.crt
+COPY deploy/testing-scaleway-postgres-ca.pem /usr/local/share/ca-certificates/scw-postgres-ca.crt
 RUN update-ca-certificates
 
 ENV NODE_OPTIONS=--use-openssl-ca

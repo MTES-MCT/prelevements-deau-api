@@ -12,6 +12,25 @@ services:
     networks:
       - prelevement-network
 
+  postgres:
+    image: postgis/postgis:17-3.5
+    container_name: prelevement-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: prelevements-deau
+      POSTGRES_PASSWORD: prelevements-deau
+      POSTGRES_USER: prelevements-deau
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:rw
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "prelevements-deau", "-U", "prelevements-deau"]
+      timeout: 5s
+      retries: 30
+      interval: 5s
+      start_period: 30s
+
   redis:
     image: redis:alpine
     container_name: prelevement-redis
@@ -57,5 +76,6 @@ networks:
 
 volumes:
   mongo_data:
+  postgres_data:
   redis_data:
   minio_data:

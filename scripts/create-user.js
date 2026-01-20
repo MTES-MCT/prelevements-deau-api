@@ -1,18 +1,14 @@
 /* eslint-disable n/prefer-global/process */
 /* eslint-disable unicorn/no-process-exit */
 import 'dotenv/config'
-import {argv} from 'node:process'
-import mongo from '../lib/util/mongo.js'
-import {insertUser} from '../lib/models/user.js'
+import process, {argv} from 'node:process'
+import {prisma} from '../db/prisma.js'
 
-await mongo.connect()
+const VALID_ROLES = new Set(['DECLARANT', 'INSTRUCTOR'])
 
 function parseArgValue(args, argName) {
   const arg = args.find(a => a.startsWith(`--${argName}=`))
-  if (!arg) {
-    return undefined
-  }
-
+  if (!arg) return undefined
   const value = arg.split('=').slice(1).join('=')
   return value.replaceAll(/^["']|["']$/g, '')
 }
@@ -21,60 +17,53 @@ async function main() {
   const args = argv.slice(2)
 
   const email = parseArgValue(args, 'email')
-  const nom = parseArgValue(args, 'nom')
-  const prenom = parseArgValue(args, 'prenom')
-  const structure = parseArgValue(args, 'structure')
-  const role = parseArgValue(args, 'role') || 'reader'
+  const lastName = parseArgValue(args, 'nom')
+  const firstName = parseArgValue(args, 'prenom')
+  const role = (parseArgValue(args, 'role') || 'DECLARANT').toUpperCase()
 
-  if (!email || !nom || !prenom) {
-    console.error('Usage: node scripts/create-user.js --email=user@example.com --nom=Dupont --prenom=Jean [--structure=DREAL] [--role=reader|editor|preleveur]')
+  if (!email || !lastName || !firstName) {
+    console.error(
+      'Usage: node scripts/create-user.js --email=user@example.com --nom=Dupont --prenom=Jean [--role=DECLARANT|INSTRUCTOR]'
+    )
     process.exit(1)
   }
 
-  if (role !== 'reader' && role !== 'editor' && role !== 'preleveur') {
-    console.error('Le rôle doit être "reader", "editor" ou "preleveur"')
+  if (!VALID_ROLES.has(role)) {
+    console.error('Le rôle doit être "DECLARANT" ou "INSTRUCTOR" (ADMIN ignoré).')
     process.exit(1)
   }
-
-  const user = {
-    email,
-    nom,
-    prenom,
-    structure: structure || null,
-    roles: []
-  }
-
-  user.roles.push({role})
 
   try {
-    const createdUser = await insertUser(user)
-    console.log('\u001B[32;1m%s\u001B[0m', '\n✓ Utilisateur créé avec succès\n')
-    console.log('ID:', createdUser._id.toString())
-    console.log('Email:', createdUser.email)
-    console.log('Nom:', createdUser.prenom, createdUser.nom)
-    if (createdUser.structure) {
-      console.log('Structure:', createdUser.structure)
-    }
-
-    if (createdUser.roles.length > 0) {
-      console.log('\nRôles:')
-      for (const r of createdUser.roles) {
-        console.log(`  - ${r.role}`)
+    const createdUser = await prisma.user.create({
+      data: {
+        email,
+        firstName,
+        lastName,
+        role,
+        ...(role === 'DECLARANT'
+          ? {declarant: {create: {}}}
+          : {instructor: {create: {}}})
+      },
+      include: {
+        declarant: true,
+        instructor: true
       }
-    } else {
-      console.log('\nAucun rôle assigné. Utilisez add-user-role.js pour ajouter des rôles.')
-    }
+    })
 
+    console.log('\u001B[32;1m%s\u001B[0m', '\n✓ Utilisateur créé avec succès\n')
+    console.log('ID:', createdUser.id)
+    console.log('Email:', createdUser.email)
+    console.log('Nom:', createdUser.firstName, createdUser.lastName)
+    console.log('Rôle:', createdUser.role)
+    console.log('Profil:', createdUser.declarant ? 'Declarant' : 'Instructor')
     console.log()
   } catch (error) {
     console.error('\u001B[31;1m%s\u001B[0m', '\n✗ Erreur lors de la création de l\'utilisateur\n')
-    console.error(error.message)
+    console.error(error?.message || error)
     process.exit(1)
+  } finally {
+    await prisma.$disconnect()
   }
 }
 
-try {
-  await main()
-} finally {
-  await mongo.disconnect()
-}
+await main()
