@@ -1,170 +1,65 @@
 import {pick} from 'lodash-es'
 
-import {readSheet} from '../xlsx.js'
-import {readAsString, readAsDateString, readAsNumber} from '../xlsx.js'
+import {readSheet, readAsString, readAsDateString, readAsNumber} from '../xlsx.js'
 import {validateNumericValue} from '../validate.js'
 import * as XLSX from 'xlsx'
 
-// Définition des colonnes des points de prélèvement (fichier Cadres)
-const CADRES_POINT_COLUMNS = [
-  {
-    key: 'codeInspection',
-    outputKey: 'code_aiot',
-    matchers: ['code_inspection', 'code_aiot'],
-    type: 'string',
-    required: true
-  },
-  {
-    key: 'pointSurveillance',
-    outputKey: 'id_point_de_prelevement_ou_rejet',
-    matchers: ['point_de_surveillance', 'point_surveillance'],
-    type: 'string',
-    required: true
-  },
-  {
-    key: 'coordonneesX',
-    outputKey: 'x_lambert93',
-    matchers: ['coordonnées_x', 'coordonnees_x', 'x_lambert93', 'x_lambert'],
-    type: 'number'
-  },
-  {
-    key: 'coordonneesY',
-    outputKey: 'y_lambert93',
-    matchers: ['coordonnées_y', 'coordonnees_y', 'y_lambert93', 'y_lambert'],
-    type: 'number'
-  },
-  {
-    key: 'commune',
-    outputKey: 'commune',
-    matchers: ['commune'],
-    type: 'string'
-  },
-  {
-    key: 'typePoint',
-    outputKey: 'type_de_point',
-    matchers: ['type_de_point', 'type_point'],
-    type: 'string'
-  },
-  {
-    key: 'milieu',
-    outputKey: 'milieu',
-    matchers: ['milieu'],
-    type: 'string'
-  },
-  {
-    key: 'precisionMilieu',
-    outputKey: 'précision_milieu',
-    matchers: ['précision_milieu', 'precision_milieu'],
-    type: 'string'
-  },
-  {
-    key: 'volumeMaxAutorise',
-    outputKey: 'volume_max_autorisé_m3',
-    matchers: ['volume_max_autorisé_(m3)', 'volume_max_autorise_m3', 'volume_max_autorisé', 'volume_max_autorise'],
-    type: 'number'
-  },
-  {
-    key: 'periodeReferenceVolumeMax',
-    outputKey: 'période_de_référence_volume_max',
-    matchers: ['période_de_référence_volume_max', 'periode_de_reference_volume_max'],
-    type: 'string'
-  }
+const CADRES_COLUMNS = [
+  {key: 'codeInspection', matchers: ['code_inspection']},
+  {key: 'pointSurveillance', matchers: ['point_de_surveillance']},
+  {key: 'siret', matchers: ['siret']},
+  {key: 'raisonSociale', matchers: ['raison_sociale']},
+  {key: 'coordonneesX', matchers: ['coordonnees_x', 'coordonnées_x']},
+  {key: 'coordonneesY', matchers: ['coordonnees_y', 'coordonnées_y']},
+  {key: 'typePoint', matchers: ['type_de_point']},
+  {key: 'milieu', matchers: ['milieu']},
+  {key: 'precisionMilieu', matchers: ['precision_milieu', 'précision_milieu']},
+  {key: 'periodeReference', matchers: ['periode_de_reference_volume_max', 'période_de_référence_volume_max']},
+  {key: 'volumeMax', matchers: ['volume_max_autorise_(m3)', 'volume_max_autorisé_(m3)', 'volume_max_autorise', 'volume_max_autorisé']}
 ]
 
-// Définition des colonnes des préleveurs (fichier Cadres)
-const CADRES_PRELEVEUR_COLUMNS = [
-  {
-    key: 'siret',
-    outputKey: 'siret',
-    matchers: ['siret', 'siret_preleveur'],
-    type: 'string',
-    required: true
-  },
-  {
-    key: 'raisonSociale',
-    outputKey: 'raison_sociale',
-    matchers: ['raison_sociale'],
-    type: 'string'
-  }
+const PRELEVEMENTS_COLUMNS = [
+  {key: 'codeInspection', matchers: ['code_inspection']},
+  {key: 'pointSurveillance', matchers: ['point_de_surveillance']},
+  {key: 'typePoint', matchers: ['type_de_point']},
+  {key: 'dateMesure', matchers: ['date_de_mesure']},
+  {key: 'volume', matchers: ['volume_(m3)', 'volume_m3', 'volume']}
 ]
 
-// Définition des colonnes des données dynamiques (fichier Prelevements)
-const PRELEVEMENTS_COLUMNS = {
-  codeInspection: {
-    key: 'codeInspection',
-    outputKey: 'code_aiot',
-    matchers: ['code_inspection', 'code_aiot'],
-    type: 'string',
-    required: true
-  },
-  pointSurveillance: {
-    key: 'pointSurveillance',
-    outputKey: 'id_point_de_prelevement_ou_rejet',
-    matchers: ['point_de_surveillance', 'point_surveillance'],
-    type: 'string',
-    required: true
-  },
-  typePoint: {
-    key: 'typePoint',
-    outputKey: 'type_de_point',
-    matchers: ['type_de_point', 'point_de_surveillance', 'type_point'],
-    type: 'string'
-  },
-  dateMesure: {
-    key: 'dateMesure',
-    outputKey: 'date_de_mesure',
-    matchers: ['date_de_mesure', 'date_mesure'],
-    type: 'string',
-    required: true
-  },
-  volume: {
-    key: 'volume',
-    outputKey: 'volume_m3',
-    matchers: ['volume_(m3)', 'volume_m3', 'volume'],
-    type: 'number',
-    required: true
-  }
+const PERIOD_MULTIPLIERS = {
+  journaliere: 365,
+  mensuelle: 12,
+  annuelle: 1
 }
 
-// Mapping des fréquences vers multiplicateurs annuels
-const FREQUENCY_TO_MULTIPLIER = {
-  'journalière': 365,
-  'mensuelle': 12,
-  'annuelle': 1
+function normalizeHeader(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')
 }
 
+function stripDiacritics(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
 
-/**
- * Calcule le volume annuel maximum à partir du volume limite et de la période de référence
- * @param {number|null} volumeLimite - Volume limite en m³
- * @param {string|null} periodeReference - Période de référence (Journalière, Mensuelle, Annuelle)
- * @returns {number|null}
- */
-function computeMaxAnnualVolume(volumeLimite, periodeReference) {
-  if (volumeLimite === null || volumeLimite === undefined || Number.isNaN(volumeLimite)) {
+function isPrelevementType(typePoint) {
+  const normalized = stripDiacritics(typePoint).toLowerCase()
+  return normalized.includes('alimentation')
+}
+
+function computeAnnualLimit(volumeMax, periode) {
+  if (volumeMax === null || volumeMax === undefined || Number.isNaN(volumeMax)) {
     return null
   }
 
-  if (!periodeReference || typeof periodeReference !== 'string') {
-    return null
-  }
-
-  const normalized = periodeReference.toLowerCase().trim()
-  const multiplier = FREQUENCY_TO_MULTIPLIER[normalized]
-  
-  if (!multiplier) {
-    return null
-  }
-
-  return multiplier * volumeLimite
+  const normalized = stripDiacritics(periode).toLowerCase()
+  const multiplier = PERIOD_MULTIPLIERS[normalized]
+  return multiplier ? volumeMax * multiplier : null
 }
 
-/**
- * Extrait le code meso depuis la colonne précision_milieu
- * Format attendu: "Alluvions de la Plaine de Bièvre-Valloire (FRDG303)" -> "FRDG303"
- * @param {string|null} precisionMilieu - Valeur de la colonne précision_milieu
- * @returns {string|null}
- */
 function extractCodeMeso(precisionMilieu) {
   if (!precisionMilieu || typeof precisionMilieu !== 'string') {
     return null
@@ -174,263 +69,43 @@ function extractCodeMeso(precisionMilieu) {
   return match ? match[1].trim() : null
 }
 
-/**
- * Normalise le nom de colonne pour la comparaison
- * @param {string} headerValue - Valeur de l'en-tête
- * @returns {string}
- */
-function normalizeColumnName(headerValue) {
-  return headerValue.toLowerCase().trim().replace(/\s+/g, '_')
-}
-
-/**
- * Extrait les données GIDAF depuis deux fichiers Excel
- * @param {Buffer|Object} cadresBufferOrOptions - Buffer du fichier Cadres ou objet avec {cadresBuffer, prelevementsBuffer}
- * @param {Buffer} [prelevementsBuffer] - Buffer du fichier Prelevements (si premier paramètre est un buffer)
- * @returns {Promise<{errors: Array, data: {series: Array, metadata: Object}}>}
- */
-export async function extractGidaf(cadresBufferOrOptions, prelevementsBuffer) {
-  const errors = []
-  const data = {}
-
-  // Gérer les deux formats d'appel:
-  // 1. extractGidaf({cadresBuffer, prelevementsBuffer})
-  // 2. extractGidaf(cadresBuffer, prelevementsBuffer)
-  let cadresBuffer
-  let prelevementsBufferFinal
-
-  // Vérifier si c'est un objet avec les propriétés cadresBuffer et prelevementsBuffer
-  // (mais pas un ArrayBuffer, TypedArray, ou autre type de buffer natif)
-  const isArrayBuffer = cadresBufferOrOptions instanceof ArrayBuffer
-  const isTypedArray = cadresBufferOrOptions && typeof cadresBufferOrOptions === 'object' && ArrayBuffer.isView && ArrayBuffer.isView(cadresBufferOrOptions)
-  const hasBufferProperties = cadresBufferOrOptions && typeof cadresBufferOrOptions === 'object' && ('cadresBuffer' in cadresBufferOrOptions || 'prelevementsBuffer' in cadresBufferOrOptions)
-  
-  const isOptionsObject = !isArrayBuffer && !isTypedArray && hasBufferProperties
-
-  if (isOptionsObject) {
-    // Format objet
-    cadresBuffer = cadresBufferOrOptions.cadresBuffer
-    prelevementsBufferFinal = cadresBufferOrOptions.prelevementsBuffer
-  } else {
-    // Format deux paramètres
-    cadresBuffer = cadresBufferOrOptions
-    prelevementsBufferFinal = prelevementsBuffer
-  }
-
-  // Valider que les deux buffers sont fournis
-  // Vérifier aussi qu'ils ne sont pas vides (byteLength > 0)
-  if (!cadresBuffer) {
-    console.error('GIDAF: cadresBuffer est null/undefined', {
-      cadresBufferOrOptions,
-      isOptionsObject,
-      cadresBuffer
-    })
-    return {
-      errors: [{message: 'Le fichier "Cadres" est requis.', severity: 'error'}],
-      data: {series: []}
-    }
-  }
-
-  if (cadresBuffer.byteLength !== undefined && cadresBuffer.byteLength === 0) {
-    console.error('GIDAF: cadresBuffer est vide', {cadresBuffer})
-    return {
-      errors: [{message: 'Le fichier "Cadres" est vide.', severity: 'error'}],
-      data: {series: []}
-    }
-  }
-
-  if (!prelevementsBufferFinal) {
-    console.error('GIDAF: prelevementsBufferFinal est null/undefined', {
-      prelevementsBuffer,
-      prelevementsBufferFinal
-    })
-    return {
-      errors: [{message: 'Le fichier "Prelevements" est requis.', severity: 'error'}],
-      data: {series: []}
-    }
-  }
-
-  if (prelevementsBufferFinal.byteLength !== undefined && prelevementsBufferFinal.byteLength === 0) {
-    console.error('GIDAF: prelevementsBufferFinal est vide', {prelevementsBufferFinal})
-    return {
-      errors: [{message: 'Le fichier "Prelevements" est vide.', severity: 'error'}],
-      data: {series: []}
-    }
-  }
-
-  // Traiter le fichier Cadres (métadonnées)
-  let cadresWorkbook
-  try {
-    cadresWorkbook = await readSheet(cadresBuffer)
-  } catch (error) {
-    return {
-      errors: [formatError(error)],
-      data: {series: []}
-    }
-  }
-
-  if (!cadresWorkbook.SheetNames || cadresWorkbook.SheetNames.length === 0) {
-    return {
-      errors: [{message: 'Le fichier "Cadres" est vide ou ne contient pas de feuille.', severity: 'error'}],
-      data: {series: []}
-    }
-  }
-
-  // Prendre la première feuille du fichier Cadres
-  const cadresSheet = cadresWorkbook.Sheets[cadresWorkbook.SheetNames[0]]
-  const cadresResult = validateAndExtractCadres(cadresSheet)
-  errors.push(...cadresResult.errors)
-  data.metadata = cadresResult.data
-
-  // Traiter le fichier Prelevements (données dynamiques)
-  let prelevementsWorkbook
-  try {
-    prelevementsWorkbook = await readSheet(prelevementsBufferFinal)
-  } catch (error) {
-    errors.push(formatError(error))
-    return {
-      errors: errors.map(e => formatError(e)),
-      data: {series: []}
-    }
-  }
-
-  if (!prelevementsWorkbook.SheetNames || prelevementsWorkbook.SheetNames.length === 0) {
-    errors.push({
-      message: 'Le fichier "Prelevements" est vide ou ne contient pas de feuille.',
-      severity: 'error'
-    })
-    return {
-      errors: errors.map(e => formatError(e)),
-      data: {series: []}
-    }
-  }
-
-  // Prendre la première feuille du fichier Prelevements
-  const prelevementsSheet = prelevementsWorkbook.Sheets[prelevementsWorkbook.SheetNames[0]]
-  const prelevementsResult = validateAndExtractPrelevements(prelevementsSheet, errors)
-  errors.push(...prelevementsResult.errors)
-  data.volumeData = prelevementsResult.data
-
-  // Consolider les données en séries
-  let consolidatedData
-  try {
-    consolidatedData = consolidateData(data)
-  } catch (error) {
-    errors.push({message: error.message, severity: 'error'})
-    consolidatedData = {series: []}
-  }
-
-  const result = {
-    rawData: data,
-    data: consolidatedData,
-    errors: errors.map(e => formatError(e))
-  }
-
-  return result
-}
-
-function validateAndExtractCadres(sheet) {
-  const data = {
-    pointsPrelevement: [],
-    preleveurs: []
-  }
-  const errors = []
-
-  if (!sheet['!ref']) {
-    errors.push({
-      message: 'La feuille du fichier "Cadres" est vide.',
-      severity: 'error'
-    })
-    return {data, errors}
-  }
-
-  const range = XLSX.utils.decode_range(sheet['!ref'])
-  
-  // Trouver la ligne d'en-tête
-  const headerRow = findCadresHeaderRow(sheet, range, errors)
-  if (headerRow === -1) {
-    return {data, errors}
-  }
-
-  // Mapper les colonnes
-  const columnMap = mapCadresColumns(sheet, headerRow, range, errors)
-  if (Object.keys(columnMap).length === 0) {
-    return {data, errors}
-  }
-
-  // Extraire les points de prélèvement
-  const pointsData = extractCadresPoints(sheet, headerRow, range, columnMap, errors)
-  data.pointsPrelevement = pointsData.points
-
-  // Extraire les préleveurs
-  const preleveursData = extractCadresPreleveurs(sheet, headerRow, range, columnMap, errors)
-  data.preleveurs = preleveursData.preleveurs
-
-  return {data, errors}
-}
-
-function findCadresHeaderRow(sheet, range, errors) {
-  const possibleHeaders = [
-    'code_inspection',
-    'code_aiot',
-    'coordonnées_x',
-    'coordonnees_x',
-    'type_de_point',
-    'siret'
-  ]
-
+function findHeaderRow(sheet, range, requiredHeaders, errors, sheetLabel) {
   for (let r = 0; r <= Math.min(10, range.e.r); r++) {
     const rowValues = []
     for (let c = 0; c <= range.e.c; c++) {
       const cellValue = readAsString(sheet, r, c) || ''
-      rowValues.push(normalizeColumnName(cellValue))
+      rowValues.push(normalizeHeader(cellValue))
     }
 
-    const hasHeader = possibleHeaders.some(header => {
-      return rowValues.some(val => val === header || val.includes(header))
-    })
+    const hasAll = requiredHeaders.every(header =>
+      rowValues.some(value => value === header || value.includes(header))
+    )
 
-    if (hasHeader) {
+    if (hasAll) {
       return r
     }
   }
 
   errors.push({
-    message: 'Impossible de trouver la ligne d\'en-tête dans le fichier "Cadres".',
+    message: `Impossible de trouver la ligne d'en-tête dans le fichier "${sheetLabel}".`,
     severity: 'error'
   })
 
   return -1
 }
 
-function mapCadresColumns(sheet, headerRow, range, errors) {
+function mapColumns(sheet, headerRow, range, columnDefs) {
   const columnMap = {}
-
   for (let c = 0; c <= range.e.c; c++) {
     const headerValue = readAsString(sheet, headerRow, c) || ''
-    const normalized = normalizeColumnName(headerValue)
-
-    // Mapper les colonnes des points de prélèvement
-    for (const colDef of CADRES_POINT_COLUMNS) {
-      if (columnMap[colDef.key] === undefined) {
-        const matches = colDef.matchers.some(matcher =>
-          normalized === matcher || normalized.includes(matcher)
-        )
-        if (matches) {
-          columnMap[colDef.key] = c
-        }
+    const normalized = normalizeHeader(headerValue)
+    for (const def of columnDefs) {
+      if (columnMap[def.key] !== undefined) {
+        continue
       }
-    }
 
-    // Mapper les colonnes des préleveurs
-    for (const colDef of CADRES_PRELEVEUR_COLUMNS) {
-      if (columnMap[colDef.key] === undefined) {
-        const matches = colDef.matchers.some(matcher =>
-          normalized === matcher || normalized.includes(matcher)
-        )
-        if (matches) {
-          columnMap[colDef.key] = c
-        }
+      if (def.matchers.some(matcher => normalized === matcher || normalized.includes(matcher))) {
+        columnMap[def.key] = c
       }
     }
   }
@@ -438,315 +113,159 @@ function mapCadresColumns(sheet, headerRow, range, errors) {
   return columnMap
 }
 
-function extractCadresPoints(sheet, headerRow, range, columnMap, errors) {
-  const points = []
+function readValue(sheet, rowIndex, columnMap, key, type = 'string') {
+  if (columnMap[key] === undefined) {
+    return null
+  }
+
+  switch (type) {
+    case 'number': {
+      const value = readAsNumber(sheet, rowIndex, columnMap[key])
+      return value === undefined ? null : value
+    }
+    case 'date': {
+      const value = readAsDateString(sheet, rowIndex, columnMap[key])
+      return value === undefined ? null : value
+    }
+    case 'string':
+    default: {
+      const value = readAsString(sheet, rowIndex, columnMap[key])
+      return value === undefined ? null : value
+    }
+  }
+}
+
+function pushError(errors, message) {
+  errors.push({message, severity: 'error'})
+}
+
+function extractCadresData(sheet) {
+  const data = {pointsPrelevement: [], preleveurs: []}
+  const errors = []
+
+  if (!sheet['!ref']) {
+    pushError(errors, 'La feuille du fichier "Cadres" est vide.')
+    return {data, errors}
+  }
+
+  const range = XLSX.utils.decode_range(sheet['!ref'])
+  const headerRow = findHeaderRow(sheet, range, ['code_inspection', 'point_de_surveillance'], errors, 'Cadres')
+  if (headerRow === -1) {
+    return {data, errors}
+  }
+
+  const columnMap = mapColumns(sheet, headerRow, range, CADRES_COLUMNS)
   const seenPointIds = new Set()
+  const preleveursMap = new Map()
 
   for (let r = headerRow + 1; r <= range.e.r; r++) {
-    const codeInspectionCol = CADRES_POINT_COLUMNS.find(col => col.key === 'codeInspection')
-    const pointSurveillanceCol = CADRES_POINT_COLUMNS.find(col => col.key === 'pointSurveillance')
-    const codeInspection = columnMap.codeInspection !== undefined
-      ? readAsString(sheet, r, columnMap.codeInspection)
-      : null
-    const pointSurveillance = columnMap.pointSurveillance !== undefined
-      ? readAsString(sheet, r, columnMap.pointSurveillance)
-      : null
+    const pointSurveillance = readValue(sheet, r, columnMap, 'pointSurveillance')
+    const codeInspection = readValue(sheet, r, columnMap, 'codeInspection')
 
-    const pointIdValue = pointSurveillance || codeInspection
-    if (!pointIdValue) {
+    if (!pointSurveillance && !codeInspection) {
       continue
     }
 
-    const pointIdStr = String(pointIdValue).trim()
-    if (!pointIdStr || seenPointIds.has(pointIdStr)) {
+    const pointId = String(pointSurveillance || codeInspection).trim()
+    if (!pointId || seenPointIds.has(pointId)) {
       continue
     }
 
-    seenPointIds.add(pointIdStr)
+    seenPointIds.add(pointId)
+
+    const siretRaw = readValue(sheet, r, columnMap, 'siret')
+    const siret = siretRaw ? String(siretRaw).trim().replace(/\s+/g, '') : null
+    const raisonSociale = readValue(sheet, r, columnMap, 'raisonSociale')
+    const typePoint = readValue(sheet, r, columnMap, 'typePoint')
+    const milieu = readValue(sheet, r, columnMap, 'milieu')
+    const precisionMilieu = readValue(sheet, r, columnMap, 'precisionMilieu')
+    const coordX = readValue(sheet, r, columnMap, 'coordonneesX', 'number')
+    const coordY = readValue(sheet, r, columnMap, 'coordonneesY', 'number')
+    const periodeReference = readValue(sheet, r, columnMap, 'periodeReference')
+    const volumeMax = readValue(sheet, r, columnMap, 'volumeMax', 'number')
 
     const point = {
-      [codeInspectionCol.outputKey]: codeInspection ? String(codeInspection).trim() : undefined,
-      [pointSurveillanceCol.outputKey]: pointIdStr
+      id_point_de_prelevement_ou_rejet: pointId,
+      code_aiot: codeInspection ? String(codeInspection).trim() : undefined,
+      siret: siret || null,
+      raison_sociale: raisonSociale ? String(raisonSociale).trim() : undefined,
+      type_de_point: typePoint ? String(typePoint).trim() : undefined,
+      milieu: milieu ? String(milieu).trim() : undefined,
+      précision_milieu: precisionMilieu ? String(precisionMilieu).trim() : undefined
     }
 
-    // Extraire toutes les colonnes des points de prélèvement
-    for (const colDef of CADRES_POINT_COLUMNS) {
-      if (colDef.key === 'codeInspection') {
-        continue // Déjà traité
-      }
-
-      if (columnMap[colDef.key] === undefined) {
-        continue
-      }
-
-      let value
-      if (colDef.type === 'number') {
-        value = readAsNumber(sheet, r, columnMap[colDef.key])
-        if (value === null || value === undefined || Number.isNaN(value)) {
-          continue
-        }
-      } else {
-        value = readAsString(sheet, r, columnMap[colDef.key])
-        if (!value) {
-          continue
-        }
-        value = String(value).trim()
-      }
-
-      if (colDef.transform) {
-        value = colDef.transform(value)
-      }
-
-      point[colDef.outputKey] = value
+    if (coordX !== null && coordX !== undefined && !Number.isNaN(coordX)) {
+      point.x_lambert93 = coordX
+    }
+    if (coordY !== null && coordY !== undefined && !Number.isNaN(coordY)) {
+      point.y_lambert93 = coordY
     }
 
-    // Calculer le volume limite annuel si nécessaire
-    if (point.volume_max_autorisé_m3 && point.période_de_référence_volume_max) {
-      const volumeAnnuel = computeMaxAnnualVolume(
-        point.volume_max_autorisé_m3,
-        point.période_de_référence_volume_max
-      )
-      if (volumeAnnuel !== null) {
-        point.volume_limite_m3 = volumeAnnuel
-      }
-    }
-
-    // Extraire le code meso depuis précision_milieu
-    if (point.précision_milieu) {
-      const codeMeso = extractCodeMeso(point.précision_milieu)
+    if (precisionMilieu) {
+      const codeMeso = extractCodeMeso(precisionMilieu)
       if (codeMeso) {
         point.code_meso = codeMeso
       }
     }
 
-    // Déterminer si c'est un prélèvement ou un rejet
-    if (point.type_de_point) {
-      const typePointLower = String(point.type_de_point).toLowerCase()
-      if (typePointLower.includes('alimentation')) {
-        point.prelevement_ou_rejet = 1
-        point.usage = 'prelevement ICPE'
-      } else {
-        point.prelevement_ou_rejet = 2
-        point.usage = 'rejet'
+    if (volumeMax !== null && volumeMax !== undefined && !Number.isNaN(volumeMax)) {
+      point.volume_max_autorisé_m3 = volumeMax
+      const volumeLimite = computeAnnualLimit(volumeMax, periodeReference)
+      if (volumeLimite !== null) {
+        point.volume_limite_m3 = volumeLimite
       }
     }
 
-    points.push(point)
+    if (typePoint) {
+      point.prelevement_ou_rejet = isPrelevementType(typePoint) ? 1 : 2
+      point.usage = isPrelevementType(typePoint) ? 'prelevement ICPE' : 'rejet'
+    }
+
+    data.pointsPrelevement.push(point)
+
+    if (siret && siret.length === 14 && !preleveursMap.has(siret)) {
+      preleveursMap.set(siret, {
+        siret,
+        raison_sociale: raisonSociale ? String(raisonSociale).trim() : undefined
+      })
+    }
   }
 
-  return {points}
+  data.preleveurs = [...preleveursMap.values()]
+  return {data, errors}
 }
 
-function extractCadresPreleveurs(sheet, headerRow, range, columnMap, errors) {
-  const preleveursMap = new Map()
-  const siretCol = CADRES_PRELEVEUR_COLUMNS.find(col => col.key === 'siret')
-
-  for (let r = headerRow + 1; r <= range.e.r; r++) {
-    const siret = columnMap.siret !== undefined
-      ? readAsString(sheet, r, columnMap.siret)
-      : null
-
-    if (!siret) {
-      continue
-    }
-
-    const siretStr = String(siret).trim().replace(/\s+/g, '')
-    if (!siretStr || siretStr.length !== 14) {
-      continue
-    }
-
-    // Si on a déjà ce préleveur, on ne l'ajoute qu'une fois
-    if (preleveursMap.has(siretStr)) {
-      continue
-    }
-
-    const preleveur = {
-      [siretCol.outputKey]: siretStr
-    }
-
-    // Extraire les autres colonnes des préleveurs
-    for (const colDef of CADRES_PRELEVEUR_COLUMNS) {
-      if (colDef.key === 'siret') {
-        continue // Déjà traité
-      }
-
-      if (columnMap[colDef.key] === undefined) {
-        continue
-      }
-
-      const value = readAsString(sheet, r, columnMap[colDef.key])
-      if (!value) {
-        continue
-      }
-
-      let processedValue = String(value).trim()
-      if (colDef.transform) {
-        processedValue = colDef.transform(processedValue)
-      }
-
-      preleveur[colDef.outputKey] = processedValue
-    }
-
-    preleveursMap.set(siretStr, preleveur)
-  }
-
-  return {preleveurs: Array.from(preleveursMap.values())}
-}
-
-function validateAndExtractPrelevements(sheet, errors) {
+function extractPrelevementsData(sheet) {
   const data = {rows: []}
-  const result = {errors: errors, data}
+  const errors = []
 
   if (!sheet['!ref']) {
-    result.errors.push({
-      message: 'La feuille du fichier "Prelevements" est vide.',
-      severity: 'error'
-    })
-    return result
+    pushError(errors, 'La feuille du fichier "Prelevements" est vide.')
+    return {data, errors}
   }
 
   const range = XLSX.utils.decode_range(sheet['!ref'])
-  const headerRow = findPrelevementsHeaderRow(sheet, range, result.errors)
-
+  const headerRow = findHeaderRow(sheet, range, ['code_inspection', 'point_de_surveillance', 'date_de_mesure', 'volume'], errors, 'Prelevements')
   if (headerRow === -1) {
-    return result
+    return {data, errors}
   }
 
-  const columnMap = mapPrelevementsColumns(sheet, headerRow, range, result.errors)
-  if (Object.keys(columnMap).length < 3) {
-    return result
-  }
+  const columnMap = mapColumns(sheet, headerRow, range, PRELEVEMENTS_COLUMNS)
 
-  parsePrelevementsRows(sheet, headerRow, range, columnMap, data.rows, result.errors)
-
-  if (data.rows.length === 0) {
-    result.errors.push({
-      message: 'Aucune ligne de données valide trouvée dans le fichier "Prelevements".',
-      severity: 'error'
-    })
-  }
-
-  return result
-}
-
-function findPrelevementsHeaderRow(sheet, range, errors) {
-  const requiredKeywords = ['code_inspection', 'point_de_surveillance', 'date_de_mesure', 'volume']
-
-  for (let r = 0; r <= Math.min(10, range.e.r); r++) {
-    const rowValues = []
-    for (let c = 0; c <= range.e.c; c++) {
-      const cellValue = readAsString(sheet, r, c) || ''
-      rowValues.push(normalizeColumnName(cellValue))
-    }
-
-    const hasAllKeywords = requiredKeywords.every(keyword =>
-      rowValues.some(val => val === keyword || val.includes(keyword))
-    )
-
-    if (hasAllKeywords) {
-      return r
-    }
-  }
-
-  errors.push({
-    message: 'Impossible de trouver la ligne d\'en-tête avec les colonnes requises (code_inspection, date_de_mesure, volume) dans le fichier "Prelevements".',
-    severity: 'error'
-  })
-
-  return -1
-}
-
-function mapPrelevementsColumns(sheet, headerRow, range, errors) {
-  const columnMap = {}
-
-  for (let c = 0; c <= range.e.c; c++) {
-    const headerValue = readAsString(sheet, headerRow, c) || ''
-    const normalized = normalizeColumnName(headerValue)
-
-    if (columnMap.codeInspection === undefined && PRELEVEMENTS_COLUMNS.codeInspection.matchers.some(m => normalized === m || normalized.includes(m))) {
-      columnMap.codeInspection = c
-    } else if (columnMap.pointSurveillance === undefined && PRELEVEMENTS_COLUMNS.pointSurveillance.matchers.some(m => normalized === m || normalized.includes(m))) {
-      columnMap.pointSurveillance = c
-    } else if (columnMap.typePoint === undefined && PRELEVEMENTS_COLUMNS.typePoint.matchers.some(m => normalized === m || normalized.includes(m))) {
-      columnMap.typePoint = c
-    } else if (columnMap.dateMesure === undefined && PRELEVEMENTS_COLUMNS.dateMesure.matchers.some(m => normalized === m || normalized.includes(m))) {
-      columnMap.dateMesure = c
-    } else if (columnMap.volume === undefined && PRELEVEMENTS_COLUMNS.volume.matchers.some(m => normalized === m || normalized.includes(m))) {
-      columnMap.volume = c
-    }
-  }
-
-  // Valider que les colonnes requises sont présentes
-  const missingColumns = []
-  if (columnMap.codeInspection === undefined) {
-    missingColumns.push('code_inspection')
-  }
-  if (columnMap.pointSurveillance === undefined) {
-    missingColumns.push('point_de_surveillance')
-  }
-  if (columnMap.dateMesure === undefined) {
-    missingColumns.push('date_de_mesure')
-  }
-  if (columnMap.volume === undefined) {
-    missingColumns.push('volume')
-  }
-
-  if (missingColumns.length > 0) {
-    errors.push({
-      message: `Colonnes requises manquantes dans le fichier "Prelevements": ${missingColumns.join(', ')}.`,
-      severity: 'error'
-    })
-  }
-
-  return columnMap
-}
-
-function parsePrelevementsRows(sheet, headerRow, range, columnMap, rows, errors) {
   for (let r = headerRow + 1; r <= range.e.r; r++) {
-    const codeInspection = readAsString(sheet, r, columnMap.codeInspection)
-    const pointSurveillance = columnMap.pointSurveillance !== undefined
-      ? readAsString(sheet, r, columnMap.pointSurveillance)
-      : null
-    const typePoint = columnMap.typePoint !== undefined
-      ? readAsString(sheet, r, columnMap.typePoint)
-      : null
-    const dateMesure = readAsString(sheet, r, columnMap.dateMesure)
-    const volume = readAsNumber(sheet, r, columnMap.volume)
+    const pointSurveillance = readValue(sheet, r, columnMap, 'pointSurveillance')
+    const typePoint = readValue(sheet, r, columnMap, 'typePoint')
+    const dateMesure = readValue(sheet, r, columnMap, 'dateMesure', 'date')
+    const volume = readValue(sheet, r, columnMap, 'volume', 'number')
 
-    if (!codeInspection && !pointSurveillance && !dateMesure) {
+    if (!pointSurveillance && !dateMesure) {
       continue
     }
 
-    if (!codeInspection) {
-      errors.push({
-        message: `Ligne ${r + 1}: Code inspection manquant.`,
-        severity: 'error'
-      })
+    if (!pointSurveillance || !dateMesure) {
+      pushError(errors, `Ligne ${r + 1}: Point de surveillance ou date de mesure manquant(e).`)
       continue
     }
-    if (!pointSurveillance) {
-      errors.push({
-        message: `Ligne ${r + 1}: Point de surveillance manquant.`,
-        severity: 'error'
-      })
-      continue
-    }
-
-    // Lire la date de mesure (peut être au format date Excel ou texte)
-    const dateMesureValue = readAsDateString(sheet, r, columnMap.dateMesure)
-    if (!dateMesureValue) {
-      errors.push({
-        message: `Ligne ${r + 1}: Date de mesure manquante ou invalide.`,
-        severity: 'error'
-      })
-      continue
-    }
-
-    // Pour les données mensuelles, on utilise la date comme date de fin
-    // et on calcule la date de début (premier jour du mois)
-    const dateFin = dateMesureValue
-    const [year, month] = dateFin.split('-').map(Number)
-    const dateDebut = `${year}-${String(month).padStart(2, '0')}-01`
 
     if (volume === null || volume === undefined || Number.isNaN(volume)) {
       continue
@@ -755,9 +274,6 @@ function parsePrelevementsRows(sheet, headerRow, range, columnMap, rows, errors)
     let numericVolume
     try {
       numericVolume = validateNumericValue(volume)
-      if (numericVolume === undefined || numericVolume === null) {
-        continue
-      }
     } catch (error) {
       errors.push({
         message: error.message || `Ligne ${r + 1}: Valeur numérique invalide: ${volume}`,
@@ -767,20 +283,31 @@ function parsePrelevementsRows(sheet, headerRow, range, columnMap, rows, errors)
       continue
     }
 
-    // Déterminer si c'est un prélèvement ou un rejet
-    const typePointLower = typePoint ? String(typePoint).toLowerCase() : ''
-    const isPrelevement = typePointLower.includes('alimentation')
-    
-    const pointIdStr = String(pointSurveillance).trim()
+    if (numericVolume === null || numericVolume === undefined) {
+      continue
+    }
 
-    rows.push({
-      pointId: pointIdStr,
+    const dateFin = dateMesure
+    const [year, month] = dateFin.split('-').map(Number)
+    const dateDebut = `${year}-${String(month).padStart(2, '0')}-01`
+
+    const pointId = String(pointSurveillance).trim()
+    const isPrelevement = isPrelevementType(typePoint)
+
+    data.rows.push({
+      pointId,
       dateDebut,
       dateFin,
       volumePreleve: isPrelevement ? numericVolume : 0,
-      volumeRejete: !isPrelevement ? numericVolume : 0
+      volumeRejete: isPrelevement ? 0 : numericVolume
     })
   }
+
+  if (data.rows.length === 0) {
+    pushError(errors, 'Aucune ligne de données valide trouvée dans le fichier "Prelevements".')
+  }
+
+  return {data, errors}
 }
 
 function consolidateData(rawData) {
@@ -791,22 +318,17 @@ function consolidateData(rawData) {
     return {series}
   }
 
-  // Grouper par point de prélèvement
   const rowsByPoint = new Map()
   for (const row of volumeRows) {
-    const pointId = row.pointId
-    if (!rowsByPoint.has(pointId)) {
-      rowsByPoint.set(pointId, [])
+    if (!rowsByPoint.has(row.pointId)) {
+      rowsByPoint.set(row.pointId, [])
     }
-    rowsByPoint.get(pointId).push(row)
+    rowsByPoint.get(row.pointId).push(row)
   }
 
-  // Créer une série par point de prélèvement
   for (const [pointId, rows] of rowsByPoint.entries()) {
-    // Agréger par date de fin : plusieurs lignes peuvent exister pour un même point et mois
     const prelevementByDate = new Map()
     const rejetByDate = new Map()
-
     let minDate = null
     let maxDate = null
 
@@ -819,13 +341,10 @@ function consolidateData(rawData) {
       }
 
       if (row.volumePreleve > 0) {
-        const current = prelevementByDate.get(row.dateFin) || 0
-        prelevementByDate.set(row.dateFin, current + row.volumePreleve)
+        prelevementByDate.set(row.dateFin, (prelevementByDate.get(row.dateFin) || 0) + row.volumePreleve)
       }
-
       if (row.volumeRejete > 0) {
-        const current = rejetByDate.get(row.dateFin) || 0
-        rejetByDate.set(row.dateFin, current + row.volumeRejete)
+        rejetByDate.set(row.dateFin, (rejetByDate.get(row.dateFin) || 0) + row.volumeRejete)
       }
     }
 
@@ -837,7 +356,6 @@ function consolidateData(rawData) {
       .map(([date, value]) => ({date, value}))
       .sort((a, b) => a.date.localeCompare(b.date))
 
-    // Créer la série pour les volumes prélevés
     if (prelevementEntries.length > 0) {
       series.push({
         pointPrelevement: pointId,
@@ -851,7 +369,6 @@ function consolidateData(rawData) {
       })
     }
 
-    // Créer la série pour les volumes rejetés
     if (rejetEntries.length > 0) {
       series.push({
         pointPrelevement: pointId,
@@ -867,6 +384,91 @@ function consolidateData(rawData) {
   }
 
   return {series}
+}
+
+export async function extractGidaf(cadresBufferOrOptions, prelevementsBuffer) {
+  let cadresBuffer
+  let prelevementsBufferFinal
+
+  const hasBufferProperties = cadresBufferOrOptions
+    && typeof cadresBufferOrOptions === 'object'
+    && ('cadresBuffer' in cadresBufferOrOptions || 'prelevementsBuffer' in cadresBufferOrOptions)
+
+  if (hasBufferProperties) {
+    cadresBuffer = cadresBufferOrOptions.cadresBuffer
+    prelevementsBufferFinal = cadresBufferOrOptions.prelevementsBuffer
+  } else {
+    cadresBuffer = cadresBufferOrOptions
+    prelevementsBufferFinal = prelevementsBuffer
+  }
+
+  if (!cadresBuffer) {
+    return {
+      errors: [{message: 'Le fichier "Cadres" est requis.', severity: 'error'}],
+      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+    }
+  }
+
+  if (!prelevementsBufferFinal) {
+    return {
+      errors: [{message: 'Le fichier "Prelevements" est requis.', severity: 'error'}],
+      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+    }
+  }
+
+  let cadresWorkbook
+  try {
+    cadresWorkbook = await readSheet(cadresBuffer)
+  } catch (error) {
+    return {errors: [formatError(error)], data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}}
+  }
+
+  if (!cadresWorkbook.SheetNames || cadresWorkbook.SheetNames.length === 0) {
+    return {
+      errors: [{message: 'Le fichier "Cadres" est vide ou ne contient pas de feuille.', severity: 'error'}],
+      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+    }
+  }
+
+  let prelevementsWorkbook
+  try {
+    prelevementsWorkbook = await readSheet(prelevementsBufferFinal)
+  } catch (error) {
+    return {errors: [formatError(error)], data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}}
+  }
+
+  if (!prelevementsWorkbook.SheetNames || prelevementsWorkbook.SheetNames.length === 0) {
+    return {
+      errors: [{message: 'Le fichier "Prelevements" est vide ou ne contient pas de feuille.', severity: 'error'}],
+      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+    }
+  }
+
+  const cadresSheet = cadresWorkbook.Sheets[cadresWorkbook.SheetNames[0]]
+  const prelevementsSheet = prelevementsWorkbook.Sheets[prelevementsWorkbook.SheetNames[0]]
+
+  const errors = []
+  const cadresResult = extractCadresData(cadresSheet)
+  errors.push(...cadresResult.errors)
+
+  const prelevementsResult = extractPrelevementsData(prelevementsSheet)
+  errors.push(...prelevementsResult.errors)
+
+  const rawData = {
+    metadata: cadresResult.data,
+    volumeData: prelevementsResult.data
+  }
+
+  const consolidated = consolidateData(rawData)
+
+  return {
+    rawData,
+    data: {
+      ...consolidated,
+      metadata: rawData.metadata
+    },
+    errors: errors.map(formatError)
+  }
 }
 
 function formatError(error) {
@@ -887,3 +489,4 @@ function formatError(error) {
 
   return errorObj
 }
+
