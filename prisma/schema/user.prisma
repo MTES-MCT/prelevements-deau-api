@@ -5,7 +5,7 @@ enum UserRole {
 }
 
 model User {
-  id    Int      @id @default(autoincrement())
+  id    String   @id @default(uuid()) @db.Uuid
   email String   @unique @db.Citext
   role  UserRole
 
@@ -23,21 +23,23 @@ model User {
 }
 
 model Declarant {
-  userId Int  @id
-  user   User @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
+  userId String @id @db.Uuid
+  user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
+
+  declarations Declaration[]
 }
 
 model Instructor {
-  userId Int  @id
-  user   User @relation("UserInstructor", fields: [userId], references: [id], onDelete: Cascade)
+  userId String @id @db.Uuid
+  user   User   @relation("UserInstructor", fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuthToken {
-  id    Int    @id @default(autoincrement())
+  id    String @id @default(uuid()) @db.Uuid
   token String @unique
 
-  userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   expiresAt DateTime
@@ -47,13 +49,13 @@ model AuthToken {
 }
 
 model SessionToken {
-  id    Int    @id @default(autoincrement())
+  id    String @id @default(uuid()) @db.Uuid
   token String @unique
 
   role UserRole
 
-  userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   expiresAt DateTime

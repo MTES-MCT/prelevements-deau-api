@@ -3,6 +3,7 @@
 import 'dotenv/config'
 import process, {argv} from 'node:process'
 import {prisma} from '../db/prisma.js'
+import {randomUUID} from "node:crypto";
 
 const VALID_ROLES = new Set(['DECLARANT', 'INSTRUCTOR'])
 
@@ -36,6 +37,7 @@ async function main() {
   try {
     const createdUser = await prisma.user.create({
       data: {
+        id: randomUUID(),
         email,
         firstName,
         lastName,

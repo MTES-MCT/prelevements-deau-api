@@ -43,6 +43,7 @@ git submodule update
   docker compose exec minio mc alias set local http://localhost:9000 minio minio123
   docker compose exec minio mc mb local/prelevements-deau-documents
   docker compose exec minio mc mb local/prelevements-deau-ds
+  docker compose exec minio mc mb local/prelevements-deau-declarations
   ```
 
 ## Initialisation des données

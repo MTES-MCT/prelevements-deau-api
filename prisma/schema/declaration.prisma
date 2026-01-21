@@ -1,0 +1,62 @@
+model Declaration {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Relation déclarant
+  declarantUserId String    @db.Uuid
+  declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  // Fichiers liés
+  files DeclarationFile[]
+
+  // Métadonnées
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Champs métier
+  comment             String?                    @db.Text
+  startMonth          DateTime                   @db.Date
+  endMonth            DateTime                   @db.Date
+  aotDecreeNumber     String?
+  status              DeclarationStatus          @default(SUBMITTED)
+  dataSourceType      DeclarationDataSourceType?
+  waterWithdrawalType String
+  consolidatedAt      DateTime?
+
+  @@index([declarantUserId])
+  @@index([status])
+  @@index([dataSourceType])
+  @@index([waterWithdrawalType])
+  @@index([consolidatedAt])
+}
+
+enum DeclarationStatus {
+  SUBMITTED
+  IN_INSTRUCTION
+  VALIDATED
+  REJECTED
+}
+
+enum DeclarationDataSourceType {
+  NONE
+  MANUAL
+  SPREADSHEET
+  API
+}
+
+model DeclarationFile {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarationId String      @db.Uuid
+  declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  type     String
+  filename String
+
+  storageKey String
+
+  createdAt DateTime @default(now())
+
+  @@unique([storageKey])
+  @@unique([declarationId, type])
+  @@index([declarationId])
+}
