@@ -6,7 +6,8 @@ import {validateNumericValue} from '../validate.js'
 import {dedupe} from '../dedupe.js'
 import * as XLSX from 'xlsx'
 
-// Définition des colonnes des points de prélèvement
+// Définition des colonnes des points de prélèvement.
+// Compatible avec un futur ajout d'index compteur (id_compteur, coefficient_de_lecture déjà présents).
 const POINT_COLUMNS = [
   {
     key: 'pointId',
@@ -180,7 +181,10 @@ export async function extractTemplateFile(buffer) {
     })
   }
 
-  // Traiter la feuille de données (declaration_de_volume)
+// Traiter la feuille de données (declaration_de_volume).
+// Note métier : ce template fournit des volumes, pas des index.
+// L'architecture reste compatible si on ajoute une série d'index plus tard
+// (elle sera simplement ajoutée dans `series`).
   const dataSheet = workbook.Sheets['declaration_de_volume']
   if (!dataSheet) {
     errors.push({
@@ -721,6 +725,9 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors) {
   }
 }
 
+// Consolidation des séries :
+// - volumes uniquement aujourd'hui
+// - compatible avec un futur ajout d'index (nouvelle série par point+compteur)
 function consolidateData(rawData) {
   const series = []
   const volumeRows = rawData.volumeData?.rows || []
@@ -741,20 +748,20 @@ function consolidateData(rawData) {
 
   // Créer une série par point de prélèvement
   // Pour template-file, on garde les données telles qu'elles sont (mensuelles)
-  // sans créer d'entrées quotidiennes artificielles
+  // sans créer d'entrées quotidiennes artificielles.
+  // Si plusieurs lignes tombent sur la même date (ex: plusieurs points sur une ligne source),
+  // on additionne les volumes pour éviter les doublons de date.
   for (const [pointId, rows] of rowsByPoint.entries()) {
-    const dataEntries = []
+    const valuesByDate = new Map()
     let minDate = null
     let maxDate = null
 
     for (const row of rows) {
-      // Pour template-file, on crée une entrée par ligne avec la date de fin
+      // Pour template-file, on crée une entrée par date de fin
       // (plus logique pour des données mensuelles : le volume est prélevé jusqu'à cette date)
-      const entry = {
-        date: row.dateFin,
-        value: row.volume
+      if (row.dateFin) {
+        valuesByDate.set(row.dateFin, (valuesByDate.get(row.dateFin) || 0) + row.volume)
       }
-      dataEntries.push(entry)
 
       if (!minDate || row.dateDebut < minDate) {
         minDate = row.dateDebut
@@ -764,12 +771,14 @@ function consolidateData(rawData) {
       }
     }
 
-    if (dataEntries.length === 0) {
+    if (valuesByDate.size === 0) {
       continue
     }
 
     // Trier par date
-    dataEntries.sort((a, b) => a.date.localeCompare(b.date))
+    const dataEntries = [...valuesByDate.entries()]
+      .map(([date, value]) => ({date, value}))
+      .sort((a, b) => a.date.localeCompare(b.date))
 
     series.push({
       pointPrelevement: pointId,
