@@ -57,6 +57,8 @@ jobs:
           file: ./deploy/Dockerfile
           platforms: linux/amd64
           push: true
+          secrets: |
+            GITHUB_TOKEN=${{ github.token }}
           tags: |
             ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:testing-latest
             ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:testing-${{ github.sha }}
