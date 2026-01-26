@@ -9,6 +9,9 @@ FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
+COPY prisma ./prisma
+RUN npx prisma generate
+
 FROM base AS runner
 
 COPY --from=deps /app/node_modules ./node_modules
