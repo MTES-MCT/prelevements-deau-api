@@ -75,8 +75,9 @@ jobs:
           SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
           SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
           SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
+          SCW_JOB_DEFINITION_ID_TESTING_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_TESTING_DB }}
         run: |
-          scw jobs run name=testing-prelevement-deau-api-db
+          scw jobs definition start "$SCW_JOB_DEFINITION_ID_TESTING_DB"
 
       - name: Deploy API to Scaleway Serverless Container (testing)
         env:
