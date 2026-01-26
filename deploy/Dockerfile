@@ -12,7 +12,7 @@ COPY packages ./packages
 COPY prisma ./prisma
 
 RUN npm install --no-audit --no-fund
-RUN npx prisma generate --schema=./prisma/schema/schema.prisma
+RUN npx prisma generate --schema=./prisma/schema
 
 ENV NODE_ENV=production
 RUN npm prune --omit=dev
