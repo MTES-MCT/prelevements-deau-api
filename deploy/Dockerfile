@@ -10,7 +10,7 @@ COPY package.json package-lock.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
 COPY prisma ./prisma
-RUN npx prisma generate
+RUN npx prisma generate --schema=./prisma/schema/schema.prisma
 
 FROM base AS runner
 
