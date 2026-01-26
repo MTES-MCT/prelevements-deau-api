@@ -77,9 +77,11 @@ jobs:
           SCW_DEFAULT_REGION: fr-par
           SCW_JOB_DEFINITION_ID_TESTING_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_TESTING_DB }}
         run: |
-          RUN_ID=$(scw jobs definition start "$SCW_JOB_DEFINITION_ID_TESTING_DB" region=fr-par -o json | jq -r '.id')
-          scw jobs run wait "$RUN_ID"
-          scw jobs run logs "$RUN_ID"
+          scw jobs definition start "$SCW_JOB_DEFINITION_ID_TESTING_DB" region=fr-par >/dev/null
+          while scw jobs run list region=fr-par -o json \
+            | jq -e --arg def "$SCW_JOB_DEFINITION_ID_TESTING_DB" '.[] | select(.job_definition_id==$def and .state=="running")' >/dev/null; do
+            sleep 2
+          done
 
       - name: Deploy API to Scaleway Serverless Container (testing)
         env:
