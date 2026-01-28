@@ -12,6 +12,9 @@ model Zone {
   name        String                                     @db.Text
   coordinates Unsupported("geometry(MultiPolygon,4326)")
 
+  instructorZones       InstructorZone[]
+  pointPrelevementZones PointPrelevementZone[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

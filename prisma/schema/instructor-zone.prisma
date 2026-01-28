@@ -1,0 +1,21 @@
+model InstructorZone {
+  id String @id @default(uuid()) @db.Uuid
+
+  instructorUserId String     @db.Uuid
+  instructor       Instructor @relation(fields: [instructorUserId], references: [userId], onDelete: Cascade)
+
+  zoneId String @db.Uuid
+  zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  isAdmin   Boolean   @default(false)
+  startDate DateTime  @db.Date
+  endDate   DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([instructorUserId, zoneId])
+  @@index([instructorUserId])
+  @@index([zoneId])
+  @@index([isAdmin])
+}

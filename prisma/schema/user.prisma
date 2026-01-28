@@ -26,12 +26,15 @@ model Declarant {
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
-  declarations Declaration[]
+  declarations      Declaration[]
+  pointPrelevements DeclarantPointPrelevement[]
 }
 
 model Instructor {
   userId String @id @db.Uuid
   user   User   @relation("UserInstructor", fields: [userId], references: [id], onDelete: Cascade)
+
+  instructorZones InstructorZone[]
 }
 
 model AuthToken {
