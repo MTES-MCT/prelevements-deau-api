@@ -365,21 +365,15 @@ paths:
           example: "DEP-974"
       responses:
         '302':
-          description: Redirection vers le front-end avec le token de session
+          description: Redirection vers le front-end (succès ou erreur)
           headers:
             Location:
               schema:
                 type: string
-              description: URL de redirection vers le front-end avec le token
-              example: "https://app.example.com?token=abc123..."
-        '302 ':
-          description: Redirection vers une page d'erreur
-          headers:
-            Location:
-              schema:
-                type: string
-              description: URL de redirection vers une page d'erreur avec le motif
-              example: "https://app.example.com/auth/error?reason=expired"
+              description: |
+                URL de redirection vers le front-end.
+                - Succès : `/?token=...`
+                - Erreur : `/auth/error?reason=...`
   /auth/verify:
     post:
       tags: [Auth]

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import 'dotenv/config'
+import './instrument.js'
 
 import process from 'node:process'
 
+import * as Sentry from '@sentry/node'
 import express from 'express'
 import morgan from 'morgan'
 import cors from 'cors'
@@ -13,6 +15,8 @@ import routes from './lib/routes.js'
 import {createBullBoardRouter} from './lib/queues/board.js'
 import {ensureSeriesIndexes} from './lib/models/series.js'
 import {validateEmailConfig} from './lib/util/email.js'
+
+Sentry.setTag('service', 'api')
 
 // Validate configuration
 validateEmailConfig()
@@ -60,6 +64,8 @@ if (process.env.BULLBOARD_PASSWORD) {
 
 app.use('/', routes)
 app.use('/api', routes) // Deprecated
+
+Sentry.setupExpressErrorHandler(app)
 
 // Register error handler
 app.use(errorHandler)
