@@ -307,7 +307,6 @@ async function importDocuments(csvData, folderPath, codeTerritoire) {
     const url = `${process.env.S3_PUBLIC_URL}/document/${nom_fichier}`
     let buffer
     try {
-      // eslint-disable-next-line no-await-in-loop
       buffer = await got(url).buffer()
     } catch (error) {
       console.error(`Erreur avec le document ${nom_fichier} : ${error.message}`)
@@ -317,7 +316,6 @@ async function importDocuments(csvData, folderPath, codeTerritoire) {
 
     // Créer un document par préleveur (duplication)
     for (const currentPreleveurId of beneficiaireIds) {
-      // eslint-disable-next-line no-await-in-loop
       const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur: currentPreleveurId})
 
       if (!preleveur) {
@@ -328,7 +326,7 @@ async function importDocuments(csvData, folderPath, codeTerritoire) {
       const preleveurObjectId = preleveur._id
 
       // Upload vers S3 (idempotent avec hash)
-      // eslint-disable-next-line no-await-in-loop
+
       const {objectKey, skipped} = await uploadDocumentToS3({
         buffer,
         filename: nom_fichier,
