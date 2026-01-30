@@ -8,6 +8,9 @@ if (dsn) {
   Sentry.init({
     dsn,
     sendDefaultPii: true,
+    enableLogs: true,
+    tracesSampleRate: 1,
+    profileLifecycle: 'trace',
     integrations: [nodeProfilingIntegration()]
   })
 }
