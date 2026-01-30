@@ -1,5 +1,7 @@
 /* eslint-disable n/prefer-global/process */
 /* eslint-disable unicorn/no-process-exit */
+/* eslint-disable promise/prefer-await-to-then */
+/* eslint-disable no-await-in-loop */
 import 'dotenv/config'
 
 import {argv} from 'node:process'
@@ -41,7 +43,7 @@ const preleveursIds = new Map()
 const exploitationsIds = new Map()
 const exploitationsPreleveursIds = new Map()
 const documentsIds = new Map()
-const seriesIds = new Map() // id_serie (hash) -> ObjectId de la série
+const seriesIds = new Map() // Id_serie (hash) -> ObjectId de la série
 
 function getPointId(idPoint) {
   return pointsIds.get(idPoint)
@@ -305,7 +307,6 @@ async function importDocuments(csvData, folderPath, codeTerritoire) {
     const url = `${process.env.S3_PUBLIC_URL}/document/${nom_fichier}`
     let buffer
     try {
-      // eslint-disable-next-line no-await-in-loop
       buffer = await got(url).buffer()
     } catch (error) {
       console.error(`Erreur avec le document ${nom_fichier} : ${error.message}`)
@@ -315,7 +316,6 @@ async function importDocuments(csvData, folderPath, codeTerritoire) {
 
     // Créer un document par préleveur (duplication)
     for (const currentPreleveurId of beneficiaireIds) {
-      // eslint-disable-next-line no-await-in-loop
       const preleveur = await mongo.db.collection('preleveurs').findOne({id_preleveur: currentPreleveurId})
 
       if (!preleveur) {
@@ -326,7 +326,7 @@ async function importDocuments(csvData, folderPath, codeTerritoire) {
       const preleveurObjectId = preleveur._id
 
       // Upload vers S3 (idempotent avec hash)
-      // eslint-disable-next-line no-await-in-loop
+
       const {objectKey, skipped} = await uploadDocumentToS3({
         buffer,
         filename: nom_fichier,
@@ -526,6 +526,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
     await mongo.db.collection('series_values').deleteMany({seriesId: {$in: seriesIds}})
     await mongo.db.collection('series').deleteMany({_id: {$in: seriesIds}})
   }
+
   console.log('...Ok !')
 
   // Grouper les résultats par série (id_serie)
@@ -563,7 +564,10 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
     // Calculer minDate et maxDate à partir des résultats filtrés
     const dateStrings = resultatsAvecValeur
       .map(r => {
-        if (!r.date_heure_mesure) return null
+        if (!r.date_heure_mesure) {
+          return null
+        }
+
         let dateStr = r.date_heure_mesure
         // Gérer les différents formats de date
         if (dateStr.includes('T')) {
@@ -571,6 +575,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
         } else if (dateStr.includes(' ')) {
           dateStr = dateStr.split(' ')[0]
         }
+
         return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : null
       })
       .filter(Boolean)
@@ -583,7 +588,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
     // Trier les dates pour trouver min et max
     dateStrings.sort()
     const minDate = dateStrings[0]
-    const maxDate = dateStrings[dateStrings.length - 1]
+    const maxDate = dateStrings.at(-1)
 
     // Extraire les dates uniques pour computed.integratedDays
     const integratedDays = [...new Set(dateStrings)].sort()
@@ -595,7 +600,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
       dossierId: null,
       territoire: codeTerritoire,
       pointPrelevement: pointId, // Utiliser l'ObjectId, pas l'id_point
-      parameter: "volume prélevé", // Déjà converti en libellé par le mapping CSV
+      parameter: 'volume prélevé', // Déjà converti en libellé par le mapping CSV
       unit: serie.unite,
       frequency,
       valueType: 'cumulative', // Les volumes sont toujours cumulatifs
@@ -690,13 +695,14 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
       await mongo.db.collection('series_values').insertMany(batch)
       insertedValues += batch.length
     }
+
     console.log(`=> ${insertedValues} valeurs insérées dans la collection series_values`)
   }
 
   console.log('\u001B[32;1m%s\u001B[0m', '\n=> Importation des séries terminée\n\n')
 }
 
-async function updateExploitationsWithSeries(csvData, codeTerritoire) {
+async function updateExploitationsWithSeries(csvData) {
   const {exploitationsSeries} = csvData
 
   if (!exploitationsSeries || exploitationsSeries.length === 0) {

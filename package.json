@@ -38,6 +38,8 @@
     "@etalab/decoupage-administratif": "^5.2.0",
     "@fabnum/demarches-simplifiees": "workspace:*",
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*",
+    "@sentry/node": "^10.38.0",
+    "@sentry/profiling-node": "^10.38.0",
     "bullmq": "^5.63.1",
     "content-disposition": "^0.5.4",
     "cors": "^2.8.5",
@@ -62,6 +64,7 @@
   "devDependencies": {
     "@stoplight/spectral-cli": "^6.11.0",
     "ava": "^6.4.1",
+    "baseline-browser-mapping": "^2.9.19",
     "c8": "^10.1.3",
     "mongodb-memory-server": "^10.3.0",
     "supertest": "^7.1.4",
