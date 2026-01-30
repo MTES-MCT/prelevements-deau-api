@@ -38,6 +38,8 @@
     "@etalab/decoupage-administratif": "^5.2.0",
     "@fabnum/demarches-simplifiees": "workspace:*",
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*",
+    "@sentry/node": "^10.38.0",
+    "@sentry/profiling-node": "^10.38.0",
     "bullmq": "^5.63.1",
     "content-disposition": "^0.5.4",
     "cors": "^2.8.5",
