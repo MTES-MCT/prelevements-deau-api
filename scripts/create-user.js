@@ -1,15 +1,18 @@
-/* eslint-disable n/prefer-global/process */
+
 /* eslint-disable unicorn/no-process-exit */
 import 'dotenv/config'
 import process, {argv} from 'node:process'
 import {prisma} from '../db/prisma.js'
-import {randomUUID} from "node:crypto";
+import {randomUUID} from 'node:crypto'
 
 const VALID_ROLES = new Set(['DECLARANT', 'INSTRUCTOR'])
 
 function parseArgValue(args, argName) {
   const arg = args.find(a => a.startsWith(`--${argName}=`))
-  if (!arg) return undefined
+  if (!arg) {
+    return undefined
+  }
+
   const value = arg.split('=').slice(1).join('=')
   return value.replaceAll(/^["']|["']$/g, '')
 }

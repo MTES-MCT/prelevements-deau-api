@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 // Setup BullBoard (monitoring des queues)
 if (process.env.BULLBOARD_PASSWORD) {
   const basePath = '/admin/queues'
-  const { router } = createBullBoardRouter(basePath, process.env.BULLBOARD_PASSWORD)
+  const {router} = createBullBoardRouter(basePath, process.env.BULLBOARD_PASSWORD)
   app.use(basePath, router)
   console.log(`📊 BullBoard disponible sur ${basePath}`)
 } else if (process.env.NODE_ENV !== 'test') {

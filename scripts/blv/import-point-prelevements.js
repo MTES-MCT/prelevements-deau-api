@@ -23,7 +23,29 @@ async function importRow(row) {
 
   let pointId
 
-  if (!existing) {
+  if (existing) {
+    pointId = existing.id
+
+    await prisma.$executeRawUnsafe(
+      `
+      UPDATE "PointPrelevement"
+      SET
+        "name" = $2,
+        "coordinates" = ST_Transform(
+          ST_SetSRID(
+            ST_GeomFromEWKB(decode($3, 'hex')),
+            32740
+          ),
+          4326
+        ),
+        "updatedAt" = now()
+      WHERE "id" = $1
+      `,
+      pointId,
+      name,
+      geomHex
+    )
+  } else {
     const [{id}] = await prisma.$queryRawUnsafe(
       `
       INSERT INTO "PointPrelevement"
@@ -49,28 +71,6 @@ async function importRow(row) {
       geomHex
     )
     pointId = id
-  } else {
-    pointId = existing.id
-
-    await prisma.$executeRawUnsafe(
-      `
-      UPDATE "PointPrelevement"
-      SET
-        "name" = $2,
-        "coordinates" = ST_Transform(
-          ST_SetSRID(
-            ST_GeomFromEWKB(decode($3, 'hex')),
-            32740
-          ),
-          4326
-        ),
-        "updatedAt" = now()
-      WHERE "id" = $1
-      `,
-      pointId,
-      name,
-      geomHex
-    )
   }
 
   await prisma.pointPrelevementZone.deleteMany({
@@ -126,8 +126,8 @@ async function main() {
 }
 
 main()
-  .catch((err) => {
-    console.error(err)
+  .catch(error => {
+    console.error(error)
     process.exit(1)
   })
   .finally(async () => {

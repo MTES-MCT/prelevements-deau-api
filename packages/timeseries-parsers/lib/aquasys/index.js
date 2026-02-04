@@ -102,14 +102,14 @@ function normalizeHeader(value) {
   return stripDiacritics(String(value ?? ''))
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
+    .replaceAll(/\s+/g, '_')
+    .replaceAll(/_+/g, '_')
 }
 
 function stripDiacritics(value) {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[\u0300-\u036F]/g, '')
 }
 
 function findHeaderRow(sheet, range, requiredHeaders, errors, sheetLabel) {
@@ -219,9 +219,11 @@ function extractRows(sheet, headerRow, range, columnMap, errors) {
     if (typePrelevement) {
       pointEntry.point.type_point_prelevement_ou_rejet = String(typePrelevement).trim()
     }
+
     if (naturePrelevement) {
       pointEntry.point.nature_prelevement_ou_rejet = String(naturePrelevement).trim()
     }
+
     if (codeCommune) {
       pointEntry.point.code_INSEE = codeCommune
     }
@@ -229,6 +231,7 @@ function extractRows(sheet, headerRow, range, columnMap, errors) {
     if (compteur) {
       pointEntry.compteurs.add(String(compteur).trim())
     }
+
     if (coefficientLecture !== undefined && coefficientLecture !== null && !Number.isNaN(coefficientLecture)) {
       pointEntry.coefficients.add(coefficientLecture)
     }
@@ -250,9 +253,11 @@ function extractRows(sheet, headerRow, range, columnMap, errors) {
     if (entry.compteurs.size === 1) {
       point.id_compteur = [...entry.compteurs][0]
     }
+
     if (entry.coefficients.size === 1) {
       point.coefficient_de_lecture = [...entry.coefficients][0]
     }
+
     pointsPrelevement.push(point)
   }
 
@@ -312,7 +317,7 @@ function normalizeSiret(value) {
     return
   }
 
-  const cleaned = String(value).trim().replace(/\s+/g, '').replace(/\.0$/, '')
+  const cleaned = String(value).trim().replaceAll(/\s+/g, '').replace(/\.0$/, '')
   return cleaned.length === 14 ? cleaned : undefined
 }
 
@@ -392,6 +397,7 @@ function computeVolumesFromIndex(indexRows) {
     if (!byKey.has(key)) {
       byKey.set(key, [])
     }
+
     byKey.get(key).push(row)
   }
 
@@ -407,6 +413,7 @@ function computeVolumesFromIndex(indexRows) {
       if (volume === null || volume === undefined || Number.isNaN(volume)) {
         continue
       }
+
       computed.push({
         pointId: curr.pointId,
         dateDebut: prev.dateMesure,
@@ -432,9 +439,11 @@ function consolidateData(volumeRows, indexRows) {
       if (!row.pointId) {
         continue
       }
+
       if (!rowsByPoint.has(row.pointId)) {
         rowsByPoint.set(row.pointId, [])
       }
+
       rowsByPoint.get(row.pointId).push(row)
     }
 
@@ -459,6 +468,7 @@ function consolidateData(volumeRows, indexRows) {
         if (!minDate || row.dateDebut < minDate) {
           minDate = row.dateDebut
         }
+
         if (!maxDate || row.dateFin > maxDate) {
           maxDate = row.dateFin
         }
@@ -513,6 +523,7 @@ function consolidateIndexSeries(indexRows) {
     if (!rowsByKey.has(key)) {
       rowsByKey.set(key, [])
     }
+
     rowsByKey.get(key).push(row)
   }
 
@@ -551,7 +562,7 @@ function consolidateIndexSeries(indexRows) {
 
     if (uniqueDates.length > 0) {
       minDate = uniqueDates[0]
-      maxDate = uniqueDates[uniqueDates.length - 1]
+      maxDate = uniqueDates.at(-1)
     }
 
     const dataEntries = uniqueDates.map(date => ({
@@ -594,7 +605,7 @@ function consolidateIndexSeries(indexRows) {
 function diffInDays(start, end) {
   const startDate = new Date(`${start}T00:00:00Z`)
   const endDate = new Date(`${end}T00:00:00Z`)
-  return Math.round((endDate - startDate) / 86400000)
+  return Math.round((endDate - startDate) / 86_400_000)
 }
 
 function inferFrequency(durations) {
@@ -608,12 +619,15 @@ function inferFrequency(durations) {
   if (median >= 330) {
     return '1 year'
   }
+
   if (median >= 80) {
     return '1 quarter'
   }
+
   if (median >= 25) {
     return '1 month'
   }
+
   return '1 day'
 }
 
@@ -625,13 +639,9 @@ function formatError(error) {
     'severity'
   ])
 
-  if (!errorObj.message) {
-    errorObj.message = errorObj.explanation || errorObj.internalMessage || 'Erreur non spécifiée'
-  }
+  errorObj.message ||= errorObj.explanation || errorObj.internalMessage || 'Erreur non spécifiée'
 
-  if (!errorObj.severity) {
-    errorObj.severity = 'error'
-  }
+  errorObj.severity ||= 'error'
 
   return errorObj
 }

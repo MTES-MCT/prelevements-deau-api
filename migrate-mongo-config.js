@@ -4,13 +4,13 @@ const config = {
     databaseName: process.env.MONGODB_DBNAME || 'prelevements-deau',
     options: {}
   },
-  migrationsDir: "migrations",
-  changelogCollectionName: "changelog",
-  lockCollectionName: "changelog_lock",
+  migrationsDir: 'migrations',
+  changelogCollectionName: 'changelog',
+  lockCollectionName: 'changelog_lock',
   lockTtl: 0,
-  migrationFileExtension: ".js",
+  migrationFileExtension: '.js',
   useFileHash: false,
-  moduleSystem: "esm",
-};
+  moduleSystem: 'esm'
+}
 
-export default config;
+export default config

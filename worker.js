@@ -37,6 +37,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(503)
       res.end('starting')
     }
+
     return
   }
 

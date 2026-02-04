@@ -40,13 +40,13 @@ function normalizeHeader(value) {
   return String(value ?? '')
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '_')
+    .replaceAll(/\s+/g, '_')
 }
 
 function stripDiacritics(value) {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[\u0300-\u036F]/g, '')
 }
 
 function isPrelevementType(typePoint) {
@@ -127,10 +127,12 @@ function readValue(sheet, rowIndex, columnMap, key, type = 'string') {
       const value = readAsNumber(sheet, rowIndex, columnMap[key])
       return value === undefined ? null : value
     }
+
     case 'date': {
       const value = readAsDateString(sheet, rowIndex, columnMap[key])
       return value === undefined ? null : value
     }
+
     case 'string':
     default: {
       const value = readAsString(sheet, rowIndex, columnMap[key])
@@ -178,7 +180,7 @@ function extractCadresData(sheet) {
     seenPointIds.add(pointId)
 
     const siretRaw = readValue(sheet, r, columnMap, 'siret')
-    const siret = siretRaw ? String(siretRaw).trim().replace(/\s+/g, '') : null
+    const siret = siretRaw ? String(siretRaw).trim().replaceAll(/\s+/g, '') : null
     const raisonSociale = readValue(sheet, r, columnMap, 'raisonSociale')
     const typePoint = readValue(sheet, r, columnMap, 'typePoint')
     const milieu = readValue(sheet, r, columnMap, 'milieu')
@@ -201,6 +203,7 @@ function extractCadresData(sheet) {
     if (coordX !== null && coordX !== undefined && !Number.isNaN(coordX)) {
       point.x_lambert93 = coordX
     }
+
     if (coordY !== null && coordY !== undefined && !Number.isNaN(coordY)) {
       point.y_lambert93 = coordY
     }
@@ -334,6 +337,7 @@ function consolidateData(rawData) {
     if (!rowsByPoint.has(row.pointId)) {
       rowsByPoint.set(row.pointId, [])
     }
+
     rowsByPoint.get(row.pointId).push(row)
   }
 
@@ -347,6 +351,7 @@ function consolidateData(rawData) {
       if (!minDate || row.dateDebut < minDate) {
         minDate = row.dateDebut
       }
+
       if (!maxDate || row.dateFin > maxDate) {
         maxDate = row.dateFin
       }
@@ -354,6 +359,7 @@ function consolidateData(rawData) {
       if (row.volumePreleve > 0) {
         prelevementByDate.set(row.dateFin, (prelevementByDate.get(row.dateFin) || 0) + row.volumePreleve)
       }
+
       if (row.volumeRejete > 0) {
         rejetByDate.set(row.dateFin, (rejetByDate.get(row.dateFin) || 0) + row.volumeRejete)
       }
@@ -490,13 +496,9 @@ function formatError(error) {
     'severity'
   ])
 
-  if (!errorObj.message) {
-    errorObj.message = errorObj.explanation || errorObj.internalMessage || 'Erreur non spécifiée'
-  }
+  errorObj.message ||= errorObj.explanation || errorObj.internalMessage || 'Erreur non spécifiée'
 
-  if (!errorObj.severity) {
-    errorObj.severity = 'error'
-  }
+  errorObj.severity ||= 'error'
 
   return errorObj
 }

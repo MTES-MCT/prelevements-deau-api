@@ -1,7 +1,6 @@
 import {pick} from 'lodash-es'
 
-import {readSheet} from '../xlsx.js'
-import {readAsString, readAsDateString, readAsNumber} from '../xlsx.js'
+import {readSheet, readAsString, readAsDateString, readAsNumber} from '../xlsx.js'
 import {validateNumericValue} from '../validate.js'
 import {dedupe} from '../dedupe.js'
 import * as XLSX from 'xlsx'
@@ -33,7 +32,7 @@ const POINT_COLUMNS = [
     outputKey: 'code_INSEE',
     matchers: ['code_insee', 'code_commune'],
     type: 'string',
-    transform: (val) => String(val).replace(/\.0$/, '').trim().padStart(5, '0')
+    transform: val => String(val).replace(/\.0$/, '').trim().padStart(5, '0')
   },
   {
     key: 'codeMasseEau',
@@ -158,7 +157,7 @@ export async function extractTemplateFile(buffer) {
   //   id_compteur, coefficient_de_lecture, code_OPR, code_PTP, code_BDLISA, code_BDTopage,
   //   code_BDCarthage, code_aiot, code_sispea
   // - Les préleveurs : siret_preleveur, raison_sociale_preleveur (généralement un seul par fichier)
-  const metadataSheet = workbook.Sheets['point_de_prelevement']
+  const metadataSheet = workbook.Sheets.point_de_prelevement
   if (metadataSheet) {
     const metadataResult = validateAndExtractMetadata(metadataSheet)
     errors.push(...metadataResult.errors)
@@ -181,11 +180,11 @@ export async function extractTemplateFile(buffer) {
     })
   }
 
-// Traiter la feuille de données (declaration_de_volume).
-// Note métier : ce template fournit des volumes, pas des index.
-// L'architecture reste compatible si on ajoute une série d'index plus tard
-// (elle sera simplement ajoutée dans `series`).
-  const dataSheet = workbook.Sheets['declaration_de_volume']
+  // Traiter la feuille de données (declaration_de_volume).
+  // Note métier : ce template fournit des volumes, pas des index.
+  // L'architecture reste compatible si on ajoute une série d'index plus tard
+  // (elle sera simplement ajoutée dans `series`).
+  const dataSheet = workbook.Sheets.declaration_de_volume
   if (!dataSheet) {
     errors.push({
       message: 'La feuille "declaration_de_volume" est requise.',
@@ -230,23 +229,22 @@ function validateStructure(workbook) {
   const foundSheets = []
   const missingSheets = []
 
-  requiredSheets.forEach(required => {
+  for (const required of requiredSheets) {
     const found = workbook.SheetNames.some(name => name.toLowerCase().trim() === required)
     if (found) {
       foundSheets.push(required)
     } else {
       missingSheets.push(required)
     }
-  })
+  }
 
   if (missingSheets.length > 0) {
     throw new Error(
-      `Feuille${missingSheets.length > 1 ? 's' : ''} ${missingSheets.map(s => `"${s}"`).join(', ')} introuvable${missingSheets.length > 1 ? 's' : ''} dans le fichier. ` +
-      `Feuilles trouvées : ${foundSheets.map(s => `"${s}"`).join(', ') || 'aucune'}. ` +
-      `Feuilles disponibles dans le fichier : ${workbook.SheetNames.join(', ')}.`
+      `Feuille${missingSheets.length > 1 ? 's' : ''} ${missingSheets.map(s => `"${s}"`).join(', ')} introuvable${missingSheets.length > 1 ? 's' : ''} dans le fichier. `
+      + `Feuilles trouvées : ${foundSheets.map(s => `"${s}"`).join(', ') || 'aucune'}. `
+      + `Feuilles disponibles dans le fichier : ${workbook.SheetNames.join(', ')}.`
     )
   }
-  
 }
 
 function validateAndExtractMetadata(metadataSheet) {
@@ -265,7 +263,7 @@ function validateAndExtractMetadata(metadataSheet) {
   }
 
   const range = XLSX.utils.decode_range(metadataSheet['!ref'])
-  
+
   // Trouver la ligne d'en-tête
   const headerRow = findMetadataHeaderRow(metadataSheet, range, errors)
   if (headerRow === -1) {
@@ -307,7 +305,7 @@ function findMetadataHeaderRow(sheet, range, errors) {
 
     // Vérifier si on trouve au moins un des headers possibles
     const hasHeader = possibleHeaders.some(header => {
-      const normalizedHeader = header.replace(/_/g, ' ')
+      const normalizedHeader = header.replaceAll('_', ' ')
       return rowValues.some(val => val === header || val === normalizedHeader || val.includes(header))
     })
 
@@ -366,9 +364,9 @@ function extractPointsPrelevement(sheet, headerRow, range, columnMap, errors) {
 
   for (let r = headerRow + 1; r <= range.e.r; r++) {
     const pointIdCol = POINT_COLUMNS.find(col => col.key === 'pointId')
-    const pointId = columnMap.pointId !== undefined
-      ? readAsString(sheet, r, columnMap.pointId)
-      : null
+    const pointId = columnMap.pointId === undefined
+      ? null
+      : readAsString(sheet, r, columnMap.pointId)
 
     if (!pointId) {
       continue
@@ -389,7 +387,7 @@ function extractPointsPrelevement(sheet, headerRow, range, columnMap, errors) {
     if (columnMap.siret !== undefined) {
       const siretValue = readAsString(sheet, r, columnMap.siret)
       if (siretValue) {
-        const siretStr = String(siretValue).trim().replace(/\s+/g, '')
+        const siretStr = String(siretValue).trim().replaceAll(/\s+/g, '')
         if (siretStr.length === 14) {
           point[siretCol.outputKey] = siretStr
         }
@@ -417,6 +415,7 @@ function extractPointsPrelevement(sheet, headerRow, range, columnMap, errors) {
         if (!value) {
           continue
         }
+
         value = String(value).trim()
       }
 
@@ -439,15 +438,15 @@ function extractPreleveurs(sheet, headerRow, range, columnMap, errors) {
   const siretCol = PRELEVEUR_COLUMNS.find(col => col.key === 'siret')
 
   for (let r = headerRow + 1; r <= range.e.r; r++) {
-    const siret = columnMap.siret !== undefined
-      ? readAsString(sheet, r, columnMap.siret)
-      : null
+    const siret = columnMap.siret === undefined
+      ? null
+      : readAsString(sheet, r, columnMap.siret)
 
     if (!siret) {
       continue
     }
 
-    const siretStr = String(siret).trim().replace(/\s+/g, '')
+    const siretStr = String(siret).trim().replaceAll(/\s+/g, '')
     if (!siretStr || siretStr.length !== 14) {
       continue
     }
@@ -487,12 +486,12 @@ function extractPreleveurs(sheet, headerRow, range, columnMap, errors) {
     preleveursMap.set(siretStr, preleveur)
   }
 
-  return {preleveurs: Array.from(preleveursMap.values())}
+  return {preleveurs: [...preleveursMap.values()]}
 }
 
 function validateAndExtractData(dataSheet, errors) {
   const data = {rows: []}
-  const result = {errors: errors, data}
+  const result = {errors, data}
 
   if (!dataSheet['!ref']) {
     result.errors.push({
@@ -560,12 +559,16 @@ function getSampleHeaders(sheet, range) {
     const rowValues = []
     for (let c = 0; c <= Math.min(5, range.e.c); c++) {
       const cellValue = readAsString(sheet, r, c) || ''
-      if (cellValue) rowValues.push(cellValue)
+      if (cellValue) {
+        rowValues.push(cellValue)
+      }
     }
+
     if (rowValues.length > 0) {
       sampleHeaders.push(`Ligne ${r + 1}: ${rowValues.join(', ')}`)
     }
   }
+
   return sampleHeaders
 }
 
@@ -595,30 +598,30 @@ function mapColumns(sheet, headerRow, range, errors) {
 }
 
 function normalizeColumnName(headerValue) {
-  return headerValue.toLowerCase().trim().replace(/\s+/g, '_')
+  return headerValue.toLowerCase().trim().replaceAll(/\s+/g, '_')
 }
 
 function matchesPointIdColumn(normalized) {
-  return normalized === 'id_point_de_prelevement' ||
-         normalized === 'id_point_de_prelevement_ou_rejet' ||
-         normalized.includes('id_point_de_prelevement_ou_rejet') ||
-         (normalized.includes('id_point') && normalized.includes('prelevement'))
+  return normalized === 'id_point_de_prelevement'
+    || normalized === 'id_point_de_prelevement_ou_rejet'
+    || normalized.includes('id_point_de_prelevement_ou_rejet')
+    || (normalized.includes('id_point') && normalized.includes('prelevement'))
 }
 
 function matchesDateDebutColumn(normalized) {
-  return normalized === 'date_debut' ||
-         normalized === 'date_de_but' ||
-         (normalized.includes('date') && normalized.includes('debut'))
+  return normalized === 'date_debut'
+    || normalized === 'date_de_but'
+    || (normalized.includes('date') && normalized.includes('debut'))
 }
 
 function matchesDateFinColumn(normalized) {
-  return normalized === 'date_fin' ||
-         (normalized.includes('date') && normalized.includes('fin'))
+  return normalized === 'date_fin'
+    || (normalized.includes('date') && normalized.includes('fin'))
 }
 
 function matchesVolumeColumn(normalized) {
-  return normalized.includes('volume_preleve_m3') ||
-         (normalized.includes('volume') && normalized.includes('preleve') && !normalized.includes('rejete'))
+  return normalized.includes('volume_preleve_m3')
+    || (normalized.includes('volume') && normalized.includes('preleve') && !normalized.includes('rejete'))
 }
 
 function validateColumnMapping(columnMap, foundColumns, headerRow, errors) {
@@ -626,9 +629,18 @@ function validateColumnMapping(columnMap, foundColumns, headerRow, errors) {
   if (columnMap.pointId === undefined) {
     missingColumns.push('id_point_de_prelevement (ou id_point_de_prelevement_ou_rejet)')
   }
-  if (columnMap.dateDebut === undefined) missingColumns.push('date_debut')
-  if (columnMap.dateFin === undefined) missingColumns.push('date_fin')
-  if (columnMap.volume === undefined) missingColumns.push('volume_preleve_m3')
+
+  if (columnMap.dateDebut === undefined) {
+    missingColumns.push('date_debut')
+  }
+
+  if (columnMap.dateFin === undefined) {
+    missingColumns.push('date_fin')
+  }
+
+  if (columnMap.volume === undefined) {
+    missingColumns.push('volume_preleve_m3')
+  }
 
   if (missingColumns.length > 0) {
     const foundColumnsList = foundColumns.filter(c => c !== '(vide)')
@@ -739,10 +751,11 @@ function consolidateData(rawData) {
   // Grouper par point de prélèvement
   const rowsByPoint = new Map()
   for (const row of volumeRows) {
-    const pointId = row.pointId
+    const {pointId} = row
     if (!rowsByPoint.has(pointId)) {
       rowsByPoint.set(pointId, [])
     }
+
     rowsByPoint.get(pointId).push(row)
   }
 
@@ -766,6 +779,7 @@ function consolidateData(rawData) {
       if (!minDate || row.dateDebut < minDate) {
         minDate = row.dateDebut
       }
+
       if (!maxDate || row.dateFin > maxDate) {
         maxDate = row.dateFin
       }
@@ -803,13 +817,9 @@ function formatError(error) {
     'severity'
   ])
 
-  if (!errorObj.message) {
-    errorObj.message = errorObj.explanation || errorObj.internalMessage || 'Erreur non spécifiée'
-  }
+  errorObj.message ||= errorObj.explanation || errorObj.internalMessage || 'Erreur non spécifiée'
 
-  if (!errorObj.severity) {
-    errorObj.severity = 'error'
-  }
+  errorObj.severity ||= 'error'
 
   return errorObj
 }
