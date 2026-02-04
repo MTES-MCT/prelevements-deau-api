@@ -1,6 +1,7 @@
 enum DeclarantPointPrelevementType {
-  PRELEVEUR
-  ASA
+  PRELEVEUR_DECLARANT
+  PRELEVEUR_NON_DECLARANT
+  COLLECTEUR
 }
 
 model PointPrelevement {
@@ -13,8 +14,9 @@ model PointPrelevement {
   zones      PointPrelevementZone[]
   declarants DeclarantPointPrelevement[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   sourceId String? @db.Text
 
