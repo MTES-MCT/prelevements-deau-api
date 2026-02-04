@@ -29,6 +29,13 @@ const SOURCES = [
     codeProperty: "code",
     nameProperty: "nom",
   },
+  {
+    file: "sage.geojson",
+    type: "SAGE",
+    prefix: "sage",
+    codeProperty: "code",
+    nameProperty: "nom",
+  },
 ];
 
 function readGeoJson(filePath) {

@@ -16,6 +16,9 @@ model PointPrelevement {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  sourceId String? @db.Text
+
+  @@unique([sourceId])
   @@index([name])
   @@index([coordinates], type: Gist)
 }
