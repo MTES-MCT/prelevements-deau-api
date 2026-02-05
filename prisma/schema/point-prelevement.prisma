@@ -4,10 +4,36 @@ enum DeclarantPointPrelevementType {
   COLLECTEUR
 }
 
+enum DeclarantPointPrelevementStatus {
+  EN_ACTIVITE
+  NON_RENSEIGNE
+  ABANDONNEE
+  TERMINEE
+}
+
+enum UsageEau {
+  EAU_POTABLE
+  AGRICULTURE
+  CAMION_CITERNE
+  EAU_EMBOUTEILLEE
+  HYDROELECTRICITE
+  INDUSTRIE
+  THERMALISME
+  NON_RENSEIGNE
+  AUTRE
+}
+
+enum WaterBodyType {
+  SURFACE
+  SOUTERRAIN
+  TRANSITION
+}
+
 model PointPrelevement {
   id String @id @default(uuid()) @db.Uuid
 
-  name String @db.Text
+  name          String         @db.Text
+  waterBodyType WaterBodyType?
 
   coordinates Unsupported("geometry(Point,4326)")
 
@@ -52,6 +78,14 @@ model DeclarantPointPrelevement {
 
   type DeclarantPointPrelevementType
 
+  status    DeclarantPointPrelevementStatus @default(NON_RENSEIGNE)
+  startDate DateTime?                       @db.Date
+  endDate   DateTime?                       @db.Date
+  usages    UsageEau[]                      @default([])
+
+  abandonReason String? @db.Text
+  comment       String? @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -59,4 +93,8 @@ model DeclarantPointPrelevement {
   @@index([declarantUserId])
   @@index([pointPrelevementId])
   @@index([type])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([usages], type: Gin)
 }

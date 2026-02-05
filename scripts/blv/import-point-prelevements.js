@@ -11,10 +11,31 @@ const __dirname = path.dirname(__filename)
 
 const CSV_PATH = path.resolve(__dirname, '../../data/point-prelevement.csv')
 
+function getWaterBodyType(typeMilieu) {
+  switch (Number(typeMilieu)) {
+    case 1: {
+      return 'SURFACE'
+    }
+
+    case 2: {
+      return 'SOUTERRAIN'
+    }
+
+    case 3: {
+      return 'TRANSITION'
+    }
+
+    default: {
+      return null
+    }
+  }
+}
+
 async function importRow(row) {
   const sourceId = `blv-${row.id_point}`
   const name = row.nom
   const geomHex = row.geom
+  const waterBodyType = getWaterBodyType(row?.type_milieu)
 
   // 1️⃣ Chercher le point par sourceId (Prisma)
   const existing = await prisma.pointPrelevement.findUnique({
@@ -31,6 +52,7 @@ async function importRow(row) {
       UPDATE "PointPrelevement"
       SET
         "name" = $2,
+        "waterBodyType" = $4,
         "coordinates" = ST_Transform(
           ST_SetSRID(
             ST_GeomFromEWKB(decode($3, 'hex')),
@@ -43,13 +65,14 @@ async function importRow(row) {
       `,
       pointId,
       name,
-      geomHex
+      geomHex,
+      waterBodyType
     )
   } else {
     const [{id}] = await prisma.$queryRawUnsafe(
       `
       INSERT INTO "PointPrelevement"
-        ("id", "sourceId", "name", "coordinates", "createdAt", "updatedAt")
+        ("id", "sourceId", "name", "waterBodyType", "coordinates", "createdAt", "updatedAt")
       VALUES (
         gen_random_uuid(),
         $1,
@@ -68,7 +91,8 @@ async function importRow(row) {
       `,
       sourceId,
       name,
-      geomHex
+      geomHex,
+      waterBodyType
     )
     pointId = id
   }
