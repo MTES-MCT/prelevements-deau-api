@@ -1,3 +1,5 @@
+import process from 'node:process'
+
 const config = {
   mongodb: {
     url: process.env.MONGODB_URL || 'mongodb://localhost',
