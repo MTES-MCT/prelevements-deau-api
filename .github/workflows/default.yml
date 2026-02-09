@@ -30,7 +30,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-        token: ${{ secrets.GITHUB_TOKEN }}
+        ssh-key: ${{ secrets.SUBMODULES_SSH_KEY }}
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
