@@ -1,5 +1,6 @@
 model Declaration {
-  id String @id @default(uuid()) @db.Uuid
+  id   String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(6)
 
   // Relation déclarant
   declarantUserId String    @db.Uuid
@@ -13,6 +14,7 @@ model Declaration {
   updatedAt DateTime @updatedAt
 
   // Champs métier
+  type                String                     @db.Text
   comment             String?                    @db.Text
   startMonth          DateTime                   @db.Date
   endMonth            DateTime                   @db.Date
