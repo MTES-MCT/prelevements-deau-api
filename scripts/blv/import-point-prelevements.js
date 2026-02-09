@@ -77,6 +77,7 @@ async function importRow(row) {
         gen_random_uuid(),
         $1,
         $2,
+        $4,
         ST_Transform(
           ST_SetSRID(
             ST_GeomFromEWKB(decode($3, 'hex')),
