@@ -23,12 +23,36 @@ model User {
   sessionTokens SessionToken[]
 }
 
+enum DeclarantType {
+  NATURAL_PERSON
+  LEGAL_PERSON
+}
+
+enum Civility {
+  MR
+  MRS
+}
+
 model Declarant {
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
   declarations      Declaration[]
   pointPrelevements DeclarantPointPrelevement[]
+
+  declarantType DeclarantType @default(NATURAL_PERSON)
+
+  socialReason String? @db.Text
+
+  civility Civility?
+
+  addressLine1 String? @db.Text
+  addressLine2 String? @db.Text
+  poBox        String? @db.Text
+  postalCode   String? @db.Text
+  city         String? @db.Text
+
+  phoneNumber String? @db.Text
 }
 
 model Instructor {
