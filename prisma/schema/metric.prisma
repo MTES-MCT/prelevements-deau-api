@@ -1,0 +1,62 @@
+// Une ligne = une valeur (point + type + date + valeur)
+enum MetricQuality {
+  SUSPECT
+  ANOMALY
+}
+
+model Metric {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Référence point sans relation Prisma (PointPrelevement ne connaît pas Metric)
+  pointPrelevementId   String? @db.Uuid
+  pointPrelevementName String? @db.Text // Nom brut (ex. "Source du Golley") si point non encore lié
+
+  meterId String? @db.Uuid // cas plusieurs compteurs sur 1 point
+
+  metricTypeCode String  @db.Text
+  unit           String? @db.Text
+
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  value     Decimal  @db.Decimal(20, 4)
+
+  // Référence source sans relation Prisma (Source ne connaît pas Metric)
+  sourceId String @db.Uuid
+
+  quality MetricQuality?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pointPrelevementId])
+  @@index([sourceId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([metricTypeCode])
+}
+
+// Données métriques en staging (une ligne = une valeur). Si pointPrelevementId est renseigné
+// après matching, la donnée est aussi ingérée dans Metric. Sinon elle reste ici pour instruction.
+model StageMetric {
+  id String @id @default(uuid()) @db.Uuid
+
+  pointPrelevementId   String? @db.Uuid
+  pointPrelevementName String? @db.Text
+
+  metricTypeCode String  @db.Text
+  unit           String? @db.Text
+
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  value     Decimal  @db.Decimal(20, 4)
+
+  sourceId String @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sourceId])
+  @@index([pointPrelevementId])
+  @@index([startDate])
+  @@index([endDate])
+}
