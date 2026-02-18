@@ -14,7 +14,7 @@ enum SourceStatus {
 }
 
 model Source {
-  id     String @id @default(uuid()) @db.Uuid
+  id     String       @id @default(uuid()) @db.Uuid
   type   SourceType
   status SourceStatus @default(PENDING)
 
@@ -23,7 +23,11 @@ model Source {
   end      DateTime? @db.Date
 
   // Référence déclaration sans relation Prisma (Declaration ne connaît pas Source)
-  declarationId String? @unique @db.Uuid
+  declarationId String?      @db.Uuid
+  declaration   Declaration? @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  metrics      Metric[]
+  stageMetrics StageMetric[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

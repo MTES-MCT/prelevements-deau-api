@@ -8,8 +8,11 @@ model Metric {
   id String @id @default(uuid()) @db.Uuid
 
   // Référence point sans relation Prisma (PointPrelevement ne connaît pas Metric)
-  pointPrelevementId   String? @db.Uuid
-  pointPrelevementName String? @db.Text // Nom brut (ex. "Source du Golley") si point non encore lié
+  pointPrelevementId String           @db.Uuid
+  pointPrelevement   PointPrelevement @relation(fields: [pointPrelevementId], references: [id])
+
+  // Nom brut (ex. "Source du Golley") si point non encore lié
+  pointPrelevementName String? @db.Text
 
   meterId String? @db.Uuid // cas plusieurs compteurs sur 1 point
 
@@ -22,12 +25,14 @@ model Metric {
 
   // Référence source sans relation Prisma (Source ne connaît pas Metric)
   sourceId String @db.Uuid
+  source   Source @relation(fields: [sourceId], references: [id])
 
   quality MetricQuality?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([pointPrelevementId, metricTypeCode, startDate, endDate, sourceId])
   @@index([pointPrelevementId])
   @@index([sourceId])
   @@index([startDate])
@@ -51,10 +56,13 @@ model StageMetric {
   value     Decimal  @db.Decimal(20, 4)
 
   sourceId String @db.Uuid
+  source   Source @relation(fields: [sourceId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  pointPrelevement PointPrelevement? @relation(fields: [pointPrelevementId], references: [id])
 
+  @@unique([sourceId, pointPrelevementName, metricTypeCode, startDate, endDate])
   @@index([sourceId])
   @@index([pointPrelevementId])
   @@index([startDate])

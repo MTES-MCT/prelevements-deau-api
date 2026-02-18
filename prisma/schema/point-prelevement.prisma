@@ -40,6 +40,9 @@ model PointPrelevement {
   zones      PointPrelevementZone[]
   declarants DeclarantPointPrelevement[]
 
+  metrics      Metric[]
+  stageMetrics StageMetric[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
