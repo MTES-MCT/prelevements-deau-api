@@ -486,7 +486,7 @@ function consolidateData(volumeRows, indexRows) {
 
       series.push({
         pointPrelevement: pointId,
-        parameter: 'Volume prélevé',
+        parameter: 'volume prélevé',
         unit: 'm³',
         frequency: inferFrequency(durations),
         valueType: 'cumulative',

@@ -376,7 +376,7 @@ function consolidateData(rawData) {
     if (prelevementEntries.length > 0) {
       series.push({
         pointPrelevement: pointId,
-        parameter: 'Volume prélevé',
+        parameter: 'volume prélevé',
         unit: 'm³',
         frequency: '1 month',
         valueType: 'cumulative',
