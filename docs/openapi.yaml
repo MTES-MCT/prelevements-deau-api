@@ -291,7 +291,7 @@ paths:
       summary: Demander un magic link de connexion
       description: |
         Envoie un email avec des liens de connexion pour chaque territoire auquel l'utilisateur a accès.
-        Les liens sont valables 1 heure et à usage unique.
+        Les liens sont valables 15 minutes.
       operationId: requestAuth
       security: []
       requestBody:
