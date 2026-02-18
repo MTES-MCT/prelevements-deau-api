@@ -796,7 +796,7 @@ function consolidateData(rawData) {
 
     series.push({
       pointPrelevement: pointId,
-      parameter: 'Volume prélevé',
+      parameter: 'volume prélevé',
       unit: 'm³',
       frequency: '1 day',
       valueType: 'cumulative',

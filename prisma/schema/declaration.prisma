@@ -9,6 +9,9 @@ model Declaration {
   // Fichiers liés
   files DeclarationFile[]
 
+  // Sources
+  sources Source[]
+
   // Métadonnées
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
