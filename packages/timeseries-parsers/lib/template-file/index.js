@@ -125,7 +125,7 @@ const PRELEVEUR_COLUMNS = [
   },
   {
     key: 'raisonSociale',
-    outputKey: 'raison_sociale',
+    outputKey: 'socialReason',
     matchers: ['raison_sociale_preleveur', 'raison_sociale'],
     type: 'string'
   }
