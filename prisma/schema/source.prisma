@@ -56,6 +56,8 @@ model Chunk {
   instructedByInstructor       Instructor?            @relation(fields: [instructedByInstructorUserId], references: [userId])
   instructionComment           String?                @db.Text
 
+  parsingInfo Json @default("{}")
+
   minDate DateTime @db.Date
   maxDate DateTime @db.Date
 
