@@ -10,7 +10,7 @@ model Declaration {
   files DeclarationFile[]
 
   // Sources
-  sources Source[]
+  source Source? @relation
 
   // Métadonnées
   createdAt DateTime @default(now())
@@ -19,8 +19,6 @@ model Declaration {
   // Champs métier
   type                String                     @db.Text
   comment             String?                    @db.Text
-  startMonth          DateTime                   @db.Date
-  endMonth            DateTime                   @db.Date
   aotDecreeNumber     String?
   status              DeclarationStatus          @default(SUBMITTED)
   dataSourceType      DeclarationDataSourceType?

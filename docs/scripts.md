@@ -254,15 +254,11 @@ npm run run-job-with-logs <nom-job> <donnees-json>
 
 **Jobs disponibles :**
 - `consolidate-dossier` : Consolidation d'un dossier spécifique
-- `process-attachment` : Traitement d'une pièce jointe spécifique
 
 **Exemples :**
 ```bash
 # Consolider un dossier avec logs détaillés
 npm run run-job-with-logs consolidate-dossier '{"dossierId":"6908db261a6a10831363dde3"}'
-
-# Traiter une pièce jointe avec logs détaillés
-npm run run-job-with-logs process-attachment '{"attachmentId":"6908db2679a0c1d0dd5b6fbe"}'
 ```
 
 **Utilisation :** Debug, investigation de problèmes sur un dossier/attachment spécifique, ou test de modifications du code de consolidation.

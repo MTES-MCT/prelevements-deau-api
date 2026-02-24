@@ -1,5 +1,3 @@
-// Table intermédiaire avant ingestion : une source = un lot (déclaration, API…).
-// Pour l’instant une source ne contient que des données de type métrique (validateur, plus tard API).
 enum SourceType {
   DECLARATION
   BATCH
@@ -19,15 +17,11 @@ model Source {
   status SourceStatus @default(PENDING)
 
   metadata Json?
-  start    DateTime? @db.Date
-  end      DateTime? @db.Date
 
-  // Référence déclaration sans relation Prisma (Declaration ne connaît pas Source)
-  declarationId String?      @db.Uuid
-  declaration   Declaration? @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  declarationId String      @unique @db.Uuid
+  declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
 
-  metrics      Metric[]
-  stageMetrics StageMetric[]
+  chunks Chunk[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -35,4 +29,61 @@ model Source {
   @@index([type])
   @@index([status])
   @@index([declarationId])
+}
+
+enum ChunkInstructionStatus {
+  PENDING
+  REJECTED
+  VALIDATED
+  AUTOMATICALLY_VALIDATED
+}
+
+model Chunk {
+  id String @id @default(uuid()) @db.Uuid
+
+  sourceId String @db.Uuid
+  source   Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  // Nom brut (ex. "Source du Golley") si point non encore lié
+  pointPrelevementName String? @db.Text
+
+  pointPrelevementId String?           @db.Uuid
+  pointPrelevement   PointPrelevement? @relation(fields: [pointPrelevementId], references: [id], onDelete: SetNull)
+
+  instructionStatus            ChunkInstructionStatus @default(PENDING)
+  instructedAt                 DateTime?
+  instructedByInstructorUserId String?                @db.Uuid
+  instructedByInstructor       Instructor?            @relation(fields: [instructedByInstructorUserId], references: [userId])
+  instructionComment           String?                @db.Text
+
+  minDate DateTime @db.Date
+  maxDate DateTime @db.Date
+
+  extras Json @default("{}")
+
+  chunkValues ChunkValue[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([instructionStatus])
+}
+
+model ChunkValue {
+  id String @id @default(uuid()) @db.Uuid
+
+  chunkId String @db.Uuid
+  chunk   Chunk  @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  metricTypeCode String  @db.Text
+  unit           String? @db.Text
+  frequency      String  @db.Text
+
+  date  DateTime @db.Date
+  value Decimal  @db.Decimal(20, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([metricTypeCode])
 }

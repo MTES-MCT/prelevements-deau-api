@@ -41,7 +41,6 @@ Configuration centrale : connexion Redis, définition des files d'attente et des
 | Nom | Type | Fréquence | Description |
 |-----|------|-----------|-------------|
 | `consolidate-dossiers-maintenance` | Cron | 1x/jour à 4h | Reconsolide les dossiers marqués |
-| `process-attachment` | On-demand | - | Traite une pièce jointe spécifique |
 | `consolidate-dossier` | On-demand | - | Consolide un dossier spécifique |
 
 ### `scheduler.js`

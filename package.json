@@ -27,7 +27,7 @@
     "@etalab/decoupage-administratif": "^5.2.0",
     "@fabnum/prelevements-deau-timeseries-parsers": "file:packages/prelevements-deau-timeseries-parsers",
     "@prisma/adapter-pg": "^7.2.0",
-    "@prisma/client": "^7.4.0",
+    "@prisma/client": "^7.4.1",
     "@sentry/node": "^10.38.0",
     "@sentry/profiling-node": "^10.38.0",
     "bullmq": "^5.63.1",
@@ -63,7 +63,7 @@
     "dotenv": "^17.2.3",
     "mongodb-memory-server": "^10.3.0",
     "nodemon": "^3.1.11",
-    "prisma": "^7.4.0",
+    "prisma": "^7.4.1",
     "supertest": "^7.1.4",
     "xo": "^1.2.3"
   },
