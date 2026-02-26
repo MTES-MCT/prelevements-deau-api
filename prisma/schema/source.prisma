@@ -61,7 +61,7 @@ model Chunk {
   minDate DateTime @db.Date
   maxDate DateTime @db.Date
 
-  extras Json @default("{}")
+  metadata Json @default("{}")
 
   chunkValues ChunkValue[]
 
