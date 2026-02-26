@@ -1,4 +1,4 @@
-
+/* eslint-disable no-await-in-loop */
 import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -135,7 +135,7 @@ async function main() {
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Erreur import zones', error)
-    process.exit(1)
+    throw error
   } finally {
     client.release()
     await pool.end()

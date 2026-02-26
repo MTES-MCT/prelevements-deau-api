@@ -375,7 +375,7 @@ function buildVolumeRows(rawRows, errors) {
   }
 }
 
-function safeNumericValue(value, errors, pointId, dateMesure) {
+function safeNumericValue(value, errors) {
   try {
     return validateNumericValue(value)
   } catch (error) {

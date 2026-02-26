@@ -1,3 +1,4 @@
+import process from 'node:process'
 import prismaPkg from '@prisma/client'
 import pgPkg from 'pg'
 import {PrismaPg} from '@prisma/adapter-pg'

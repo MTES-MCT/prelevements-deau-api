@@ -1,4 +1,4 @@
-/* eslint-disable unicorn/no-process-exit */
+
 import 'dotenv/config'
 import {prisma} from '../db/prisma.js'
 import {randomUUID} from 'node:crypto'

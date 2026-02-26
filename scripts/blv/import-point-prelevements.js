@@ -150,11 +150,11 @@ async function main() {
   console.log(`[import-point-prelevements] terminé (${count} points)`)
 }
 
-main()
-  .catch(error => {
-    console.error(error)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+try {
+  await main()
+} catch (error) {
+  console.error(error)
+  throw error
+} finally {
+  await prisma.$disconnect()
+}

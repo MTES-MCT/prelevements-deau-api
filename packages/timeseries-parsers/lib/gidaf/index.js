@@ -133,7 +133,6 @@ function readValue(sheet, rowIndex, columnMap, key, type = 'string') {
       return value === undefined ? null : value
     }
 
-    case 'string':
     default: {
       const value = readAsString(sheet, rowIndex, columnMap[key])
       return value === undefined ? null : value
