@@ -92,6 +92,9 @@ model DeclarantPointPrelevement {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  sourceId String? @db.Text
+
+  @@unique([sourceId])
   @@unique([declarantUserId, pointPrelevementId])
   @@index([declarantUserId])
   @@index([pointPrelevementId])

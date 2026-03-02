@@ -1,3 +1,5 @@
+// noinspection JSNonASCIINames
+
 import 'dotenv/config'
 
 import fs from 'node:fs'
@@ -9,20 +11,16 @@ import {prisma} from '../../db/prisma.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const CSV_PATH = path.resolve(__dirname, '../../data/point-prelevement.csv')
+const CSV_PATH = path.resolve(__dirname, '../../data/blv/donnees-brutes.csv')
 
 function getWaterBodyType(typeMilieu) {
-  switch (Number(typeMilieu)) {
-    case 1: {
+  switch (typeMilieu) {
+    case 'Superficiel': {
       return 'SURFACE'
     }
 
-    case 2: {
+    case 'Souterrain': {
       return 'SOUTERRAIN'
-    }
-
-    case 3: {
-      return 'TRANSITION'
     }
 
     default: {
@@ -32,14 +30,18 @@ function getWaterBodyType(typeMilieu) {
 }
 
 async function importRow(row) {
-  const sourceId = `blv-${row.id_point}`
-  const name = row.nom
-  const geomHex = row.geom
-  const waterBodyType = getWaterBodyType(row?.type_milieu)
+  const sourceId = `blv-${row['ID_Point_Prélèvement']}`
+  const name = row['ID_Point_Prélèvement']
+  const geoX = row['X']
+  const geoY = row['Y']
+
+  const waterBodyType = getWaterBodyType(row['Type_Prélèvement'])
 
   // 1️⃣ Chercher le point par sourceId (Prisma)
   const existing = await prisma.pointPrelevement.findUnique({
     where: {sourceId}
+  }) || await prisma.pointPrelevement.findUnique({
+    where: {name}
   })
 
   let pointId
@@ -52,21 +54,24 @@ async function importRow(row) {
       UPDATE "PointPrelevement"
       SET
         "name" = $2,
-        "waterBodyType" = $4,
+        "waterBodyType" = $5,
         "coordinates" = ST_Transform(
           ST_SetSRID(
-            ST_GeomFromEWKB(decode($3, 'hex')),
-            32740
+            ST_MakePoint($3, $4),
+            2154
           ),
           4326
         ),
-        "updatedAt" = now()
+        "updatedAt" = now(),
+        "sourceId" = $6
       WHERE "id" = $1
       `,
       pointId,
       name,
-      geomHex,
-      waterBodyType
+      geoX,
+      geoY,
+      waterBodyType,
+      sourceId
     )
   } else {
     const [{id}] = await prisma.$queryRawUnsafe(
@@ -77,11 +82,11 @@ async function importRow(row) {
         gen_random_uuid(),
         $1,
         $2,
-        $4,
+        $5,
         ST_Transform(
           ST_SetSRID(
-            ST_GeomFromEWKB(decode($3, 'hex')),
-            32740
+            ST_MakePoint($3, $4),
+            2154
           ),
           4326
         ),
@@ -92,7 +97,8 @@ async function importRow(row) {
       `,
       sourceId,
       name,
-      geomHex,
+      geoX,
+      geoY,
       waterBodyType
     )
     pointId = id
@@ -137,13 +143,15 @@ async function main() {
   let count = 0
 
   for await (const row of parser) {
-    await prisma.$transaction(async () => {
-      await importRow(row)
-    })
+    if (row['Libellé_UG'] === 'Bievre Liers Valloire') {
+      await prisma.$transaction(async () => {
+        await importRow(row)
+      })
 
-    count++
-    if (count % 500 === 0) {
-      console.log(`[import-point-prelevements] ${count} points importés`)
+      count++
+      if (count % 500 === 0) {
+        console.log(`[import-point-prelevements] ${count} points importés`)
+      }
     }
   }
 
