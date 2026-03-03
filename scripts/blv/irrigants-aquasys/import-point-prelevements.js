@@ -6,12 +6,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {parse} from 'csv-parse'
-import {prisma} from '../../db/prisma.js'
+import {prisma} from '../../../db/prisma.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const CSV_PATH = path.resolve(__dirname, '../../data/blv/irrigants-aquasys/donnees-brutes.csv')
+const CSV_PATH = path.resolve(__dirname, '../../../data/blv/irrigants-aquasys/referentiels/donnees-brutes.csv')
 
 function getWaterBodyType(typeMilieu) {
   switch (typeMilieu) {
