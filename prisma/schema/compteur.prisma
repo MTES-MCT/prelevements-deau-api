@@ -1,0 +1,38 @@
+model Compteur {
+  id String @id @default(uuid()) @db.Uuid
+
+  serialNumber String? @db.Text
+  identifier   String? @db.Text
+
+  points CompteurPointPrelevement[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([serialNumber])
+  @@unique([identifier])
+  @@index([serialNumber])
+  @@index([identifier])
+}
+
+model CompteurPointPrelevement {
+  id String @id @default(uuid()) @db.Uuid
+
+  compteurId         String @db.Uuid
+  pointPrelevementId String @db.Uuid
+
+  startDate DateTime?
+  endDate   DateTime?
+
+  compteur         Compteur         @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  pointPrelevement PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([compteurId, startDate])
+  @@index([compteurId])
+  @@index([pointPrelevementId])
+  @@index([startDate, endDate])
+}

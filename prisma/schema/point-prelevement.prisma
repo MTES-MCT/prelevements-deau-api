@@ -39,6 +39,7 @@ model PointPrelevement {
 
   zones      PointPrelevementZone[]
   declarants DeclarantPointPrelevement[]
+  compteurs  CompteurPointPrelevement[]
 
   chunks Chunk[]
 

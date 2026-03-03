@@ -4,13 +4,13 @@ import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
 import {parse} from 'csv-parse'
-import {prisma} from '../../db/prisma.js'
+import {prisma} from '../../../db/prisma.js'
 import {fileURLToPath} from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const CSV_PATH = path.resolve(__dirname, '../../data/blv/donnees-brutes.csv')
+const CSV_PATH = path.resolve(__dirname, '../../data/blv/irrigants-aquasys/donnees-brutes.csv')
 
 const PERSON_KIND = {
   NATURAL: 'NATURAL_PERSON',
