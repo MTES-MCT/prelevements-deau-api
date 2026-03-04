@@ -1,4 +1,4 @@
-// noinspection JSNonASCIINames
+// Noinspection JSNonASCIINames
 
 import 'dotenv/config'
 
@@ -36,7 +36,7 @@ function parseLambertNumber(s) {
     return null
   }
 
-  const normalized = raw.replace(/\s/g, '').replace(',', '.')
+  const normalized = raw.replaceAll(/\s/g, '').replace(',', '.')
   const n = Number(normalized)
 
   return Number.isFinite(n) ? n : null
@@ -81,21 +81,21 @@ function getFileSourceId(filePath) {
 }
 
 async function importRow(row, fileSource) {
-  const name = row['id_point_de_prelevement']
+  const name = row.id_point_de_prelevement || row.id_point_de_prelevement_ou_rejet
   if (!name) {
-    return
+    throw new Error('Le champ "id_point_de_prelevement" ou "id_point_de_prelevement_ou_rejet" est requis')
   }
 
   const sourceId = `blv-${fileSource}-${name}`
 
-  const geoX = parseLambertNumber(row['x_lambert93'])
-  const geoY = parseLambertNumber(row['y_lambert93'])
+  const geoX = parseLambertNumber(row.x_lambert93)
+  const geoY = parseLambertNumber(row.y_lambert93)
 
   if (geoX == null || geoY == null) {
-    throw new Error(`Coordonnées invalides pour "${name}" (x=${row['x_lambert93']}, y=${row['y_lambert93']})`)
+    throw new Error(`Coordonnées invalides pour "${name}" (x=${row.x_lambert93}, y=${row.y_lambert93})`)
   }
 
-  const waterBodyType = getWaterBodyType(row['type_point_prelevement'])
+  const waterBodyType = getWaterBodyType(row.type_point_prelevement)
 
   // 1️⃣ Chercher le point par sourceId (Prisma)
   const existing = await prisma.pointPrelevement.findUnique({
@@ -221,7 +221,7 @@ async function main() {
 
   const files = listTemplateReferentielCsvFiles()
 
-  if (!files.length) {
+  if (files.length === 0) {
     console.log('[import-point-prelevements-template-file] aucun fichier trouvé')
     return
   }

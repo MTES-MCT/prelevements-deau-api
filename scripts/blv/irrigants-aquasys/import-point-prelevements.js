@@ -1,4 +1,4 @@
-// noinspection JSNonASCIINames
+// Noinspection JSNonASCIINames
 
 import 'dotenv/config'
 
@@ -32,8 +32,8 @@ function getWaterBodyType(typeMilieu) {
 async function importRow(row) {
   const sourceId = `blv-${row['ID_Point_Prélèvement']}`
   const name = row['ID_Point_Prélèvement']
-  const geoX = row['X']
-  const geoY = row['Y']
+  const geoX = row.X
+  const geoY = row.Y
 
   const waterBodyType = getWaterBodyType(row['Type_Prélèvement'])
 

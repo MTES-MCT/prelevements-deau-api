@@ -1,4 +1,4 @@
-// noinspection JSNonASCIINames
+// Noinspection JSNonASCIINames
 
 import 'dotenv/config'
 import fs from 'node:fs'
@@ -14,50 +14,50 @@ const CSV_PATH = path.resolve(__dirname, '../../../data/blv/irrigants-aquasys/re
 
 const PERSON_KIND = {
   NATURAL: 'NATURAL_PERSON',
-  LEGAL: 'LEGAL_PERSON',
+  LEGAL: 'LEGAL_PERSON'
 }
 
 function stripParens(s) {
   return String(s ?? '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/\(.*?\)/g, '')
+    .replaceAll(/\s+/g, ' ')
     .trim()
 }
 
 function normalizeType(typeRaw) {
   return stripParens(typeRaw)
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[\u0300-\u036F]/g, '')
     .toLowerCase()
 }
 
 function parseIndividual(fullNameRaw) {
   const fullName = stripParens(fullNameRaw)
   if (!fullName) {
-    return { firstName: null, lastName: null }
+    return {firstName: null, lastName: null}
   }
 
   const parts = fullName.split(' ')
   if (parts.length === 1) {
-    return { firstName: null, lastName: parts[0] }
+    return {firstName: null, lastName: parts[0]}
   }
 
   return {
     lastName: parts[0],
-    firstName: parts.slice(1).join(' ') || null,
+    firstName: parts.slice(1).join(' ') || null
   }
 }
 
 export function parseUsagerRow(row) {
-  const typeNormalized = normalizeType(row['Type_Usager'])
-  const nom = stripParens(row['Nom_Usager'])
+  const typeNormalized = normalizeType(row.Type_Usager)
+  const nom = stripParens(row.Nom_Usager)
 
   if (!nom) {
     return {
       kind: null,
       firstName: null,
       lastName: null,
-      socialReason: null,
+      socialReason: null
     }
   }
 
@@ -68,45 +68,45 @@ export function parseUsagerRow(row) {
       kind: PERSON_KIND.LEGAL,
       firstName: null,
       lastName: null,
-      socialReason: nom,
+      socialReason: nom
     }
   }
 
-  const { firstName, lastName } = parseIndividual(nom)
+  const {firstName, lastName} = parseIndividual(nom)
 
   return {
     kind: PERSON_KIND.NATURAL,
     firstName,
     lastName,
-    socialReason: null,
+    socialReason: null
   }
 }
 
 async function importRow(row) {
-  const sourceId = `blv-${row['ID_Usager']}`
+  const sourceId = `blv-${row.ID_Usager}`
 
-  const siret = row['SIRET'].slice(0, 14)
-  const { kind, firstName, lastName, socialReason } = parseUsagerRow(row)
-  const postalCode = row['Code_INSEE_Commune']
-  const city = row['NOM_Commune']
+  const siret = row.SIRET.slice(0, 14)
+  const {kind, firstName, lastName, socialReason} = parseUsagerRow(row)
+  const postalCode = row.Code_INSEE_Commune
+  const city = row.NOM_Commune
   const address = row['Lieu-Dit_Parcelle']
 
   // 1️⃣ Chercher le déclarant par sourceId (Prisma)
   const existing = await prisma.declarant.findUnique({
     where: {sourceId},
     include: {
-      user: true,
+      user: true
     }
   })
 
   let declarantUserId
 
-  const declarantType =
-    kind === PERSON_KIND.LEGAL
+  const declarantType
+    = kind === PERSON_KIND.LEGAL
       ? 'LEGAL_PERSON'
-      : kind === PERSON_KIND.NATURAL
+      : (kind === PERSON_KIND.NATURAL
         ? 'NATURAL_PERSON'
-        : null
+        : null)
 
   const email = `${sourceId}@import.local`
 
@@ -118,7 +118,7 @@ async function importRow(row) {
       data: {
         role: 'DECLARANT',
         firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null,
+        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
       }
     })
 
@@ -131,7 +131,7 @@ async function importRow(row) {
         siret,
         addressLine1: address,
         postalCode,
-        city,
+        city
       }
     })
   } else {
@@ -140,13 +140,13 @@ async function importRow(row) {
       update: {
         role: 'DECLARANT',
         firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null,
+        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
       },
       create: {
         email,
         role: 'DECLARANT',
         firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null,
+        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
       }
     })
 
@@ -161,7 +161,7 @@ async function importRow(row) {
         siret,
         addressLine1: address,
         postalCode,
-        city,
+        city
       },
       create: {
         userId: declarantUserId,
@@ -171,7 +171,7 @@ async function importRow(row) {
         siret,
         addressLine1: address,
         postalCode,
-        city,
+        city
       }
     })
   }

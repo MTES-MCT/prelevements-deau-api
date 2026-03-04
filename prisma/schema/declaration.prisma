@@ -13,8 +13,9 @@ model Declaration {
   source Source? @relation
 
   // Métadonnées
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  importSourceId String?  @db.Text
 
   // Champs métier
   type                String                     @db.Text
@@ -25,6 +26,7 @@ model Declaration {
   waterWithdrawalType String
   consolidatedAt      DateTime?
 
+  @@unique([importSourceId])
   @@index([declarantUserId])
   @@index([status])
   @@index([dataSourceType])

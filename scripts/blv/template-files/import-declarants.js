@@ -1,4 +1,4 @@
-// noinspection JSNonASCIINames
+// Noinspection JSNonASCIINames
 
 import 'dotenv/config'
 
@@ -16,13 +16,13 @@ const DIR_PATTERN = /-template-file$/i
 
 const PERSON_KIND = {
   NATURAL: 'NATURAL_PERSON',
-  LEGAL: 'LEGAL_PERSON',
+  LEGAL: 'LEGAL_PERSON'
 }
 
 function stripParens(s) {
   return String(s ?? '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/\(.*?\)/g, '')
+    .replaceAll(/\s+/g, ' ')
     .trim()
 }
 
@@ -32,7 +32,7 @@ function normalizeSiret(s) {
     return null
   }
 
-  const digits = raw.replace(/\D/g, '')
+  const digits = raw.replaceAll(/\D/g, '')
   if (!digits) {
     return null
   }
@@ -53,13 +53,13 @@ function parseIndividual(fullNameRaw) {
 
   return {
     lastName: parts[0],
-    firstName: parts.slice(1).join(' ') || null,
+    firstName: parts.slice(1).join(' ') || null
   }
 }
 
 function parseDeclarantRow(row) {
-  const socialReasonRaw = stripParens(row['raison_sociale_preleveur'])
-  const siret = normalizeSiret(row['siret_preleveur'])
+  const socialReasonRaw = stripParens(row.raison_sociale_preleveur)
+  const siret = normalizeSiret(row.siret_preleveur)
 
   if (siret) {
     return {
@@ -67,7 +67,7 @@ function parseDeclarantRow(row) {
       firstName: null,
       lastName: null,
       socialReason: socialReasonRaw || null,
-      siret,
+      siret
     }
   }
 
@@ -77,7 +77,7 @@ function parseDeclarantRow(row) {
       firstName: null,
       lastName: null,
       socialReason: null,
-      siret: null,
+      siret: null
     }
   }
 
@@ -88,7 +88,7 @@ function parseDeclarantRow(row) {
     firstName,
     lastName,
     socialReason: null,
-    siret: null,
+    siret: null
   }
 }
 
@@ -133,29 +133,29 @@ function getFileSourceId(filePath) {
 async function importRow(row, fileSource) {
   const {kind, firstName, lastName, socialReason, siret} = parseDeclarantRow(row)
 
-  const rawKey = siret || stripParens(row['raison_sociale_preleveur']) || null
+  const rawKey = siret || stripParens(row.raison_sociale_preleveur) || null
   if (!rawKey) {
-    return
+    throw new Error(`Clé de déclarant introuvable pour la ligne : ${JSON.stringify(row)}`)
   }
 
   const sourceId = `blv-${fileSource}-declarant-${rawKey}`
   const email = `${sourceId}@import.local`
 
-  const postalCode = String(row['code_INSEE'] ?? '').trim() || null
+  const postalCode = String(row.code_INSEE ?? '').trim() || null
   const city = null
   const address = null
 
-  const declarantType =
-    kind === PERSON_KIND.LEGAL
+  const declarantType
+    = kind === PERSON_KIND.LEGAL
       ? 'LEGAL_PERSON'
-      : kind === PERSON_KIND.NATURAL
+      : (kind === PERSON_KIND.NATURAL
         ? 'NATURAL_PERSON'
-        : null
+        : null)
 
   // 1️⃣ Chercher le déclarant par sourceId (Prisma)
   const existing = await prisma.declarant.findUnique({
     where: {sourceId},
-    include: {user: true},
+    include: {user: true}
   })
 
   let declarantUserId
@@ -168,7 +168,7 @@ async function importRow(row, fileSource) {
       data: {
         role: 'DECLARANT',
         firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null,
+        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
       }
     })
 
@@ -181,7 +181,7 @@ async function importRow(row, fileSource) {
         siret: siret ?? null,
         addressLine1: address,
         postalCode,
-        city,
+        city
       }
     })
   } else {
@@ -190,13 +190,13 @@ async function importRow(row, fileSource) {
       update: {
         role: 'DECLARANT',
         firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null,
+        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
       },
       create: {
         email,
         role: 'DECLARANT',
         firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null,
+        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
       }
     })
 
@@ -211,7 +211,7 @@ async function importRow(row, fileSource) {
         siret: siret ?? null,
         addressLine1: address,
         postalCode,
-        city,
+        city
       },
       create: {
         userId: declarantUserId,
@@ -221,7 +221,7 @@ async function importRow(row, fileSource) {
         siret: siret ?? null,
         addressLine1: address,
         postalCode,
-        city,
+        city
       }
     })
   }
@@ -261,7 +261,7 @@ async function main() {
 
   const files = listTemplateReferentielCsvFiles()
 
-  if (!files.length) {
+  if (files.length === 0) {
     console.log('[import-declarants-template-file] aucun fichier trouvé')
     return
   }

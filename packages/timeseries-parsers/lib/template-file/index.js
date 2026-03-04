@@ -712,7 +712,7 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors) {
     // Gérer les points de prélèvement séparés par une virgule
     // Si plusieurs points partagent le volume, on divise le volume entre eux
     const pointIdStr = String(pointId).trim()
-    const pointIds = pointIdStr.split(',').map(p => p.trim()).filter(Boolean)
+    const pointIds = pointIdStr.split('|').map(p => p.trim()).filter(Boolean)
 
     if (pointIds.length === 0) {
       errors.push({
