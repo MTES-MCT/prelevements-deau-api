@@ -21,24 +21,15 @@ model Declaration {
   type                String                     @db.Text
   comment             String?                    @db.Text
   aotDecreeNumber     String?
-  status              DeclarationStatus          @default(SUBMITTED)
   dataSourceType      DeclarationDataSourceType?
   waterWithdrawalType String
   consolidatedAt      DateTime?
 
   @@unique([importSourceId])
   @@index([declarantUserId])
-  @@index([status])
   @@index([dataSourceType])
   @@index([waterWithdrawalType])
   @@index([consolidatedAt])
-}
-
-enum DeclarationStatus {
-  SUBMITTED
-  IN_INSTRUCTION
-  VALIDATED
-  REJECTED
 }
 
 enum DeclarationDataSourceType {

@@ -11,10 +11,20 @@ enum SourceStatus {
   FAILED
 }
 
+enum GlobalInstructionStatus {
+  TO_INSTRUCT
+  VALIDATED
+  REJECTED
+  PARTIALLY_VALIDATED
+  INSTRUCTION_IN_PROGRESS
+}
+
 model Source {
   id     String       @id @default(uuid()) @db.Uuid
   type   SourceType
   status SourceStatus @default(PENDING)
+
+  globalInstructionStatus GlobalInstructionStatus @default(TO_INSTRUCT)
 
   metadata Json?
 
