@@ -65,9 +65,15 @@ model Instructor {
   userId String @id @db.Uuid
   user   User   @relation("UserInstructor", fields: [userId], references: [id], onDelete: Cascade)
 
-  instructorZones InstructorZone[]
+  phoneNumber String? @db.Text
+  jobTitle    String? @db.Text
 
+  instructorZones  InstructorZone[]
   instructedChunks Chunk[]
+
+  sourceId String? @db.Text
+
+  @@unique([sourceId])
 }
 
 model AuthToken {
