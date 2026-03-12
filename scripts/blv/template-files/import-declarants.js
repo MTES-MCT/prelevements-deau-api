@@ -26,6 +26,11 @@ function stripParens(s) {
     .trim()
 }
 
+function clean(value) {
+  const v = String(value ?? '').trim()
+  return v || null
+}
+
 function normalizeSiret(s) {
   const raw = String(s ?? '').trim()
   if (!raw) {
@@ -92,29 +97,28 @@ function parseDeclarantRow(row) {
   }
 }
 
-function listTemplateReferentielCsvFiles() {
+function listTemplateDirs() {
   const entries = fs.readdirSync(ROOT_DIR, {withFileTypes: true})
 
+  return entries
+    .filter(entry => entry.isDirectory() && DIR_PATTERN.test(entry.name))
+    .map(entry => path.join(ROOT_DIR, entry.name))
+}
+
+function listTemplateReferentielCsvFiles() {
+  const templateDirs = listTemplateDirs()
   const files = []
 
-  for (const e of entries) {
-    if (!e.isDirectory()) {
-      continue
-    }
-
-    if (!DIR_PATTERN.test(e.name)) {
-      continue
-    }
-
-    const referentielsDir = path.join(ROOT_DIR, e.name, 'referentiels')
+  for (const templateDir of templateDirs) {
+    const referentielsDir = path.join(templateDir, 'referentiels')
     if (!fs.existsSync(referentielsDir) || !fs.statSync(referentielsDir).isDirectory()) {
       continue
     }
 
     const csvEntries = fs.readdirSync(referentielsDir, {withFileTypes: true})
-    for (const ce of csvEntries) {
-      if (ce.isFile() && ce.name.toLowerCase().endsWith('.csv')) {
-        files.push(path.join(referentielsDir, ce.name))
+    for (const entry of csvEntries) {
+      if (entry.isFile() && entry.name.toLowerCase().endsWith('.csv')) {
+        files.push(path.join(referentielsDir, entry.name))
       }
     }
   }
@@ -130,29 +134,97 @@ function getFileSourceId(filePath) {
   return `${templateDir}-${csvName}`
 }
 
-async function importRow(row, fileSource) {
-  const {kind, firstName, lastName, socialReason, siret} = parseDeclarantRow(row)
+function getTemplateDirFromFilePath(filePath) {
+  const referentielsDir = path.dirname(filePath)
+  return path.dirname(referentielsDir)
+}
 
-  const rawKey = siret || stripParens(row.raison_sociale_preleveur) || null
+async function readCsvRows(filePath) {
+  const rows = []
+
+  const parser = fs
+    .createReadStream(filePath)
+    .pipe(
+      parse({
+        columns: true,
+        skip_empty_lines: true,
+        trim: true
+      })
+    )
+
+  for await (const row of parser) {
+    rows.push(row)
+  }
+
+  return rows
+}
+
+async function loadAccountsByTemplateDir() {
+  const templateDirs = listTemplateDirs()
+  const accountsByTemplateDir = new Map()
+
+  for (const templateDir of templateDirs) {
+    const accountsPath = path.join(templateDir, 'accounts.csv')
+    const accountsMap = new Map()
+
+    if (fs.existsSync(accountsPath) && fs.statSync(accountsPath).isFile()) {
+      const rows = await readCsvRows(accountsPath)
+
+      for (const row of rows) {
+        const sourceId = clean(row.sourceId)
+        if (!sourceId) {
+          continue
+        }
+
+        accountsMap.set(sourceId, {
+          sourceId,
+          email: clean(row.email),
+          firstName: clean(row.firstName),
+          lastName: clean(row.lastName),
+          phoneNumber: clean(row.phoneNumber),
+          socialReason: clean(row.socialReason),
+          civility: clean(row.civility),
+          jobTitle: clean(row.jobTitle)
+        })
+      }
+    }
+
+    accountsByTemplateDir.set(templateDir, accountsMap)
+  }
+
+  return accountsByTemplateDir
+}
+
+async function importRow(row, fileSource, account) {
+  const parsed = parseDeclarantRow(row)
+
+  const rawKey = parsed.siret || stripParens(row.raison_sociale_preleveur) || null
   if (!rawKey) {
     throw new Error(`Clé de déclarant introuvable pour la ligne : ${JSON.stringify(row)}`)
   }
 
   const sourceId = `blv-${fileSource}-declarant-${rawKey}`
-  const email = `${sourceId}@import.local`
 
-  const postalCode = String(row.code_INSEE ?? '').trim() || null
+  const email = account?.email || `${sourceId}@import.local`
+
+  const postalCode = clean(row.code_INSEE)
   const city = null
   const address = null
 
+  const kind = parsed.kind
   const declarantType
     = kind === PERSON_KIND.LEGAL
-      ? 'LEGAL_PERSON'
-      : (kind === PERSON_KIND.NATURAL
-        ? 'NATURAL_PERSON'
-        : null)
+    ? 'LEGAL_PERSON'
+    : (kind === PERSON_KIND.NATURAL ? 'NATURAL_PERSON' : null)
 
-  // 1️⃣ Chercher le déclarant par sourceId (Prisma)
+  const firstName = account?.firstName ?? parsed.firstName
+  const lastName = account?.lastName ?? parsed.lastName
+  const socialReason = account?.socialReason ?? parsed.socialReason
+  const phoneNumber = account?.phoneNumber ?? null
+  const civility = account?.civility ?? null
+  const jobTitle = account?.jobTitle ?? null
+  const siret = parsed.siret ?? null
+
   const existing = await prisma.declarant.findUnique({
     where: {sourceId},
     include: {user: true}
@@ -166,6 +238,7 @@ async function importRow(row, fileSource) {
     await prisma.user.update({
       where: {id: declarantUserId},
       data: {
+        email,
         role: 'DECLARANT',
         firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
         lastName: kind === PERSON_KIND.NATURAL ? lastName : null
@@ -178,10 +251,13 @@ async function importRow(row, fileSource) {
         sourceId,
         declarantType: declarantType ?? undefined,
         socialReason: kind === PERSON_KIND.LEGAL ? (socialReason ?? null) : null,
-        siret: siret ?? null,
+        siret,
         addressLine1: address,
         postalCode,
-        city
+        city,
+        phoneNumber,
+        civility,
+        jobTitle
       }
     })
   } else {
@@ -208,27 +284,36 @@ async function importRow(row, fileSource) {
         sourceId,
         declarantType: declarantType ?? undefined,
         socialReason: kind === PERSON_KIND.LEGAL ? (socialReason ?? null) : null,
-        siret: siret ?? null,
+        siret,
         addressLine1: address,
         postalCode,
-        city
+        city,
+        phoneNumber,
+        civility,
+        jobTitle
       },
       create: {
         userId: declarantUserId,
         sourceId,
         declarantType: declarantType ?? 'NATURAL_PERSON',
         socialReason: kind === PERSON_KIND.LEGAL ? (socialReason ?? null) : null,
-        siret: siret ?? null,
+        siret,
         addressLine1: address,
         postalCode,
-        city
+        city,
+        phoneNumber,
+        civility,
+        jobTitle
       }
     })
   }
 }
 
-async function importFile(filePath) {
+async function importFile(filePath, accountsByTemplateDir) {
   const fileSource = getFileSourceId(filePath)
+  const templateDir = getTemplateDirFromFilePath(filePath)
+  const accountsMap = accountsByTemplateDir.get(templateDir) ?? new Map()
+  const csvFileName = path.basename(filePath)
 
   const parser = fs
     .createReadStream(filePath)
@@ -243,8 +328,10 @@ async function importFile(filePath) {
   let count = 0
 
   for await (const row of parser) {
+    const account = accountsMap.get(csvFileName) ?? null
+
     await prisma.$transaction(async () => {
-      await importRow(row, fileSource)
+      await importRow(row, fileSource, account)
     })
 
     count++
@@ -266,11 +353,13 @@ async function main() {
     return
   }
 
+  const accountsByTemplateDir = await loadAccountsByTemplateDir()
+
   console.log(`[import-declarants-template-file] ${files.length} fichiers trouvés`)
 
   for (const filePath of files) {
     console.log(`[import-declarants-template-file] import ${filePath}`)
-    await importFile(filePath)
+    await importFile(filePath, accountsByTemplateDir)
   }
 
   console.log('[import-declarants-template-file] terminé')

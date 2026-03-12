@@ -1,6 +1,7 @@
 node scripts/blv/irrigants-aquasys/import-point-prelevements.js
 node scripts/blv/irrigants-aquasys/import-declarants.js
 node scripts/blv/irrigants-aquasys/import-exploitations.js
+node scripts/blv/irrigants-aquasys/create-ougc-account.js
 node scripts/blv/template-files/import-point-prelevements.js
 node scripts/blv/template-files/import-declarants.js
 node scripts/blv/template-files/import-exploitations.js

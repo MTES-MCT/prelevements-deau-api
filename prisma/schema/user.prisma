@@ -42,6 +42,7 @@ model Declarant {
 
   declarantType DeclarantType @default(NATURAL_PERSON)
 
+  jobTitle     String? @db.Text
   socialReason String? @db.Text
 
   civility Civility?
