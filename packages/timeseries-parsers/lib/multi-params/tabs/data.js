@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import * as moment from 'moment'
 
 import {
   getCellValue,
@@ -564,9 +565,37 @@ function validateTimeStepConsistency(dataRows, {frequence, paramName, errorColle
 
   // Calculer les différences de temps entre les entrées consécutives
   for (let i = 1; i < dateTimes.length; i++) {
-    const diffMs = dateTimes[i].getTime() - dateTimes[i - 1].getTime()
+    const prev = moment.utc(dateTimes[i - 1])
+    const current = moment.utc(dateTimes[i])
 
-    if (Math.abs(diffMs - expectedDiffMs) > toleranceMs) {
+    let isValid = false
+
+    switch (frequence) {
+      case '1 month': {
+        isValid = current.isSame(prev.clone().add(1, 'month'), 'day')
+
+        break
+      }
+
+      case '1 quarter': {
+        isValid = current.isSame(prev.clone().add(3, 'month'), 'day')
+
+        break
+      }
+
+      case '1 year': {
+        isValid = current.isSame(prev.clone().add(1, 'year'), 'day')
+
+        break
+      }
+
+      default: {
+        const diffMs = current.valueOf() - prev.valueOf()
+        isValid = Math.abs(diffMs - expectedDiffMs) <= toleranceMs
+      }
+    }
+
+    if (!isValid) {
       const prevCellAddress = XLSX.utils.encode_cell({r: dataRows[i - 1].rowNum, c: 0})
       const currentCellAddress = XLSX.utils.encode_cell({r: dataRows[i].rowNum, c: 0})
       errorCollector.addError('invalidInterval', prevCellAddress)
