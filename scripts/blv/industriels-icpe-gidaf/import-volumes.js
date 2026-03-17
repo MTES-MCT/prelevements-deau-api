@@ -6,7 +6,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {randomUUID} from 'node:crypto'
-import * as XLSX from 'xlsx'
 
 import {prisma} from '../../../db/prisma.js'
 import createStorageClient from '../../../lib/util/s3.js'
@@ -17,12 +16,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const ROOT_DIR = path.resolve(__dirname, '../../../data/blv/industriels-icpe-gidaf')
+const CADRES_FILENAME = /^cadres\.xlsx$/i
 const PRELEVEMENTS_FILENAME = /^prelevements.*\.xlsx$/i
-
-function clean(value) {
-  const v = String(value ?? '').trim()
-  return v || null
-}
 
 function normalizeSpaces(value) {
   return String(value ?? '')
@@ -40,166 +35,54 @@ function normalizeSourcePart(value) {
     .toLowerCase()
 }
 
-function normalizeSiret(value) {
-  const raw = String(value ?? '').trim()
-  if (!raw) {
-    return null
-  }
-
-  const digits = raw.replaceAll(/\D/g, '')
-  return digits ? digits.slice(0, 14) : null
-}
-
-function listPrelevementsFiles() {
+function listMonthDirs() {
   const entries = fs.readdirSync(ROOT_DIR, {withFileTypes: true})
-  const files = []
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    const monthDir = path.join(ROOT_DIR, entry.name)
-    const childEntries = fs.readdirSync(monthDir, {withFileTypes: true})
-
-    for (const child of childEntries) {
-      if (child.isFile() && PRELEVEMENTS_FILENAME.test(child.name)) {
-        files.push(path.join(monthDir, child.name))
-      }
-    }
-  }
-
-  return files.sort()
+  return entries
+    .filter(entry => entry.isDirectory())
+    .map(entry => path.join(ROOT_DIR, entry.name))
+    .sort()
 }
 
-function readWorkbookRows(filePath) {
-  const buffer = fs.readFileSync(filePath)
-  const workbook = XLSX.read(buffer, {type: 'buffer', cellDates: false})
-  const firstSheetName = workbook.SheetNames[0]
+function getImportSourceId(monthDirPath) {
+  const monthKey = path.basename(monthDirPath)
+  return `blv-import-industriels-icpe-gidaf-${normalizeSourcePart(monthKey)}`
+}
 
-  if (!firstSheetName) {
-    return []
+function findMonthFiles(monthDirPath) {
+  const entries = fs.readdirSync(monthDirPath, {withFileTypes: true})
+
+  const cadresPath = entries.find(entry => entry.isFile() && CADRES_FILENAME.test(entry.name))
+  const prelevementsPath = entries.find(entry => entry.isFile() && PRELEVEMENTS_FILENAME.test(entry.name))
+
+  return {
+    cadresPath: cadresPath ? path.join(monthDirPath, cadresPath.name) : null,
+    prelevementsPath: prelevementsPath ? path.join(monthDirPath, prelevementsPath.name) : null
   }
+}
 
-  const sheet = workbook.Sheets[firstSheetName]
-
-  return XLSX.utils.sheet_to_json(sheet, {
-    defval: null,
-    raw: false
+async function resolveDeclarantUserId() {
+  const fallbackDeclarant = await prisma.declarant.findUnique({
+    where: {
+      sourceId: 'blv-gidaf-brgl'
+    },
+    select: {
+      userId: true
+    }
   })
-}
 
-function getFileMonthKey(filePath) {
-  return path.basename(path.dirname(filePath))
-}
-
-function buildGroupKey(row) {
-  const codeInspection = clean(row['Code Inspection'])
-  if (!codeInspection) {
-    throw new Error(`Code Inspection manquant: ${JSON.stringify(row)}`)
+  if (fallbackDeclarant?.userId) {
+    return fallbackDeclarant.userId
   }
 
-  return codeInspection
+  throw new Error('Declarant introuvable pour GIDAF. Lance d’abord create-gidaf-account.js')
 }
 
-function buildImportSourceId({monthKey, codeInspection}) {
-  return `blv-import-industriels-icpe-gidaf-${normalizeSourcePart(monthKey)}-${normalizeSourcePart(codeInspection)}`
-}
-
-function buildDeclarationFilename({monthKey, codeInspection, socialReason}) {
-  const base = [
-    'gidaf',
-    monthKey,
-    codeInspection,
-    normalizeSourcePart(socialReason || 'unknown')
-  ].join('-')
-
-  return `${base}.xlsx`
-}
-
-function buildWorkbookBuffer(rows) {
-  const headers = [
-    'Code Inspection',
-    'Raison sociale',
-    'SIRET',
-    'Point de surveillance',
-    'Type de point',
-    'Date de mesure',
-    'Volume (m3)'
-  ]
-
-  const normalizedRows = rows.map(row => ({
-    'Code Inspection': clean(row['Code Inspection']),
-    'Raison sociale': clean(row['Raison sociale']),
-    SIRET: clean(row.SIRET),
-    'Point de surveillance': clean(row['Point de surveillance']),
-    'Type de point': clean(row['Type de point']),
-    'Date de mesure': clean(row['Date de mesure']),
-    'Volume (m3)': clean(row['Volume (m3)'])
-  }))
-
-  const worksheet = XLSX.utils.json_to_sheet(normalizedRows, {header: headers})
-  const workbook = XLSX.utils.book_new()
-
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Prelevements')
-
-  return XLSX.write(workbook, {
-    bookType: 'xlsx',
-    type: 'buffer'
-  })
-}
-
-async function resolveDeclarantUserId(row) {
-  const socialReason = clean(row['Raison sociale'])
-  const siret = normalizeSiret(row.SIRET)
-
-  if (siret) {
-    const declarantBySiret = await prisma.declarant.findFirst({
-      where: {siret},
-      select: {userId: true}
-    })
-
-    if (declarantBySiret?.userId) {
-      return declarantBySiret.userId
-    }
-  }
-
-  if (socialReason) {
-    const declarantBySocialReason = await prisma.declarant.findFirst({
-      where: {
-        socialReason: {
-          equals: socialReason,
-          mode: 'insensitive'
-        }
-      },
-      select: {userId: true}
-    })
-
-    if (declarantBySocialReason?.userId) {
-      return declarantBySocialReason.userId
-    }
-
-    const fallbackSourceId = `blv-industriels-icpe-gidaf-declarant-${normalizeSourcePart(socialReason)}`
-    const declarantBySourceId = await prisma.declarant.findUnique({
-      where: {sourceId: fallbackSourceId},
-      select: {userId: true}
-    })
-
-    if (declarantBySourceId?.userId) {
-      return declarantBySourceId.userId
-    }
-  }
-
-  throw new Error(
-    `Déclarant introuvable pour raison sociale="${socialReason ?? ''}" siret="${siret ?? ''}"`
-  )
-}
-
-async function upsertDeclarationAndReplaceFile({
+async function upsertDeclarationAndReplaceFiles({
   importSourceId,
   declarantUserId,
-  buffer,
-  originalname,
+  cadresFile,
+  prelevementsFile,
   comment
 }) {
   const storage = createStorageClient(DECLARATIONS_BUCKET)
@@ -236,38 +119,47 @@ async function upsertDeclarationAndReplaceFile({
         }
       })
 
-    const toDelete = (existing?.files ?? []).filter(file => file.type === 'gidaf')
+    const toDelete = (existing?.files ?? []).filter(file =>
+      ['gidaf', 'gidaf-cadres', 'gidaf-prelevements'].includes(file.type)
+    )
 
     if (toDelete.length > 0) {
       await prisma.declarationFile.deleteMany({
         where: {
           declarationId: declaration.id,
-          type: 'gidaf'
+          type: {
+            in: ['gidaf', 'gidaf-cadres', 'gidaf-prelevements']
+          }
         }
       })
 
       await Promise.all(toDelete.map(file => storage.deleteObject(file.storageKey, true))).catch(() => {})
     }
 
-    const filename = safeFilename(originalname)
-    const objectKey = `declarations/${declaration.id}/${randomUUID()}-${filename}`
+    for (const file of [
+      {...cadresFile, type: 'gidaf-cadres'},
+      {...prelevementsFile, type: 'gidaf-prelevements'}
+    ]) {
+      const filename = safeFilename(file.originalname)
+      const objectKey = `declarations/${declaration.id}/${randomUUID()}-${filename}`
 
-    await storage.uploadObject(objectKey, buffer, {
-      filename,
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    })
-
-    uploadedKeys.push(objectKey)
-
-    await prisma.declarationFile.create({
-      data: {
-        id: randomUUID(),
-        declarationId: declaration.id,
-        type: 'gidaf',
+      await storage.uploadObject(objectKey, file.buffer, {
         filename,
-        storageKey: objectKey
-      }
-    })
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+
+      uploadedKeys.push(objectKey)
+
+      await prisma.declarationFile.create({
+        data: {
+          id: randomUUID(),
+          declarationId: declaration.id,
+          type: file.type,
+          filename,
+          storageKey: objectKey
+        }
+      })
+    }
 
     await addJobProcessDeclaration(declaration.id)
 
@@ -278,91 +170,96 @@ async function upsertDeclarationAndReplaceFile({
   }
 }
 
-async function importGroup({monthKey, codeInspection, rows}) {
-  const firstRow = rows[0]
-  if (!firstRow) {
-    return
+async function importMonthDir(monthDirPath, fallbackCadresPath) {
+  const monthKey = path.basename(monthDirPath)
+  const importSourceId = getImportSourceId(monthDirPath)
+  const comment = `Import GIDAF ${monthKey}`
+
+  const {cadresPath, prelevementsPath} = findMonthFiles(monthDirPath)
+  const effectiveCadresPath = cadresPath || fallbackCadresPath
+
+  if (!effectiveCadresPath) {
+    throw new Error(
+      `Fichier Cadres.xlsx introuvable dans ${monthDirPath} et aucun fichier Cadres précédent disponible`
+    )
   }
 
-  const socialReason = clean(firstRow['Raison sociale'])
-  const declarantUserId = await resolveDeclarantUserId(firstRow)
+  if (!prelevementsPath) {
+    throw new Error(`Fichier Prelevements introuvable dans ${monthDirPath}`)
+  }
 
-  const importSourceId = buildImportSourceId({monthKey, codeInspection})
-  const originalname = buildDeclarationFilename({monthKey, codeInspection, socialReason})
-  const comment = `Import GIDAF ${monthKey} - Code Inspection ${codeInspection}`
+  const declarantUserId = await resolveDeclarantUserId()
 
-  const buffer = buildWorkbookBuffer(rows)
+  const cadresFile = {
+    originalname: path.basename(effectiveCadresPath),
+    buffer: fs.readFileSync(effectiveCadresPath)
+  }
 
-  await upsertDeclarationAndReplaceFile({
+  const prelevementsFile = {
+    originalname: path.basename(prelevementsPath),
+    buffer: fs.readFileSync(prelevementsPath)
+  }
+
+  if (!cadresFile.buffer?.length) {
+    throw new Error(`Fichier vide: ${cadresFile.originalname}`)
+  }
+
+  if (!prelevementsFile.buffer?.length) {
+    throw new Error(`Fichier vide: ${prelevementsFile.originalname}`)
+  }
+
+  await upsertDeclarationAndReplaceFiles({
     importSourceId,
     declarantUserId,
-    buffer,
-    originalname,
+    cadresFile,
+    prelevementsFile,
     comment
   })
-}
 
-async function importFile(filePath) {
-  const monthKey = getFileMonthKey(filePath)
-  const rows = readWorkbookRows(filePath)
-
-  if (rows.length === 0) {
-    console.log(`[import-volumes-icpe] aucun enregistrement dans ${filePath}`)
-    return
+  return {
+    usedCadresPath: effectiveCadresPath,
+    currentCadresPath: cadresPath || null
   }
-
-  const groups = new Map()
-
-  for (const row of rows) {
-    const codeInspection = buildGroupKey(row)
-
-    if (!groups.has(codeInspection)) {
-      groups.set(codeInspection, [])
-    }
-
-    groups.get(codeInspection).push(row)
-  }
-
-  let count = 0
-
-  for (const [codeInspection, groupRows] of groups.entries()) {
-    await importGroup({
-      monthKey,
-      codeInspection,
-      rows: groupRows
-    })
-
-    count++
-
-    if (count % 100 === 0) {
-      console.log(`[import-volumes-icpe] ${monthKey} ${count} déclarations importées`)
-    }
-  }
-
-  console.log(`[import-volumes-icpe] ${filePath} terminé (${count} déclarations)`)
 }
 
 async function main() {
-  console.log('[import-volumes-icpe] start')
+  console.log('[import-volumes-gidaf] start')
 
-  const files = listPrelevementsFiles()
+  const monthDirs = listMonthDirs()
 
-  if (files.length === 0) {
-    console.log('[import-volumes-icpe] aucun fichier Prelevements trouvé')
+  if (monthDirs.length === 0) {
+    console.log('[import-volumes-gidaf] aucun dossier trouvé')
     return
   }
 
-  console.log(`[import-volumes-icpe] ${files.length} fichiers trouvés`)
+  console.log(`[import-volumes-gidaf] ${monthDirs.length} dossiers trouvés`)
 
   let count = 0
+  let lastCadresPath = null
 
-  for (const filePath of files) {
-    console.log(`[import-volumes-icpe] import ${filePath}`)
-    await importFile(filePath)
+  for (const monthDirPath of monthDirs) {
+    console.log(`[import-volumes-gidaf] import ${monthDirPath}`)
+
+    const {usedCadresPath, currentCadresPath} = await importMonthDir(monthDirPath, lastCadresPath)
+
+    if (currentCadresPath) {
+      lastCadresPath = currentCadresPath
+    }
+
+    if (!currentCadresPath) {
+      console.log(
+        `[import-volumes-gidaf] aucun Cadres.xlsx dans ${path.basename(monthDirPath)}, réutilisation de ${usedCadresPath}`
+      )
+    }
+
     count++
+
+    if (count % 25 === 0) {
+      console.log(`[import-volumes-gidaf] ${count} dossiers importés`)
+    }
   }
 
-  console.log(`[import-volumes-icpe] terminé (${count} fichiers)`)
+  console.log(`[import-volumes-gidaf] terminé (${count} dossiers)`)
 }
 
 try {
