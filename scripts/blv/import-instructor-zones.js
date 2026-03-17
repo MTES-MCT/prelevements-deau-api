@@ -7,8 +7,7 @@ import {parse} from 'csv-parse'
 import {fileURLToPath} from 'node:url'
 
 import {prisma} from '../../db/prisma.js'
-import moment from "moment";
-
+import moment from 'moment'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)

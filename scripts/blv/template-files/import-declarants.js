@@ -211,11 +211,11 @@ async function importRow(row, fileSource, account) {
   const city = null
   const address = null
 
-  const kind = parsed.kind
+  const {kind} = parsed
   const declarantType
     = kind === PERSON_KIND.LEGAL
-    ? 'LEGAL_PERSON'
-    : (kind === PERSON_KIND.NATURAL ? 'NATURAL_PERSON' : null)
+      ? 'LEGAL_PERSON'
+      : (kind === PERSON_KIND.NATURAL ? 'NATURAL_PERSON' : null)
 
   const firstName = account?.firstName ?? parsed.firstName
   const lastName = account?.lastName ?? parsed.lastName

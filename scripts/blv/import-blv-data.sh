@@ -6,4 +6,8 @@ node scripts/blv/irrigants-aquasys/create-ougc-account.js
 node scripts/blv/template-files/import-point-prelevements.js
 node scripts/blv/template-files/import-declarants.js
 node scripts/blv/template-files/import-exploitations.js
+node scripts/blv/industriels-icpe-gidaf/import-point-prelevements.js
+node scripts/blv/industriels-icpe-gidaf/import-declarants.js
+node scripts/blv/industriels-icpe-gidaf/import-exploitations.js
+node scripts/blv/industriels-icpe-gidaf/create-gidaf-account.js
 node scripts/blv/import-instructors.js
