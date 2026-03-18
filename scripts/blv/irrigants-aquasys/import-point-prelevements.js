@@ -11,7 +11,10 @@ import {prisma} from '../../../db/prisma.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const CSV_PATH = path.resolve(__dirname, '../../../data/blv/irrigants-aquasys/referentiels/donnees-brutes.csv')
+const CSV_PATH = path.resolve(
+  __dirname,
+  '../../../data/blv/irrigants-aquasys/referentiels/donnees-brutes.csv'
+)
 
 function getWaterBodyType(typeMilieu) {
   switch (typeMilieu) {
@@ -29,20 +32,61 @@ function getWaterBodyType(typeMilieu) {
   }
 }
 
-async function importRow(row) {
-  const sourceId = `blv-${row['ID_Point_Prélèvement']}`
-  const name = row['ID_Point_Prélèvement']
-  const geoX = row.X
-  const geoY = row.Y
+function parseNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
 
-  const waterBodyType = getWaterBodyType(row['Type_Prélèvement'])
+  const normalized = String(value).trim().replace(',', '.')
+  const parsed = Number(normalized)
 
-  // 1️⃣ Chercher le point par sourceId (Prisma)
-  const existing = await prisma.pointPrelevement.findUnique({
-    where: {sourceId}
-  }) || await prisma.pointPrelevement.findUnique({
-    where: {name}
-  })
+  if (Number.isNaN(parsed)) {
+    throw new TypeError(`Nombre invalide : "${value}"`)
+  }
+
+  return parsed
+}
+
+function isLonLatCoordinates(x, y) {
+  return Math.abs(x) <= 180 && Math.abs(y) <= 90
+}
+
+function getProjectionSRID(projection, geoX, geoY) {
+  switch ((projection || '').trim()) {
+    case 'Lambert 93': {
+      return 2154
+    }
+
+    case 'WGS84 UTM30': {
+      // Certaines lignes sont visiblement déjà en lon/lat malgré le libellé
+      if (isLonLatCoordinates(geoX, geoY)) {
+        return 4326
+      }
+
+      return 32_630
+    }
+
+    default: {
+      throw new Error(`Projection non supportée : "${projection}"`)
+    }
+  }
+}
+
+async function upsertPointPrelevement({
+  sourceId,
+  name,
+  waterBodyType,
+  geoX,
+  geoY,
+  srid
+}) {
+  const existing
+    = await prisma.pointPrelevement.findUnique({
+      where: {sourceId}
+    })
+    || await prisma.pointPrelevement.findUnique({
+      where: {name}
+    })
 
   let pointId
 
@@ -55,15 +99,18 @@ async function importRow(row) {
       SET
         "name" = $2,
         "waterBodyType" = $5,
-        "coordinates" = ST_Transform(
-          ST_SetSRID(
-            ST_MakePoint($3, $4),
-            2154
-          ),
-          4326
-        ),
+        "coordinates" = CASE
+          WHEN $6 = 4326 THEN ST_SetSRID(ST_MakePoint($3, $4), 4326)
+          ELSE ST_Transform(
+            ST_SetSRID(
+              ST_MakePoint($3, $4),
+              $6
+            ),
+            4326
+          )
+        END,
         "updatedAt" = now(),
-        "sourceId" = $6
+        "sourceId" = $7
       WHERE "id" = $1
       `,
       pointId,
@@ -71,6 +118,7 @@ async function importRow(row) {
       geoX,
       geoY,
       waterBodyType,
+      srid,
       sourceId
     )
   } else {
@@ -83,13 +131,16 @@ async function importRow(row) {
         $1,
         $2,
         $5,
-        ST_Transform(
-          ST_SetSRID(
-            ST_MakePoint($3, $4),
-            2154
-          ),
-          4326
-        ),
+        CASE
+          WHEN $6 = 4326 THEN ST_SetSRID(ST_MakePoint($3, $4), 4326)
+          ELSE ST_Transform(
+            ST_SetSRID(
+              ST_MakePoint($3, $4),
+              $6
+            ),
+            4326
+          )
+        END,
         now(),
         now()
       )
@@ -99,11 +150,17 @@ async function importRow(row) {
       name,
       geoX,
       geoY,
-      waterBodyType
+      waterBodyType,
+      srid
     )
+
     pointId = id
   }
 
+  return pointId
+}
+
+async function refreshPointZones(pointId) {
   await prisma.pointPrelevementZone.deleteMany({
     where: {pointPrelevementId: pointId}
   })
@@ -125,6 +182,34 @@ async function importRow(row) {
     `,
     pointId
   )
+}
+
+async function importRow(row) {
+  const sourceId = `blv-${row['ID_Point_Prélèvement']}`
+  const name = row['ID_Point_Prélèvement']
+
+  const geoX = parseNumber(row.X)
+  const geoY = parseNumber(row.Y)
+
+  if (geoX === null || geoY === null) {
+    throw new Error(
+      `Coordonnées manquantes pour le point ${name} (X="${row.X}", Y="${row.Y}")`
+    )
+  }
+
+  const srid = getProjectionSRID(row.Projection, geoX, geoY)
+  const waterBodyType = getWaterBodyType(row['Type_Prélèvement'])
+
+  const pointId = await upsertPointPrelevement({
+    sourceId,
+    name,
+    waterBodyType,
+    geoX,
+    geoY,
+    srid
+  })
+
+  await refreshPointZones(pointId)
 }
 
 async function main() {
@@ -149,6 +234,7 @@ async function main() {
       })
 
       count++
+
       if (count % 500 === 0) {
         console.log(`[import-point-prelevements] ${count} points importés`)
       }
