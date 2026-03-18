@@ -60,7 +60,7 @@ function normalizeSiret(s) {
     return null
   }
 
-  const digits = raw.replaceAll(/\D/g, '')
+  const digits = raw.replaceAll(/\s+/g, '').replaceAll(/\D/g, '')
   if (!digits) {
     return null
   }
@@ -108,12 +108,15 @@ async function upsertDeclarationAndReplaceFile({
       ? await prisma.declaration.update({
         where: {id: existing.id},
         data: {
-          declarantUserId,
+          declarant: {
+            connect: {
+              userId: declarantUserId
+            }
+          },
           type: 'template-file',
           comment,
           dataSourceType: 'SPREADSHEET',
           waterWithdrawalType: 'unknown',
-          status: 'SUBMITTED'
         }
       })
       : await prisma.declaration.create({
@@ -126,7 +129,6 @@ async function upsertDeclarationAndReplaceFile({
           importSourceId,
           dataSourceType: 'SPREADSHEET',
           waterWithdrawalType: 'unknown',
-          status: 'SUBMITTED'
         }
       })
 
