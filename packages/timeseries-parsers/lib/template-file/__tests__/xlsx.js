@@ -26,7 +26,7 @@ test('extractTemplateFile - valid file', async t => {
   // Vérifier la structure des séries
   for (const serie of data.series) {
     t.truthy(serie.pointPrelevement, 'pointPrelevement manquant')
-    t.is(serie.parameter, 'Volume prélevé')
+    t.is(serie.parameter, 'volume prélevé')
     t.is(serie.unit, 'm³')
     t.is(serie.frequency, '1 day')
     t.is(serie.valueType, 'cumulative')
@@ -385,7 +385,7 @@ test('extractTemplateFile - valid file with point_de_prelevement sheet optional'
   if (data.series.length > 0) {
     const serie = data.series[0]
     t.is(serie.pointPrelevement, 'POINT1')
-    t.is(serie.parameter, 'Volume prélevé')
+    t.is(serie.parameter, 'volume prélevé')
     t.true(serie.data.length > 0)
   }
 })
