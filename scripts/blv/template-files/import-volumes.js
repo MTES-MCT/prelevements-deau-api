@@ -11,6 +11,8 @@ import {DECLARATIONS_BUCKET, generateDossierCode, safeFilename} from '../../../l
 import {extractTemplateFile} from '@fabnum/prelevements-deau-timeseries-parsers'
 import {randomUUID} from 'node:crypto'
 import {addJobProcessDeclaration} from '../../../lib/queues/jobs.js'
+import {closeQueues} from '../../../lib/queues/config.js'
+import {closeRedis} from '../../../lib/queues/redis.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -116,7 +118,7 @@ async function upsertDeclarationAndReplaceFile({
           type: 'template-file',
           comment,
           dataSourceType: 'SPREADSHEET',
-          waterWithdrawalType: 'unknown',
+          waterWithdrawalType: 'unknown'
         }
       })
       : await prisma.declaration.create({
@@ -128,7 +130,7 @@ async function upsertDeclarationAndReplaceFile({
           comment,
           importSourceId,
           dataSourceType: 'SPREADSHEET',
-          waterWithdrawalType: 'unknown',
+          waterWithdrawalType: 'unknown'
         }
       })
 
@@ -246,5 +248,7 @@ try {
   console.error(error)
   throw error
 } finally {
+  await closeQueues()
+  await closeRedis()
   await prisma.$disconnect()
 }

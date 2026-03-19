@@ -11,6 +11,8 @@ import {prisma} from '../../../db/prisma.js'
 import createStorageClient from '../../../lib/util/s3.js'
 import {DECLARATIONS_BUCKET, generateDossierCode, safeFilename} from '../../../lib/handlers/declarations.js'
 import {addJobProcessDeclaration} from '../../../lib/queues/jobs.js'
+import {closeQueues} from '../../../lib/queues/config.js'
+import {closeRedis} from '../../../lib/queues/redis.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -268,5 +270,7 @@ try {
   console.error(error)
   throw error
 } finally {
+  await closeQueues()
+  await closeRedis()
   await prisma.$disconnect()
 }

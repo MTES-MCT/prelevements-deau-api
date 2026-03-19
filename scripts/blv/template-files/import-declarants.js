@@ -7,6 +7,8 @@ import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {parse} from 'csv-parse'
 import {prisma} from '../../../db/prisma.js'
+import {closeQueues} from '../../../lib/queues/config.js'
+import {closeRedis} from '../../../lib/queues/redis.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -371,5 +373,7 @@ try {
   console.error(error)
   throw error
 } finally {
+  await closeQueues()
+  await closeRedis()
   await prisma.$disconnect()
 }
