@@ -4,7 +4,6 @@ import http from 'node:http'
 import './instrument.js'
 import * as Sentry from '@sentry/node'
 
-import mongo from './lib/util/mongo.js'
 import {startWorkers} from './lib/queues/workers.js'
 import {startScheduler} from './lib/queues/scheduler.js'
 import {waitForRedis} from './lib/queues/redis.js'
@@ -49,7 +48,6 @@ server.listen(8080, () => {
   console.log('Healthcheck server listening on port 8080')
 })
 
-await mongo.connect()
 await startScheduler()
 startWorkers()
 
