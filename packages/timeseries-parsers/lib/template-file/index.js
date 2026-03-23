@@ -4,6 +4,7 @@ import {readSheet, readAsString, readAsDateString, readAsNumber} from '../xlsx.j
 import {validateNumericValue} from '../validate.js'
 import {dedupe} from '../dedupe.js'
 import * as XLSX from 'xlsx'
+import {options} from "joi";
 
 // Définition des colonnes des points de prélèvement.
 // Compatible avec un futur ajout d'index compteur (id_compteur, coefficient_de_lecture déjà présents).
@@ -131,7 +132,7 @@ const PRELEVEUR_COLUMNS = [
   }
 ]
 
-export async function extractTemplateFile(buffer) {
+export async function extractTemplateFile(buffer, options = {separator: '|'}) {
   let workbook
 
   // Vérifie si les feuilles declaration_de_volume et point_de_prelevement sont présentes
@@ -196,7 +197,7 @@ export async function extractTemplateFile(buffer) {
     }
   }
 
-  const dataResult = validateAndExtractData(dataSheet, errors)
+  const dataResult = validateAndExtractData(dataSheet, errors, options)
   errors.push(...dataResult.errors)
   data.volumeData = dataResult.data
 
@@ -489,7 +490,7 @@ function extractPreleveurs(sheet, headerRow, range, columnMap, errors) {
   return {preleveurs: [...preleveursMap.values()]}
 }
 
-function validateAndExtractData(dataSheet, errors) {
+function validateAndExtractData(dataSheet, errors, options) {
   const data = {rows: []}
   const result = {errors, data}
 
@@ -513,7 +514,7 @@ function validateAndExtractData(dataSheet, errors) {
     return result
   }
 
-  parseDataRows(dataSheet, headerRow, range, columnMap, data.rows, result.errors)
+  parseDataRows(dataSheet, headerRow, range, columnMap, data.rows, result.errors, options)
 
   if (data.rows.length === 0) {
     result.errors.push({
@@ -655,7 +656,7 @@ function validateColumnMapping(columnMap, foundColumns, headerRow, errors) {
   }
 }
 
-function parseDataRows(sheet, headerRow, range, columnMap, rows, errors) {
+function parseDataRows(sheet, headerRow, range, columnMap, rows, errors, options) {
   for (let r = headerRow + 1; r <= range.e.r; r++) {
     const pointId = readAsString(sheet, r, columnMap.pointId)
     const dateDebut = readAsDateString(sheet, r, columnMap.dateDebut)
@@ -712,7 +713,7 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors) {
     // Gérer les points de prélèvement séparés par une virgule
     // Si plusieurs points partagent le volume, on divise le volume entre eux
     const pointIdStr = String(pointId).trim()
-    const pointIds = pointIdStr.split('|').map(p => p.trim()).filter(Boolean)
+    const pointIds = pointIdStr.split(options.separator || '|').map(p => p.trim()).filter(Boolean)
 
     if (pointIds.length === 0) {
       errors.push({

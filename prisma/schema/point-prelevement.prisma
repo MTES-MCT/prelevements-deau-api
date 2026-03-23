@@ -12,15 +12,23 @@ enum DeclarantPointPrelevementStatus {
 }
 
 enum UsageEau {
-  EAU_POTABLE
-  AGRICULTURE
-  CAMION_CITERNE
-  EAU_EMBOUTEILLEE
-  HYDROELECTRICITE
+  INCONNU
+  PAS_D_USAGE
+  IRRIGATION
+  AGRICULTURE_ELEVAGE
   INDUSTRIE
-  THERMALISME
-  NON_RENSEIGNE
-  AUTRE
+  AEP
+  ENERGIE
+  LOISIRS
+  EMBOUTEILLAGE
+  THERMALISME_THALASSO
+  DEFENSE_INCENDIE
+  REALIMENTATION_EAU
+  CANAUX
+  ETIAGE
+  ENTRETIEN_VOIRIES
+  ALIMENTATION_SOUTIEN_CANAL
+  DOMESTIQUE
 }
 
 enum WaterBodyType {
@@ -48,6 +56,16 @@ model PointPrelevement {
   deletedAt DateTime?
 
   sourceId String? @db.Text
+
+  codeEUMasseDEau String? @db.Text
+  codePTP         String? @db.Text
+  codeOPR         String? @db.Text
+  codeBDLISA      String? @db.Text
+  codeBSS         String? @db.Text
+  codeAIOT        String? @db.Text
+  codeBDCarthage  String? @db.Text
+  codeBDTopage    String? @db.Text
+  codeSISPEA      String? @db.Text
 
   @@unique([sourceId])
   @@unique([name])

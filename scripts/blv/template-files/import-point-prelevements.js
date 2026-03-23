@@ -32,6 +32,11 @@ function getWaterBodyType(typeRaw) {
   }
 }
 
+function normalizeCode(value) {
+  const raw = String(value ?? '').trim()
+  return raw || null
+}
+
 function parseLambertNumber(s) {
   const raw = String(s ?? '').trim()
   if (!raw) {
@@ -98,6 +103,14 @@ async function importRow(row, fileSource) {
   }
 
   const waterBodyType = getWaterBodyType(row.type_point_prelevement)
+  const codeEUMasseDEau = normalizeCode(row.code_masse_eau_européen)
+  const codeBSS = normalizeCode(row.code_BSS)
+  const codeOPR = normalizeCode(row.code_OPR)
+  const codePTP = normalizeCode(row.code_PTP)
+  const codeBDLISA = normalizeCode(row.code_BDLISA)
+  const codeBDTopage = normalizeCode(row.code_BDTopage)
+  const codeBDCarthage = normalizeCode(row.code_BDCarthage)
+  const codeAIOT = normalizeCode(row.code_aiot)
 
   // 1️⃣ Chercher le point par sourceId (Prisma)
   const existing = await prisma.pointPrelevement.findUnique({
@@ -124,6 +137,14 @@ async function importRow(row, fileSource) {
             ),
             4326
                           ),
+          "codeEUMasseDEau" = $7,
+          "codeBSS" = $8,
+          "codeOPR" = $9,
+          "codePTP" = $10,
+          "codeBDLISA" = $11,
+          "codeBDTopage" = $12,
+          "codeBDCarthage" = $13,
+          "codeAIOT" = $14,
           "updatedAt" = now(),
           "sourceId" = $6
         WHERE "id" = $1
@@ -133,13 +154,37 @@ async function importRow(row, fileSource) {
       geoX,
       geoY,
       waterBodyType,
-      sourceId
+      sourceId,
+      codeEUMasseDEau,
+      codeBSS,
+      codeOPR,
+      codePTP,
+      codeBDLISA,
+      codeBDTopage,
+      codeBDCarthage,
+      codeAIOT
     )
   } else {
     const [{id}] = await prisma.$queryRawUnsafe(
       `
         INSERT INTO "PointPrelevement"
-        ("id", "sourceId", "name", "waterBodyType", "coordinates", "createdAt", "updatedAt")
+        (
+          "id",
+          "sourceId",
+          "name",
+          "waterBodyType",
+          "coordinates",
+          "codeEUMasseDEau",
+          "codeBSS",
+          "codeOPR",
+          "codePTP",
+          "codeBDLISA",
+          "codeBDTopage",
+          "codeBDCarthage",
+          "codeAIOT",
+          "createdAt",
+          "updatedAt"
+        )
         VALUES (
                  gen_random_uuid(),
                  $1,
@@ -152,6 +197,14 @@ async function importRow(row, fileSource) {
                    ),
                    4326
                  ),
+                 $6,
+                 $7,
+                 $8,
+                 $9,
+                 $10,
+                 $11,
+                 $12,
+                 $13,
                  now(),
                  now()
                )
@@ -161,7 +214,15 @@ async function importRow(row, fileSource) {
       name,
       geoX,
       geoY,
-      waterBodyType
+      waterBodyType,
+      codeEUMasseDEau,
+      codeBSS,
+      codeOPR,
+      codePTP,
+      codeBDLISA,
+      codeBDTopage,
+      codeBDCarthage,
+      codeAIOT
     )
     pointId = id
   }
