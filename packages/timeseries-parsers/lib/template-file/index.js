@@ -4,7 +4,7 @@ import {readSheet, readAsString, readAsDateString, readAsNumber} from '../xlsx.j
 import {validateNumericValue} from '../validate.js'
 import {dedupe} from '../dedupe.js'
 import * as XLSX from 'xlsx'
-import {options} from "joi";
+import {options} from 'joi'
 
 // Définition des colonnes des points de prélèvement.
 // Compatible avec un futur ajout d'index compteur (id_compteur, coefficient_de_lecture déjà présents).
