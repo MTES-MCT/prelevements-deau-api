@@ -7,6 +7,7 @@ const dsn = (process.env.SENTRY_DSN || '').trim()
 if (dsn) {
   Sentry.init({
     dsn,
+    environment: process.env.SENTRY_ENV || 'development',
     sendDefaultPii: true,
     enableLogs: true,
     tracesSampleRate: 1,
