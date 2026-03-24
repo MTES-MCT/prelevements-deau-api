@@ -1,28 +1,28 @@
-name: Deploy (testing) to Scaleway
+name: Deploy (prod) to Scaleway
 
 on:
   push:
-    branches: ["testing"]
+    branches: ["testing"] # TODO: change
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-testing
+  group: deploy-prod
   cancel-in-progress: true
 
 jobs:
   test_build_deploy:
     runs-on: ubuntu-latest
-    environment: testing
+    environment: prod
 
     env:
       TZ: Europe/Paris
       SCW_REGION: ${{ vars.SCW_REGION }}
       SCW_REGISTRY_ENDPOINT: ${{ vars.SCW_REGISTRY_ENDPOINT }}
       SCW_IMAGE_NAME: ${{ vars.SCW_IMAGE_NAME }}
-      SCW_SERVERLESS_CONTAINER_ID_TESTING_API: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_TESTING_API }}
-      SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER }}
+      SCW_SERVERLESS_CONTAINER_ID_PROD_API: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_PROD_API }}
+      SCW_SERVERLESS_CONTAINER_ID_PROD_WORKER: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_PROD_WORKER }}
 
     steps:
       - name: Checkout
@@ -53,20 +53,20 @@ jobs:
           username: nologin
           password: ${{ secrets.SCW_SECRET_KEY }}
 
-      - name: Build & push image (testing-latest + sha)
+      - name: Build & push image (prod-latest + sha)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./deploy/Dockerfile
           platforms: linux/amd64
-          push: true
           build-args: |
-            ENV_NAME=testing
+            ENV_NAME=prod
+          push: true
           secrets: |
             GITHUB_TOKEN=${{ github.token }}
           tags: |
-            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:testing-latest
-            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:testing-${{ github.sha }}
+            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:prod-latest
+            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:prod-${{ github.sha }}
 
       - name: Install Scaleway CLI
         run: |
@@ -80,15 +80,15 @@ jobs:
           SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
           SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
           SCW_DEFAULT_REGION: fr-par
-          SCW_JOB_DEFINITION_ID_TESTING_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_TESTING_DB }}
+          SCW_JOB_DEFINITION_ID_PROD_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_PROD_DB }}
         run: |
-          scw jobs definition start "$SCW_JOB_DEFINITION_ID_TESTING_DB" region=fr-par >/dev/null
+          scw jobs definition start "$SCW_JOB_DEFINITION_ID_PROD_DB" region=fr-par >/dev/null
           while scw jobs run list region=fr-par -o json \
-            | jq -e --arg def "$SCW_JOB_DEFINITION_ID_TESTING_DB" '.[] | select(.job_definition_id==$def and .state=="running")' >/dev/null; do
+            | jq -e --arg def "$SCW_JOB_DEFINITION_ID_PROD_DB" '.[] | select(.job_definition_id==$def and .state=="running")' >/dev/null; do
             sleep 2
           done
 
-      - name: Deploy API to Scaleway Serverless Container (testing)
+      - name: Deploy API to Scaleway Serverless Container (prod)
         env:
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
@@ -98,10 +98,10 @@ jobs:
           SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
           SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
-          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_TESTING_API" \
-            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:testing-latest"
+          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_PROD_API" \
+            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest"
 
-      - name: Deploy WORKER to Scaleway Serverless Container (testing)
+      - name: Deploy WORKER to Scaleway Serverless Container (prod)
         env:
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
@@ -111,7 +111,7 @@ jobs:
           SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
           SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
-          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER" \
-            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:testing-latest" \
+          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_PROD_WORKER" \
+            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest" \
             command.0=node \
             command.1=worker.js
