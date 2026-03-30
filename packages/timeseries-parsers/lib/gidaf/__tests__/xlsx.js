@@ -26,8 +26,8 @@ test('extractGidaf - valid files', async t => {
   t.true(data.metadata.preleveurs.length > 0, 'Aucun préleveur extrait')
 
   const parameters = new Set(data.series.map(serie => serie.parameter))
-  t.true(parameters.has('Volume prélevé'))
-  t.true(parameters.has('Volume rejeté'))
+  t.true(parameters.has('volume prélevé'))
+  t.true(parameters.has('volume rejeté'))
 
   const preleveur = data.metadata.preleveurs[0]
   t.truthy(preleveur.siret)

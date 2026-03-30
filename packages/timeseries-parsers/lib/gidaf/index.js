@@ -388,7 +388,7 @@ function consolidateData(rawData) {
     if (rejetEntries.length > 0) {
       series.push({
         pointPrelevement: pointId,
-        parameter: 'Volume rejeté',
+        parameter: 'volume rejeté',
         unit: 'm³',
         frequency: '1 month',
         valueType: 'cumulative',
