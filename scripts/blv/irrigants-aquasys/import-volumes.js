@@ -64,7 +64,8 @@ async function upsertDeclarationAndReplaceFile({
           type: 'aquasys',
           comment,
           dataSourceType: 'SPREADSHEET',
-          waterWithdrawalType: 'unknown'
+          waterWithdrawalType: 'unknown',
+          autoValidationEnabled: true,
         }
       })
       : await prisma.declaration.create({
@@ -76,7 +77,8 @@ async function upsertDeclarationAndReplaceFile({
           comment,
           importSourceId,
           dataSourceType: 'SPREADSHEET',
-          waterWithdrawalType: 'unknown'
+          waterWithdrawalType: 'unknown',
+          autoValidationEnabled: true,
         }
       })
 

@@ -9,6 +9,9 @@ model Declaration {
   // Fichiers liés
   files DeclarationFile[]
 
+  // Validation automatique
+  autoValidationEnabled Boolean @default(false)
+
   // Sources
   source Source? @relation
 

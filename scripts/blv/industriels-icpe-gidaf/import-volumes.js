@@ -105,7 +105,8 @@ async function upsertDeclarationAndReplaceFiles({
           type: 'gidaf',
           comment,
           dataSourceType: 'SPREADSHEET',
-          waterWithdrawalType: 'unknown'
+          waterWithdrawalType: 'unknown',
+          autoValidationEnabled: true,
         }
       })
       : await prisma.declaration.create({
@@ -117,7 +118,8 @@ async function upsertDeclarationAndReplaceFiles({
           comment,
           importSourceId,
           dataSourceType: 'SPREADSHEET',
-          waterWithdrawalType: 'unknown'
+          waterWithdrawalType: 'unknown',
+          autoValidationEnabled: true,
         }
       })
 
