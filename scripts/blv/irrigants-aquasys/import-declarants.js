@@ -119,8 +119,8 @@ async function importRow(row) {
       where: {id: declarantUserId},
       data: {
         role: 'DECLARANT',
-        firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
+        firstName,
+        lastName,
       }
     })
 
@@ -129,7 +129,7 @@ async function importRow(row) {
       data: {
         sourceId,
         declarantType: declarantType ?? undefined,
-        socialReason: kind === PERSON_KIND.LEGAL ? socialReason : null,
+        socialReason,
         siret,
         addressLine1: address,
         postalCode,
@@ -141,14 +141,14 @@ async function importRow(row) {
       where: {email},
       update: {
         role: 'DECLARANT',
-        firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
+        firstName,
+        lastName,
       },
       create: {
         email,
         role: 'DECLARANT',
-        firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
+        firstName,
+        lastName,
       }
     })
 
@@ -159,7 +159,7 @@ async function importRow(row) {
       update: {
         sourceId,
         declarantType: declarantType ?? undefined,
-        socialReason: kind === PERSON_KIND.LEGAL ? socialReason : null,
+        socialReason,
         siret,
         addressLine1: address,
         postalCode,
@@ -169,7 +169,7 @@ async function importRow(row) {
         userId: declarantUserId,
         sourceId,
         declarantType: declarantType ?? 'NATURAL_PERSON',
-        socialReason: kind === PERSON_KIND.LEGAL ? socialReason : null,
+        socialReason,
         siret,
         addressLine1: address,
         postalCode,

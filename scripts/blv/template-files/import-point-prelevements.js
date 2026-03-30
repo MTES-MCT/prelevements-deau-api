@@ -88,10 +88,15 @@ function getFileSourceId(filePath) {
 }
 
 async function importRow(row, fileSource) {
-  const name = row.id_point_de_prelevement || row.id_point_de_prelevement_ou_rejet
+  const name = String(row.id_point_de_prelevement ?? row.id_point_de_prelevement_ou_rejet ?? '')
+    ?.replaceAll(',', '')
+    ?.trim()
+    ?.replace(/\s+/g, ' ')
+
   if (!name) {
     throw new Error('Le champ "id_point_de_prelevement" ou "id_point_de_prelevement_ou_rejet" est requis')
   }
+
 
   const sourceId = `blv-${fileSource}-${name}`
 

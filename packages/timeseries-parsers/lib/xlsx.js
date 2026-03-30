@@ -49,6 +49,7 @@ function sanitizeRaw(str) {
 }
 
 const DATE_CANDIDATES = [
+  'yyyy-MM-dd', // 2025-12-26
   'd/M/yyyy', // 30/1/2025
   'dd/MM/yyyy', // 26/02/2025
   'd MMMM yyyy', // 1 février 2025

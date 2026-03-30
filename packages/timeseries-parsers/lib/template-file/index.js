@@ -131,7 +131,7 @@ const PRELEVEUR_COLUMNS = [
   }
 ]
 
-export async function extractTemplateFile(buffer, options = {separator: '|'}) {
+export async function extractTemplateFile(buffer, options = {separator: ','}) {
   let workbook
 
   // Vérifie si les feuilles declaration_de_volume et point_de_prelevement sont présentes

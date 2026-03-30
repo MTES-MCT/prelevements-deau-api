@@ -242,8 +242,8 @@ async function importRow(row, fileSource, account) {
       data: {
         email,
         role: 'DECLARANT',
-        firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
+        firstName,
+        lastName
       }
     })
 
@@ -252,7 +252,7 @@ async function importRow(row, fileSource, account) {
       data: {
         sourceId,
         declarantType: declarantType ?? undefined,
-        socialReason: kind === PERSON_KIND.LEGAL ? (socialReason ?? null) : null,
+        socialReason,
         siret,
         addressLine1: address,
         postalCode,
@@ -267,14 +267,14 @@ async function importRow(row, fileSource, account) {
       where: {email},
       update: {
         role: 'DECLARANT',
-        firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
+        firstName,
+        lastName,
       },
       create: {
         email,
         role: 'DECLARANT',
-        firstName: kind === PERSON_KIND.NATURAL ? firstName : null,
-        lastName: kind === PERSON_KIND.NATURAL ? lastName : null
+        firstName,
+        lastName,
       }
     })
 
@@ -285,7 +285,7 @@ async function importRow(row, fileSource, account) {
       update: {
         sourceId,
         declarantType: declarantType ?? undefined,
-        socialReason: kind === PERSON_KIND.LEGAL ? (socialReason ?? null) : null,
+        socialReason,
         siret,
         addressLine1: address,
         postalCode,
@@ -298,7 +298,7 @@ async function importRow(row, fileSource, account) {
         userId: declarantUserId,
         sourceId,
         declarantType: declarantType ?? 'NATURAL_PERSON',
-        socialReason: kind === PERSON_KIND.LEGAL ? (socialReason ?? null) : null,
+        socialReason,
         siret,
         addressLine1: address,
         postalCode,

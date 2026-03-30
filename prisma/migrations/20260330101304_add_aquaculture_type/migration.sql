@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "UsageEau" ADD VALUE 'AQUACULTURE';
