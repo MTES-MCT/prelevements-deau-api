@@ -35,6 +35,7 @@
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "hash-object": "^5.0.1",
