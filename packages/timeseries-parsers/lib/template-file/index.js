@@ -727,9 +727,7 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors, options
     if (hasPreleve) {
       try {
         numericVolumePreleve = validateNumericValue(volumePreleve)
-        if (numericVolumePreleve === undefined || numericVolumePreleve === null) {
-          numericVolumePreleve = null
-        }
+        numericVolumePreleve ??= null
       } catch (error) {
         errors.push({
           message: error.message || `Ligne ${r + 1}: Valeur numérique invalide: ${volumePreleve}`,
@@ -742,9 +740,7 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors, options
     if (hasRejete) {
       try {
         numericVolumeRejete = validateNumericValue(volumeRejete)
-        if (numericVolumeRejete === undefined || numericVolumeRejete === null) {
-          numericVolumeRejete = null
-        }
+        numericVolumeRejete ??= null
       } catch (error) {
         errors.push({
           message: error.message || `Ligne ${r + 1}: Valeur numérique invalide: ${volumeRejete}`,
@@ -832,8 +828,8 @@ function consolidateData(rawData) {
   // Si plusieurs lignes tombent sur la même date, on additionne les volumes
   // pour éviter les doublons de date.
   for (const rows of rowsByPointAndParameter.values()) {
-    const pointId = rows[0].pointId
-    const parameter = rows[0].parameter
+    const {pointId} = rows[0]
+    const {parameter} = rows[0]
 
     const valuesByDate = new Map()
     let minDate = null

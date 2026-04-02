@@ -97,7 +97,6 @@ async function importRow(row, fileSource) {
     throw new Error('Le champ "id_point_de_prelevement" ou "id_point_de_prelevement_ou_rejet" est requis')
   }
 
-
   const sourceId = `blv-${fileSource}-${name}`
 
   const geoX = parseLambertNumber(row.x_lambert93)

@@ -13,6 +13,7 @@ import {randomUUID} from 'node:crypto'
 import {addJobProcessDeclaration} from '../../../lib/queues/jobs.js'
 import {closeQueues} from '../../../lib/queues/config.js'
 import {closeRedis} from '../../../lib/queues/redis.js'
+import {updateLastDeclarationAt} from '../../../lib/models/declarant.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -133,6 +134,8 @@ async function upsertDeclarationAndReplaceFile({
           waterWithdrawalType: 'unknown'
         }
       })
+
+    await updateLastDeclarationAt(declarantUserId)
 
     const toDelete = (existing?.files ?? []).filter(f => f.type === 'template-file')
     if (toDelete.length > 0) {

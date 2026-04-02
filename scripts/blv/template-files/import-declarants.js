@@ -268,13 +268,13 @@ async function importRow(row, fileSource, account) {
       update: {
         role: 'DECLARANT',
         firstName,
-        lastName,
+        lastName
       },
       create: {
         email,
         role: 'DECLARANT',
         firstName,
-        lastName,
+        lastName
       }
     })
 

@@ -18,6 +18,7 @@ import {
 import {addJobProcessDeclaration} from '../../lib/queues/jobs.js'
 import {closeQueues} from '../../lib/queues/config.js'
 import {closeRedis} from '../../lib/queues/redis.js'
+import {updateLastDeclarationAt} from '../../lib/models/declarant.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -65,7 +66,7 @@ function pseudoRandomInt(seed, min, max) {
     h = Math.imul(31, h) + str.charCodeAt(i) | 0
   }
 
-  const normalized = Math.abs(h) / 2147483647
+  const normalized = Math.abs(h) / 2_147_483_647
   return Math.round(min + normalized * (max - min))
 }
 
@@ -110,13 +111,13 @@ function monthSeasonalityFactor(usage, month) {
       1: 0.95,
       2: 0.92,
       3: 0.96,
-      4: 1.0,
+      4: 1,
       5: 1.05,
       6: 1.1,
       7: 1.18,
       8: 1.2,
       9: 1.08,
-      10: 1.0,
+      10: 1,
       11: 0.96,
       12: 0.94
     }
@@ -128,7 +129,7 @@ function monthSeasonalityFactor(usage, month) {
     const factors = {
       1: 0.92,
       2: 0.95,
-      3: 1.0,
+      3: 1,
       4: 1.04,
       5: 1.08,
       6: 1.12,
@@ -155,21 +156,34 @@ function computeMonthlyVolume({usage, pointName, declarantSourceId, year, month,
   let noiseMin = 0.65
   let noiseMax = 1.35
 
-  if (usage === 'IRRIGATION') {
-    baseMin = 1500
-    baseMax = 9000
-    noiseMin = 0.45
-    noiseMax = 1.55
-  } else if (usage === 'INDUSTRIE') {
-    baseMin = 800
-    baseMax = 7000
-    noiseMin = 0.6
-    noiseMax = 1.45
-  } else if (usage === 'AEP') {
-    baseMin = 3000
-    baseMax = 14000
-    noiseMin = 0.75
-    noiseMax = 1.25
+  switch (usage) {
+    case 'IRRIGATION': {
+      baseMin = 1500
+      baseMax = 9000
+      noiseMin = 0.45
+      noiseMax = 1.55
+
+      break
+    }
+
+    case 'INDUSTRIE': {
+      baseMin = 800
+      baseMax = 7000
+      noiseMin = 0.6
+      noiseMax = 1.45
+
+      break
+    }
+
+    case 'AEP': {
+      baseMin = 3000
+      baseMax = 14_000
+      noiseMin = 0.75
+      noiseMax = 1.25
+
+      break
+    }
+  // No default
   }
 
   const base = pseudoRandomInt(baseSeed, baseMin, baseMax)
@@ -277,7 +291,7 @@ async function generateWorkbookBuffer({declarant, year, month}) {
   const startDate = getMonthStart(year, month)
   const endDate = getMonthEnd(year, month)
 
-  declarant.points.forEach((point, index) => {
+  for (const [index, point] of declarant.points.entries()) {
     const volumePreleve = computeMonthlyVolume({
       usage: point.usage,
       pointName: point.name,
@@ -310,18 +324,18 @@ async function generateWorkbookBuffer({declarant, year, month}) {
     row.getCell(4).value = volumePreleve
     row.getCell(6).value = volumeRejete
     row.commit()
-  })
+  }
 
   return workbook.xlsx.writeBuffer()
 }
 
 async function upsertDeclarationAndReplaceFile({
-                                                 importSourceId,
-                                                 declarantUserId,
-                                                 buffer,
-                                                 originalname,
-                                                 comment
-                                               }) {
+  importSourceId,
+  declarantUserId,
+  buffer,
+  originalname,
+  comment
+}) {
   const storage = createStorageClient(DECLARATIONS_BUCKET)
 
   const existing = await prisma.declaration.findUnique({
@@ -345,7 +359,7 @@ async function upsertDeclarationAndReplaceFile({
           comment,
           dataSourceType: 'SPREADSHEET',
           waterWithdrawalType: 'unknown',
-          autoValidationEnabled: true,
+          autoValidationEnabled: true
         }
       })
       : await prisma.declaration.create({
@@ -358,9 +372,11 @@ async function upsertDeclarationAndReplaceFile({
           importSourceId,
           dataSourceType: 'SPREADSHEET',
           waterWithdrawalType: 'unknown',
-          autoValidationEnabled: true,
+          autoValidationEnabled: true
         }
       })
+
+    await updateLastDeclarationAt(declarantUserId)
 
     const toDelete = (existing?.files ?? []).filter(file => file.type === 'template-file')
 
@@ -405,7 +421,7 @@ async function upsertDeclarationAndReplaceFile({
 }
 
 async function createDeclarationsForDeclarant(declarant) {
-  if (!declarant.points.length) {
+  if (declarant.points.length === 0) {
     console.log(`SKIP ${declarant.email} aucun PP`)
     return
   }
@@ -445,7 +461,7 @@ async function main() {
 
   const declarants = await listDemoDeclarants()
 
-  if (!declarants.length) {
+  if (declarants.length === 0) {
     throw new Error('Aucun déclarant de démo trouvé')
   }
 

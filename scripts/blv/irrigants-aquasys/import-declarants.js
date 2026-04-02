@@ -120,7 +120,7 @@ async function importRow(row) {
       data: {
         role: 'DECLARANT',
         firstName,
-        lastName,
+        lastName
       }
     })
 
@@ -142,13 +142,13 @@ async function importRow(row) {
       update: {
         role: 'DECLARANT',
         firstName,
-        lastName,
+        lastName
       },
       create: {
         email,
         role: 'DECLARANT',
         firstName,
-        lastName,
+        lastName
       }
     })
 

@@ -261,8 +261,8 @@ function shuffle(array) {
   const copy = [...array]
 
   for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]]
   }
 
   return copy
@@ -271,10 +271,10 @@ function shuffle(array) {
 function slugify(value) {
   return value
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll(/[\u0300-\u036F]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replaceAll(/[^a-z\d]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '')
 }
 
 function buildName(globalIndex, config) {
@@ -394,7 +394,6 @@ async function main() {
     }
   }
 
-
   await prisma.declarantPointPrelevement.deleteMany({
     where: {
       sourceId: {
@@ -419,7 +418,6 @@ async function main() {
 
   await upsertInstructorAccount(zone.id)
 }
-
 
 main()
   .catch(error => {

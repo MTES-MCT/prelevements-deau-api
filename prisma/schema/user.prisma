@@ -12,9 +12,10 @@ model User {
   firstName String?
   lastName  String?
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  lastLoginAt DateTime?
 
   declarant  Declarant?  @relation("UserDeclarant")
   instructor Instructor? @relation("UserInstructor")
@@ -39,6 +40,8 @@ model Declarant {
 
   declarations      Declaration[]
   pointPrelevements DeclarantPointPrelevement[]
+
+  lastDeclarationAt DateTime?
 
   declarantType DeclarantType @default(NATURAL_PERSON)
 

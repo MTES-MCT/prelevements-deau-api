@@ -13,6 +13,7 @@ import {DECLARATIONS_BUCKET, generateDossierCode, safeFilename} from '../../../l
 import {addJobProcessDeclaration} from '../../../lib/queues/jobs.js'
 import {closeQueues} from '../../../lib/queues/config.js'
 import {closeRedis} from '../../../lib/queues/redis.js'
+import {updateLastDeclarationAt} from '../../../lib/models/declarant.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -65,7 +66,7 @@ async function upsertDeclarationAndReplaceFile({
           comment,
           dataSourceType: 'SPREADSHEET',
           waterWithdrawalType: 'unknown',
-          autoValidationEnabled: true,
+          autoValidationEnabled: true
         }
       })
       : await prisma.declaration.create({
@@ -78,9 +79,11 @@ async function upsertDeclarationAndReplaceFile({
           importSourceId,
           dataSourceType: 'SPREADSHEET',
           waterWithdrawalType: 'unknown',
-          autoValidationEnabled: true,
+          autoValidationEnabled: true
         }
       })
+
+    await updateLastDeclarationAt(declarantUserId)
 
     const toDelete = (existing?.files ?? []).filter(file => file.type === 'aquasys')
 
