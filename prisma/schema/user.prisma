@@ -41,7 +41,8 @@ model Declarant {
   declarations      Declaration[]
   pointPrelevements DeclarantPointPrelevement[]
 
-  lastDeclarationAt DateTime?
+  lastDeclarationAt      DateTime?
+  lastReminderMailSentAt DateTime?
 
   declarantType DeclarantType @default(NATURAL_PERSON)
 
