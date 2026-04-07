@@ -132,8 +132,12 @@ export function readAsNumber(sheet, rowIndex, colIndex) {
   }
 
   if (cell.t === 's') {
-    const value = trim(cell.v, CHAR_TO_TRIM)
-    const number = Number(value.replace(',', '.'))
+    const raw = trim(String(cell.v), CHAR_TO_TRIM)
+    const value = raw
+      .replaceAll(/[\s\u00A0\u202F]+/g, '')
+      .replaceAll(',', '.')
+
+    const number = Number(value)
 
     if (!Number.isNaN(number)) {
       return number

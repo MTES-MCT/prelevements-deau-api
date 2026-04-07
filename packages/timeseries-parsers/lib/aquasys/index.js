@@ -32,14 +32,22 @@ export async function extractAquasys(buffer) {
   } catch (error) {
     return {
       errors: [formatError(error)],
-      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+      data: {
+        series: [],
+        indexSeries: [],
+        metadata: {pointsPrelevement: [], preleveurs: []}
+      }
     }
   }
 
   if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
     return {
       errors: [{message: 'Le fichier Aquasys est vide ou ne contient pas de feuille.', severity: 'error'}],
-      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+      data: {
+        series: [],
+        indexSeries: [],
+        metadata: {pointsPrelevement: [], preleveurs: []}
+      }
     }
   }
 
@@ -50,7 +58,11 @@ export async function extractAquasys(buffer) {
   if (!sheet || !sheet['!ref']) {
     return {
       errors: [{message: `La feuille "${sheetName}" est vide.`, severity: 'error'}],
-      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+      data: {
+        series: [],
+        indexSeries: [],
+        metadata: {pointsPrelevement: [], preleveurs: []}
+      }
     }
   }
 
@@ -59,7 +71,11 @@ export async function extractAquasys(buffer) {
   if (headerRow === -1) {
     return {
       errors: errors.map(formatError),
-      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+      data: {
+        series: [],
+        indexSeries: [],
+        metadata: {pointsPrelevement: [], preleveurs: []}
+      }
     }
   }
 
@@ -71,7 +87,11 @@ export async function extractAquasys(buffer) {
     })
     return {
       errors: errors.map(formatError),
-      data: {series: [], metadata: {pointsPrelevement: [], preleveurs: []}}
+      data: {
+        series: [],
+        indexSeries: [],
+        metadata: {pointsPrelevement: [], preleveurs: []}
+      }
     }
   }
 
@@ -81,7 +101,7 @@ export async function extractAquasys(buffer) {
   // - des séries d'index (indispensables pour recalculer un volume en
   //   différence avec un index déjà présent en base).
   const {rawRows, metadata} = extractRows(sheet, headerRow, range, columnMap, errors)
-  const {volumeRows, indexRows} = buildVolumeRows(rawRows, errors)
+  const {volumeRows, indexRows} = buildVolumeRows(sheet, rawRows, errors)
   const consolidated = consolidateData(volumeRows, indexRows)
   consolidated.metadata = metadata
 
@@ -139,15 +159,19 @@ function findHeaderRow(sheet, range, requiredHeaders, errors, sheetLabel) {
 
 function mapColumns(sheet, headerRow, range) {
   const columnMap = {}
+
   for (let c = 0; c <= range.e.c; c++) {
     const headerValue = readAsString(sheet, headerRow, c) || ''
     const normalized = normalizeHeader(headerValue)
+
     for (const def of COLUMN_DEFS) {
       if (columnMap[def.key] !== undefined) {
         continue
       }
 
-      if (def.matchers.some(matcher => normalized === matcher || normalized.includes(matcher))) {
+      const normalizedMatchers = def.matchers.map(normalizeHeader)
+
+      if (normalizedMatchers.includes(normalized)) {
         columnMap[def.key] = c
       }
     }
@@ -250,6 +274,7 @@ function extractRows(sheet, headerRow, range, columnMap, errors) {
   const pointsPrelevement = []
   for (const entry of pointsById.values()) {
     const point = {...entry.point}
+
     if (entry.compteurs.size === 1) {
       point.id_compteur = [...entry.compteurs][0]
     }
@@ -333,7 +358,7 @@ function normalizeCodeCommune(value) {
 // - si "Index", on stocke l'index et on calcule ensuite les volumes par différence
 // - si "Volume", on garde le volume tel quel
 // Les index sont "ramenés" en m³ via le coefficient de lecture (mesure * coefficient).
-function buildVolumeRows(rawRows, errors) {
+function buildVolumeRows(sheet, rawRows, errors) {
   const indexRows = []
   const volumeRows = []
 
@@ -342,7 +367,7 @@ function buildVolumeRows(rawRows, errors) {
       continue
     }
 
-    const mesureValue = safeNumericValue(row.mesure, errors, row.pointId, row.dateMesure)
+    const mesureValue = safeNumericValue(row.mesure, errors)
     if (mesureValue === undefined || mesureValue === null) {
       continue
     }
@@ -367,8 +392,8 @@ function buildVolumeRows(rawRows, errors) {
     }
   }
 
-  // Les volumes calculés par différence d'index s'ajoutent aux volumes directs.
   const computedRows = computeVolumesFromIndex(indexRows)
+
   return {
     volumeRows: [...computedRows, ...volumeRows].filter(row => row.dateDebut && row.dateFin),
     indexRows
@@ -388,10 +413,12 @@ function safeNumericValue(value, errors) {
 }
 
 // Calcul des volumes à partir d'index successifs par point+compteur.
+// - on dédoublonne d'abord les index d'une même date
 // - cas normal : (index courant - index précédent) * coefficient
 // - remise à zéro : index courant * coefficient
 function computeVolumesFromIndex(indexRows) {
   const byKey = new Map()
+
   for (const row of indexRows) {
     const key = `${row.pointId}__${row.compteur || 'default'}`
     if (!byKey.has(key)) {
@@ -402,14 +429,32 @@ function computeVolumesFromIndex(indexRows) {
   }
 
   const computed = []
+
   for (const rows of byKey.values()) {
-    rows.sort((a, b) => a.dateMesure.localeCompare(b.dateMesure))
-    for (let i = 1; i < rows.length; i++) {
-      const prev = rows[i - 1]
-      const curr = rows[i]
+    const byDate = new Map()
+
+    for (const row of rows) {
+      if (!row.dateMesure || row.mesure === undefined || row.mesure === null || Number.isNaN(row.mesure)) {
+        continue
+      }
+
+      const existing = byDate.get(row.dateMesure)
+
+      if (!existing || row.mesure > existing.mesure) {
+        byDate.set(row.dateMesure, row)
+      }
+    }
+
+    const uniqueRows = [...byDate.values()].sort((a, b) => a.dateMesure.localeCompare(b.dateMesure))
+
+    for (let i = 1; i < uniqueRows.length; i++) {
+      const prev = uniqueRows[i - 1]
+      const curr = uniqueRows[i]
+
       const diff = curr.mesure - prev.mesure
       const coefficient = Number.isFinite(curr.coefficient) ? curr.coefficient : 1
       const volume = diff >= 0 ? diff * coefficient : curr.mesure * coefficient
+
       if (volume === null || volume === undefined || Number.isNaN(volume)) {
         continue
       }
@@ -427,14 +472,15 @@ function computeVolumesFromIndex(indexRows) {
 }
 
 // Consolide en séries temporelles :
-// - Volume prélevé (m³) pour l'intégration standard
-// - Index compteur (m³ après coefficient) pour recaler avec l'historique en base
+// - series = seulement les volumes, pour éviter les mélanges en aval
+// - indexSeries = séries d'index séparées
 function consolidateData(volumeRows, indexRows) {
-  const series = []
+  const volumeSeries = []
   const warnings = []
 
   if (Array.isArray(volumeRows) && volumeRows.length > 0) {
     const rowsByPoint = new Map()
+
     for (const row of volumeRows) {
       if (!row.pointId) {
         continue
@@ -454,7 +500,7 @@ function consolidateData(volumeRows, indexRows) {
       let maxDate = null
 
       for (const row of rows) {
-        if (!row.dateFin || row.volumePreleve === undefined || row.volumePreleve === null) {
+        if (row.volumePreleve === undefined || row.volumePreleve === null || !row.dateFin) {
           continue
         }
 
@@ -465,7 +511,7 @@ function consolidateData(volumeRows, indexRows) {
           }
         }
 
-        if (!minDate || row.dateDebut < minDate) {
+        if (!minDate || (row.dateDebut && row.dateDebut < minDate)) {
           minDate = row.dateDebut
         }
 
@@ -484,7 +530,7 @@ function consolidateData(volumeRows, indexRows) {
         continue
       }
 
-      series.push({
+      volumeSeries.push({
         pointPrelevement: pointId,
         parameter: 'volume prélevé',
         unit: 'm³',
@@ -498,10 +544,13 @@ function consolidateData(volumeRows, indexRows) {
   }
 
   const {series: indexSeries, warnings: indexWarnings} = consolidateIndexSeries(indexRows)
-  series.push(...indexSeries)
   warnings.push(...indexWarnings)
 
-  return {series, warnings}
+  return {
+    series: volumeSeries,
+    indexSeries,
+    warnings
+  }
 }
 
 // Regroupe les index par point+compteur pour créer une série d'index.
@@ -520,6 +569,7 @@ function consolidateIndexSeries(indexRows) {
 
     const compteur = row.compteur || 'default'
     const key = `${row.pointId}__${compteur}`
+
     if (!rowsByKey.has(key)) {
       rowsByKey.set(key, [])
     }
@@ -529,6 +579,7 @@ function consolidateIndexSeries(indexRows) {
 
   const series = []
   const warnings = []
+
   for (const [key, rows] of rowsByKey.entries()) {
     rows.sort((a, b) => a.dateMesure.localeCompare(b.dateMesure))
     const durations = []
@@ -553,6 +604,7 @@ function consolidateIndexSeries(indexRows) {
     }
 
     const uniqueDates = [...byDate.keys()].sort()
+
     for (let i = 1; i < uniqueDates.length; i++) {
       const duration = diffInDays(uniqueDates[i - 1], uniqueDates[i])
       if (Number.isFinite(duration) && duration >= 0) {
@@ -591,9 +643,9 @@ function consolidateIndexSeries(indexRows) {
     })
 
     if (duplicateDates.length > 0) {
-      const uniqueDates = [...new Set(duplicateDates)].sort()
+      const uniqueDuplicateDates = [...new Set(duplicateDates)].sort()
       warnings.push({
-        message: `Doublons d'index détectés pour ${parameter} (point ${pointId}) aux dates: ${uniqueDates.join(', ')}`,
+        message: `Doublons d'index détectés pour ${parameter} (point ${pointId}) aux dates: ${uniqueDuplicateDates.join(', ')}`,
         severity: 'warning'
       })
     }
@@ -640,7 +692,6 @@ function formatError(error) {
   ])
 
   errorObj.message ||= errorObj.explanation || errorObj.internalMessage || 'Erreur non spécifiée'
-
   errorObj.severity ||= 'error'
 
   return errorObj
