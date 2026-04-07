@@ -137,11 +137,6 @@ components:
               type: array
               description: Liste des préleveurs associés au point via les exploitations
               items: { $ref: '#/components/schemas/PreleveurLight' }
-            exploitationsStatus:
-              type: string
-              nullable: true
-              enum: ['En activité', 'Terminée', 'Abandonnée', 'Non renseigné']
-              description: Statut agrégé des exploitations du point
             exploitationsStartDate:
               type: string
               format: date

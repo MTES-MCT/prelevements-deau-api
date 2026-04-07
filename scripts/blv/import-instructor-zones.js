@@ -72,13 +72,13 @@ async function importRow(row, startDate) {
       }
     },
     update: {
-      isAdmin: false,
+      isAdmin: true,
       endDate: null
     },
     create: {
       instructorUserId: instructor.userId,
       zoneId: zone.id,
-      isAdmin: false,
+      isAdmin: true,
       startDate,
       endDate: null
     }
