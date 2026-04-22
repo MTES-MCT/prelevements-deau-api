@@ -114,6 +114,10 @@ model DeclarantPointPrelevement {
 
   sourceId String? @db.Text
 
+  mostRecentAvailableDate DateTime? @db.Date
+  connectorType           String?   @db.Text
+  connectorParameters     Json?     @db.Json
+
   @@unique([sourceId])
   @@unique([declarantUserId, pointPrelevementId])
   @@index([declarantUserId])
@@ -123,4 +127,5 @@ model DeclarantPointPrelevement {
   @@index([startDate])
   @@index([endDate])
   @@index([usages], type: Gin)
+  @@index([connectorType])
 }

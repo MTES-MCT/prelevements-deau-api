@@ -38,8 +38,10 @@ model Declarant {
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
-  declarations      Declaration[]
-  pointPrelevements DeclarantPointPrelevement[]
+  declarations             Declaration[]
+  pointPrelevements        DeclarantPointPrelevement[]
+  serviceAccountDeclarants ServiceAccountDeclarant[]
+  serviceAccountTokens     ServiceAccountToken[]
 
   lastDeclarationAt      DateTime?
   lastReminderMailSentAt DateTime?
