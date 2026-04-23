@@ -42,6 +42,7 @@ model Declarant {
   pointPrelevements        DeclarantPointPrelevement[]
   serviceAccountDeclarants ServiceAccountDeclarant[]
   serviceAccountTokens     ServiceAccountToken[]
+  apiImports               ApiImport[]
 
   lastDeclarationAt      DateTime?
   lastReminderMailSentAt DateTime?

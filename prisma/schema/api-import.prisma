@@ -1,0 +1,29 @@
+enum ApiImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ApiImport {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarantUserId String    @db.Uuid
+  declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  rawPayload Json?
+
+  status ApiImportStatus @default(PENDING)
+
+  errorMessage String?   @db.Text
+  processedAt  DateTime?
+
+  source Source?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([declarantUserId])
+  @@index([status])
+  @@index([createdAt])
+}

@@ -28,8 +28,11 @@ model Source {
 
   metadata Json?
 
-  declarationId String      @unique @db.Uuid
-  declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  declarationId String?      @unique @db.Uuid
+  declaration   Declaration? @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  apiImportId String?    @unique @db.Uuid
+  apiImport   ApiImport? @relation(fields: [apiImportId], references: [id], onDelete: Cascade)
 
   chunks Chunk[]
 
@@ -39,6 +42,7 @@ model Source {
   @@index([type])
   @@index([status])
   @@index([declarationId])
+  @@index([apiImportId])
 }
 
 enum ChunkInstructionStatus {
