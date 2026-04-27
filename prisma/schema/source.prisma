@@ -52,6 +52,16 @@ enum ChunkInstructionStatus {
   AUTOMATICALLY_VALIDATED
 }
 
+/// Aligné sur `Granularity` dans partageonsleau-orchestration (`src/connectors/types.ts`).
+enum ChunkGranularity {
+  FIFTEEN_MINUTES @map("15_minutes")
+  ONE_HOUR        @map("1 hour")
+  ONE_DAY         @map("1 day")
+  ONE_WEEK        @map("1 week")
+  ONE_MONTH       @map("1 month")
+  ONE_YEAR        @map("1 year")
+}
+
 model Chunk {
   id String @id @default(uuid()) @db.Uuid
 
@@ -74,6 +84,8 @@ model Chunk {
 
   minDate DateTime @db.Date
   maxDate DateTime @db.Date
+
+  granularity ChunkGranularity?
 
   metadata Json @default("{}")
 
