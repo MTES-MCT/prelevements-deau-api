@@ -1,5 +1,5 @@
 /* eslint-disable no-await-in-loop */
-import 'dotenv/config'
+import '../lib/config/env.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'

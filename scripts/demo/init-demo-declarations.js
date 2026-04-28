@@ -1,5 +1,5 @@
 // Noinspection JSNonASCIINames
-import 'dotenv/config'
+import '../../lib/config/env.js'
 
 import fs from 'node:fs'
 import path from 'node:path'

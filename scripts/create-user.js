@@ -1,6 +1,6 @@
 
 /* eslint-disable unicorn/no-process-exit */
-import 'dotenv/config'
+import '../lib/config/env.js'
 import process, {argv} from 'node:process'
 import {prisma} from '../db/prisma.js'
 import {randomUUID} from 'node:crypto'

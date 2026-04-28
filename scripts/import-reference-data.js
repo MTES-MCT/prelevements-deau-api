@@ -1,6 +1,6 @@
 /* eslint-disable n/prefer-global/process */
 /* eslint-disable unicorn/no-process-exit */
-import 'dotenv/config'
+import '../lib/config/env.js'
 import {argv} from 'node:process'
 import {keyBy} from 'lodash-es'
 import mongo from '../lib/util/mongo.js'

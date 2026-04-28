@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import '../../lib/config/env.js'
 import {prisma} from '../../db/prisma.js'
 
 const DEMO_SERIES = [

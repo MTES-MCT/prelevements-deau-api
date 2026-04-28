@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import 'dotenv/config'
+import './lib/config/env.js'
 import http from 'node:http'
 import './instrument.js'
 import * as Sentry from '@sentry/node'

@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import '../lib/config/env.js'
 import process from 'node:process'
 import {prisma} from '../db/prisma.js'
 import {createServiceAccountCredential} from '../lib/models/service-account-credential.js'
