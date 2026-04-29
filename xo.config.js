@@ -30,6 +30,25 @@ const config = [
       // Désactivation de la validation des dépendances Node.js
       'n/no-extraneous-import': 'off'
     }
+  },
+  {
+    files: [
+      'scripts/**/*.js'
+    ],
+    rules: {
+      'no-await-in-loop': 'off',
+      'promise/prefer-await-to-then': 'off',
+      'n/prefer-global/process': 'off',
+      'n/prefer-global/buffer': 'off',
+      'unicorn/no-process-exit': 'off',
+      'unicorn/prefer-top-level-await': 'off',
+      'no-eq-null': 'off',
+      eqeqeq: 'off',
+      'no-bitwise': 'off',
+      'unicorn/prefer-math-trunc': 'off',
+      'unicorn/prefer-code-point': 'off',
+      '@stylistic/no-mixed-operators': 'off'
+    }
   }
 ]
 

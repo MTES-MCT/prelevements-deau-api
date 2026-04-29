@@ -1,5 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import {Buffer} from 'node:buffer'
 import {fileURLToPath} from 'node:url'
 import test from 'ava'
 import {extractTemplateFile} from '../index.js'
@@ -38,7 +39,7 @@ test('extractTemplateFile - valid file', async t => {
     // Vérifier la structure des données
     for (const entry of serie.data) {
       t.truthy(entry.date)
-      t.truthy(typeof entry.value === 'number')
+      t.true(typeof entry.value === 'number')
     }
   }
 })
@@ -137,7 +138,7 @@ test('extractTemplateFile - invalid file format', async t => {
 test('extractTemplateFile - valid file with metadata', async t => {
   const filePath = path.join(testFilesPath, 'valid.xlsx')
   const fileContent = await fs.readFile(filePath)
-  const {errors, data, rawData} = await extractTemplateFile(fileContent)
+  const {errors, rawData} = await extractTemplateFile(fileContent)
 
   // Vérifier que les métadonnées sont extraites si présentes
   if (rawData && rawData.metadata) {
@@ -240,7 +241,7 @@ test('extractTemplateFile - file with data errors', async t => {
 test('extractTemplateFile - file with invalid volumes', async t => {
   const filePath = path.join(testFilesPath, 'invalid-volumes.xlsx')
   const fileContent = await fs.readFile(filePath)
-  const {errors, data} = await extractTemplateFile(fileContent)
+  const {errors} = await extractTemplateFile(fileContent)
 
   // Devrait générer des erreurs sur les volumes invalides
   t.true(errors.length > 0)
@@ -376,6 +377,7 @@ test('extractTemplateFile - valid file with point_de_prelevement sheet optional'
     w.message.includes('point_de_prelevement')
     || w.message.includes('métadonnées')
   )
+  t.true(hasMetadataWarning, 'Un warning sur la feuille de métadonnées est attendu')
 
   // Devrait avoir des séries extraites
   t.truthy(data)
@@ -389,4 +391,3 @@ test('extractTemplateFile - valid file with point_de_prelevement sheet optional'
     t.true(serie.data.length > 0)
   }
 })
-

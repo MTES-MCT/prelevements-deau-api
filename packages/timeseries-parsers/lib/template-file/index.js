@@ -131,7 +131,7 @@ const PRELEVEUR_COLUMNS = [
   }
 ]
 
-export async function extractTemplateFile(buffer, options = {separator: ','}) {
+export async function extractTemplateFile(buffer, options) {
   let workbook
 
   // Vérifie si les feuilles declaration_de_volume et point_de_prelevement sont présentes
@@ -196,7 +196,12 @@ export async function extractTemplateFile(buffer, options = {separator: ','}) {
     }
   }
 
-  const dataResult = validateAndExtractData(dataSheet, errors, options)
+  const parseOptions = {
+    separator: ',',
+    ...options
+  }
+
+  const dataResult = validateAndExtractData(dataSheet, errors, parseOptions)
   errors.push(...dataResult.errors)
   data.volumeData = dataResult.data
 
@@ -322,7 +327,7 @@ function findMetadataHeaderRow(sheet, range, errors) {
   return -1
 }
 
-function mapMetadataColumns(sheet, headerRow, range, errors) {
+function mapMetadataColumns(sheet, headerRow, range, _errors) {
   const columnMap = {}
 
   for (let c = 0; c <= range.e.c; c++) {
@@ -357,7 +362,7 @@ function mapMetadataColumns(sheet, headerRow, range, errors) {
   return columnMap
 }
 
-function extractPointsPrelevement(sheet, headerRow, range, columnMap, errors) {
+function extractPointsPrelevement(sheet, headerRow, range, columnMap, _errors) {
   const points = []
   const seenPointIds = new Set()
   const siretCol = PRELEVEUR_COLUMNS.find(col => col.key === 'siret')
@@ -433,7 +438,7 @@ function extractPointsPrelevement(sheet, headerRow, range, columnMap, errors) {
   return {points}
 }
 
-function extractPreleveurs(sheet, headerRow, range, columnMap, errors) {
+function extractPreleveurs(sheet, headerRow, range, columnMap, _errors) {
   const preleveursMap = new Map()
   const siretCol = PRELEVEUR_COLUMNS.find(col => col.key === 'siret')
 
