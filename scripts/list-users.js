@@ -57,7 +57,7 @@ async function main() {
       console.log('Email:', user.email)
       console.log('Nom:', user.firstName, user.lastName)
       console.log('Rôle:', user.role)
-      console.log('Profil:', user.declarant ? 'Declarant' : user.instructor ? 'Instructor' : '-')
+      console.log('Profil:', user.declarant ? 'Declarant' : (user.instructor ? 'Instructor' : '-'))
       console.log('Créé le:', user.createdAt?.toISOString?.() ?? user.createdAt)
     }
 
