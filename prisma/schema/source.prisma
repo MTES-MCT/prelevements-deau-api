@@ -85,6 +85,11 @@ model Chunk {
   @@index([instructionStatus])
 }
 
+enum ChunkValueKind {
+  DECLARED
+  COMPUTED
+}
+
 model ChunkValue {
   id String @id @default(uuid()) @db.Uuid
 
@@ -95,11 +100,20 @@ model ChunkValue {
   unit           String? @db.Text
   frequency      String  @db.Text
 
+  /// Date de fin de période pour un volume calculé ; pour un relevé d’index, date du relevé.
   date  DateTime @db.Date
-  value Decimal  @db.Decimal(20, 4)
+  /// Début de période (ex. date du relevé d’index précédent) — renseigné surtout pour les volumes calculés.
+  periodStart DateTime? @db.Date
+  /// Fin de période explicite (redondant avec `date` pour les volumes calculés ; optionnel).
+  periodEnd DateTime? @db.Date
+
+  valueKind ChunkValueKind @default(DECLARED)
+
+  value Decimal @db.Decimal(20, 4)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([metricTypeCode])
+  @@index([chunkId, valueKind, metricTypeCode])
 }
