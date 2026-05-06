@@ -100,12 +100,11 @@ model ChunkValue {
   unit           String? @db.Text
   frequency      String  @db.Text
 
-  /// Date de fin de période pour un volume calculé ; pour un relevé d’index, date du relevé.
-  date  DateTime @db.Date
-  /// Début de période (ex. date du relevé d’index précédent) — renseigné surtout pour les volumes calculés.
-  periodStart DateTime? @db.Date
-  /// Fin de période explicite (redondant avec `date` pour les volumes calculés ; optionnel).
-  periodEnd DateTime? @db.Date
+  /// Début de période.
+  /// Le pas de temps discret minimal du domaine est 15 minutes.
+  periodStart DateTime @db.Timestamp(3)
+  /// Fin de période. Pour du ponctuel, elle est calculée à partir de periodStart + frequency.
+  periodEnd DateTime @db.Timestamp(3)
 
   valueKind ChunkValueKind @default(DECLARED)
 
