@@ -1,5 +1,4 @@
 
-/* eslint-disable unicorn/no-process-exit */
 import '../lib/config/env.js'
 import process, {argv} from 'node:process'
 import {prisma} from '../db/prisma.js'

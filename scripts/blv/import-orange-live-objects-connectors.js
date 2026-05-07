@@ -1,4 +1,4 @@
-/* eslint-disable no-await-in-loop */
+
 import '../../lib/config/env.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
