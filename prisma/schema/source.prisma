@@ -85,6 +85,11 @@ model Chunk {
   @@index([instructionStatus])
 }
 
+enum ChunkValueKind {
+  DECLARED
+  COMPUTED
+}
+
 model ChunkValue {
   id String @id @default(uuid()) @db.Uuid
 
@@ -95,11 +100,19 @@ model ChunkValue {
   unit           String? @db.Text
   frequency      String  @db.Text
 
-  date  DateTime @db.Date
-  value Decimal  @db.Decimal(20, 4)
+  /// Début de période.
+  /// Le pas de temps discret minimal du domaine est 15 minutes.
+  periodStart DateTime @db.Timestamp(3)
+  /// Fin de période. Pour du ponctuel, elle est calculée à partir de periodStart + frequency.
+  periodEnd DateTime @db.Timestamp(3)
+
+  valueKind ChunkValueKind @default(DECLARED)
+
+  value Decimal @db.Decimal(20, 4)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([metricTypeCode])
+  @@index([chunkId, valueKind, metricTypeCode])
 }
