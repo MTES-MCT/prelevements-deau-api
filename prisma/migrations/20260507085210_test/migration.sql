@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "DeclarantDeclarationType_declarantUserId_declarationTypeId_star" RENAME TO "DeclarantDeclarationType_declarantUserId_declarationTypeId__key";
