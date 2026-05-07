@@ -9,6 +9,7 @@ import {parse} from 'csv-parse'
 import {prisma} from '../../../db/prisma.js'
 import {closeQueues} from '../../../lib/queues/config.js'
 import {closeRedis} from '../../../lib/queues/redis.js'
+import {allowTemplateDeclarationTypeForDeclarant} from '../../../lib/models/declaration-type.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -309,6 +310,8 @@ async function importRow(row, fileSource, account) {
       }
     })
   }
+
+  await allowTemplateDeclarationTypeForDeclarant(declarantUserId)
 }
 
 async function importFile(filePath, accountsByTemplateDir) {
