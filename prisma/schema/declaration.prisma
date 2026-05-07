@@ -56,6 +56,44 @@ model DeclarationFile {
   createdAt DateTime @default(now())
 
   @@unique([storageKey])
-  @@unique([declarationId, type])
   @@index([declarationId])
+  @@index([type])
+}
+
+model DeclarationType {
+  id String @id @default(uuid()) @db.Uuid
+
+  code        String  @unique @db.Text
+  name        String  @db.Text
+  version     Int     @default(1)
+  isAvailable Boolean @default(true)
+
+  declarants DeclarantDeclarationType[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isAvailable])
+}
+
+model DeclarantDeclarationType {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarantUserId String    @db.Uuid
+  declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  declarationTypeId String          @db.Uuid
+  declarationType   DeclarationType @relation(fields: [declarationTypeId], references: [id], onDelete: Cascade)
+
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([declarantUserId, declarationTypeId, startDate])
+  @@index([declarantUserId])
+  @@index([declarationTypeId])
+  @@index([startDate])
+  @@index([endDate])
 }

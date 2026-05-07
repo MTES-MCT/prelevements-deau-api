@@ -39,6 +39,7 @@ model Declarant {
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
   declarations             Declaration[]
+  declarationTypes         DeclarantDeclarationType[]
   pointPrelevements        DeclarantPointPrelevement[]
   serviceAccountDeclarants ServiceAccountDeclarant[]
   serviceAccountTokens     ServiceAccountToken[]

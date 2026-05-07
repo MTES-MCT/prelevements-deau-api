@@ -2,6 +2,7 @@
 import '../lib/config/env.js'
 import {prisma} from '../db/prisma.js'
 import {randomUUID} from 'node:crypto'
+import {allowTemplateDeclarationTypeForDeclarant} from '../lib/models/declaration-type.js'
 
 const usersToCreate = [
   {
@@ -34,6 +35,8 @@ async function main() {
     },
     include: {declarant: true}
   })
+
+  await allowTemplateDeclarationTypeForDeclarant(declarantUser.declarant.userId)
 
   const instructorUser = await prisma.user.upsert({
     where: {email: usersToCreate[1].email},

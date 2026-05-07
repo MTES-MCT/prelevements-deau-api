@@ -4,6 +4,7 @@ import '../lib/config/env.js'
 import process, {argv} from 'node:process'
 import {prisma} from '../db/prisma.js'
 import {randomUUID} from 'node:crypto'
+import {allowTemplateDeclarationTypeForDeclarant} from '../lib/models/declaration-type.js'
 
 const VALID_ROLES = new Set(['DECLARANT', 'INSTRUCTOR'])
 
@@ -54,6 +55,10 @@ async function main() {
         instructor: true
       }
     })
+
+    if (createdUser.declarant) {
+      await allowTemplateDeclarationTypeForDeclarant(createdUser.declarant.userId)
+    }
 
     console.log('\u001B[32;1m%s\u001B[0m', '\n✓ Utilisateur créé avec succès\n')
     console.log('ID:', createdUser.id)

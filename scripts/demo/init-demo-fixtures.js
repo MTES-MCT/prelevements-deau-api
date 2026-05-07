@@ -1,5 +1,6 @@
 import '../../lib/config/env.js'
 import {prisma} from '../../db/prisma.js'
+import {allowTemplateDeclarationTypeForDeclarant} from '../../lib/models/declaration-type.js'
 
 const DEMO_SERIES = [
   {prefix: 'ougc', count: 50, waterBodyTypes: ['SOUTERRAIN', 'SURFACE'], labels: ['Forage', 'Pompage']},
@@ -191,6 +192,8 @@ async function upsertDeclarantAccount(config) {
       sourceId: config.sourceId
     }
   })
+
+  await allowTemplateDeclarationTypeForDeclarant(user.id)
 
   return user
 }
