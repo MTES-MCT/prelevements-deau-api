@@ -176,8 +176,19 @@ async function updateExploitationsForMapping(mapping, options) {
       id: true,
       declarantUserId: true,
       pointPrelevementId: true,
-      connectorType: true,
-      connectorParameters: true
+      connectors: {
+        where: {
+          connectorType: 'orange_live_objects'
+        },
+        select: {
+          id: true,
+          connectorParameters: true,
+          rate: true
+        },
+        orderBy: {
+          createdAt: 'asc'
+        }
+      }
     },
     orderBy: {
       createdAt: 'asc'
@@ -209,18 +220,37 @@ async function updateExploitationsForMapping(mapping, options) {
       }exploitation=${exploitation.id}, declarant=${exploitation.declarantUserId}`
     )
 
+    const existingConnector = exploitation.connectors.find(connector => {
+      const parameters = connector.connectorParameters
+
+      return parameters?.sourcePointId === mapping.sourcePointId
+    })
+
     if (!options.dryRun) {
-      await prisma.declarantPointPrelevement.update({
-        where: {
-          id: exploitation.id
-        },
-        data: {
-          connectorType: 'orange_live_objects',
-          connectorParameters: {
-            sourcePointId: mapping.sourcePointId
+      if (existingConnector) {
+        await prisma.declarantPointPrelevementConnector.update({
+          where: {
+            id: existingConnector.id
+          },
+          data: {
+            connectorParameters: {
+              sourcePointId: mapping.sourcePointId
+            },
+            rate: existingConnector.rate ?? 100
           }
-        }
-      })
+        })
+      } else {
+        await prisma.declarantPointPrelevementConnector.create({
+          data: {
+            declarantPointPrelevementId: exploitation.id,
+            connectorType: 'orange_live_objects',
+            connectorParameters: {
+              sourcePointId: mapping.sourcePointId
+            },
+            rate: 100
+          }
+        })
+      }
     }
 
     updatedCount++

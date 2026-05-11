@@ -109,10 +109,22 @@ Renvoie :
         "name": "26-1112"
       },
       "mostRecentAvailableDate": "2026-04-15T00:00:00.000Z",
+      "connectors": [
+        {
+          "id": "f1b4bd53-66fd-49fb-bb03-1f7662602f96",
+          "type": "orange_live_objects",
+          "rate": 70,
+          "parameters": {
+            "sourcePointId": "urn:lo:nsid:imei:359404232383910"
+          }
+        }
+      ],
       "connector": {
-        "type": "willie",
+        "id": "f1b4bd53-66fd-49fb-bb03-1f7662602f96",
+        "type": "orange_live_objects",
+        "rate": 70,
         "parameters": {
-          "plop": true
+          "sourcePointId": "urn:lo:nsid:imei:359404232383910"
         }
       }
     }
@@ -138,3 +150,14 @@ Renvoie :
 ## Utilisation du token JWT d'impersonnification pour pousser une déclaration
 
 TODO
+
+## Ingestion d'un connecteur API
+
+Le payload d'ingestion doit continuer à fournir `metadata.point_id`,
+`metadata.declarant_id` et `metadata.context_id`. Quand le contexte déclarant
+expose plusieurs connecteurs pouvant correspondre au même point, l'orchestrateur
+doit aussi transmettre `metadata.connector_id`.
+
+L'API applique le `rate` stocké sur le connecteur autorisé avant de créer les
+valeurs de prélèvement. Par exemple, avec un `rate` de `70`, une valeur entrante
+de `100 m³` sera importée comme `70 m³`.
