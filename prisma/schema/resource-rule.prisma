@@ -1,0 +1,57 @@
+enum ResourceRuleConstraint {
+  MIN
+  MAX
+}
+
+model ResourceRule {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarantUserId String    @db.Uuid
+  declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  documentId String?           @db.Uuid
+  document   ResourceDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  parameter  String                 @db.Text
+  frequency  String?                @db.Text
+  unit       String                 @db.Text
+  value      Float
+  constraint ResourceRuleConstraint
+
+  validityStartDate     DateTime  @db.Date
+  validityEndDate       DateTime? @db.Date
+  annualPeriodStartDate DateTime? @db.Date
+  annualPeriodEndDate   DateTime? @db.Date
+
+  comment String? @db.Text
+
+  exploitations ResourceRuleExploitation[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([declarantUserId])
+  @@index([documentId])
+  @@index([parameter])
+  @@index([constraint])
+  @@index([validityStartDate])
+  @@index([validityEndDate])
+  @@index([deletedAt])
+}
+
+model ResourceRuleExploitation {
+  id String @id @default(uuid()) @db.Uuid
+
+  resourceRuleId String       @db.Uuid
+  resourceRule   ResourceRule @relation(fields: [resourceRuleId], references: [id], onDelete: Cascade)
+
+  declarantPointPrelevementId String                    @db.Uuid
+  declarantPointPrelevement   DeclarantPointPrelevement @relation(fields: [declarantPointPrelevementId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([resourceRuleId, declarantPointPrelevementId])
+  @@index([resourceRuleId])
+  @@index([declarantPointPrelevementId])
+}

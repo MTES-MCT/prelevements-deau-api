@@ -52,36 +52,36 @@ model PointPrelevement {
 
   chunks Chunk[]
 
-  createdAt DateTime  @default(now())
-  codeBNPE        String? @db.Text
-  codeMESO        String? @db.Text
-  codeMEContinentalesBV String? @db.Text
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
-  otherNames             String?  @db.Text
-  depth                  Float?
-  isZre                  Boolean?
-  isBiologicalReservoir  Boolean?
-  streamName             String?  @db.Text
-  locationDescription    String?  @db.Text
-  geometryPrecision      String?  @db.Text
-  comment                String?  @db.Text
-  internalComment        String?  @db.Text
-  communeCode            String?  @db.Text
-  communeName            String?  @db.Text
+  otherNames            String?  @db.Text
+  depth                 Float?
+  isZre                 Boolean?
+  isBiologicalReservoir Boolean?
+  streamName            String?  @db.Text
+  locationDescription   String?  @db.Text
+  geometryPrecision     String?  @db.Text
+  comment               String?  @db.Text
+  internalComment       String?  @db.Text
+  communeCode           String?  @db.Text
+  communeName           String?  @db.Text
 
   sourceId String? @db.Text
 
-  codeEUMasseDEau String? @db.Text
-  codePTP         String? @db.Text
-  codeOPR         String? @db.Text
-  codeBDLISA      String? @db.Text
-  codeBSS         String? @db.Text
-  codeAIOT        String? @db.Text
-  codeBDCarthage  String? @db.Text
-  codeBDTopage    String? @db.Text
-  codeSISPEA      String? @db.Text
+  codeEUMasseDEau        String? @db.Text
+  codePTP                String? @db.Text
+  codeOPR                String? @db.Text
+  codeBDLISA             String? @db.Text
+  codeBSS                String? @db.Text
+  codeAIOT               String? @db.Text
+  codeBDCarthage         String? @db.Text
+  codeBDTopage           String? @db.Text
+  codeSISPEA             String? @db.Text
+  codeBNPE               String? @db.Text
+  codeMESO               String? @db.Text
+  codeMEContinentalesBV  String? @db.Text
 
   @@unique([sourceId])
   @@unique([name])
@@ -110,7 +110,6 @@ model DeclarantPointPrelevement {
 
   declarantUserId String    @db.Uuid
   declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
-  documents  ResourceDocument[]
 
   pointPrelevementId String           @db.Uuid
   pointPrelevement   PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Cascade)
@@ -133,6 +132,8 @@ model DeclarantPointPrelevement {
   mostRecentAvailableDate DateTime? @db.Date
 
   connectors DeclarantPointPrelevementConnector[]
+  documents  ResourceDocument[]
+  rules      ResourceRuleExploitation[]
 
   @@unique([sourceId])
   @@unique([declarantUserId, pointPrelevementId])
