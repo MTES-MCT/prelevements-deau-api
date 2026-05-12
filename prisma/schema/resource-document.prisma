@@ -1,0 +1,32 @@
+model ResourceDocument {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarantUserId String?    @db.Uuid
+  declarant       Declarant? @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  declarantPointPrelevementId String?                    @db.Uuid
+  declarantPointPrelevement   DeclarantPointPrelevement? @relation(fields: [declarantPointPrelevementId], references: [id], onDelete: SetNull)
+
+  title     String? @db.Text
+  reference String? @db.Text
+  nature    String? @db.Text
+  comment   String? @db.Text
+
+  signatureDate DateTime? @db.Date
+  validityEndDate DateTime? @db.Date
+
+  filename   String @db.Text
+  mimeType   String? @db.Text
+  size       Int?
+  storageKey String @unique @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@index([declarantUserId])
+  @@index([declarantPointPrelevementId])
+  @@index([nature])
+  @@index([signatureDate])
+  @@index([deletedAt])
+}

@@ -79,7 +79,8 @@ model Declarant {
 
   phoneNumber String? @db.Text
 
-  sourceId String? @db.Text
+  sourceId          String?            @db.Text
+  resourceDocuments ResourceDocument[]
 
   @@unique([sourceId])
 }

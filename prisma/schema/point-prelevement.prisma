@@ -44,7 +44,7 @@ model PointPrelevement {
   name          String         @db.Text
   waterBodyType WaterBodyType?
 
-  coordinates Unsupported("geometry(Point,4326)")
+  coordinates Unsupported("geometry(Point,4326)")?
 
   zones      PointPrelevementZone[]
   declarants DeclarantPointPrelevement[]
@@ -53,8 +53,23 @@ model PointPrelevement {
   chunks Chunk[]
 
   createdAt DateTime  @default(now())
+  codeBNPE        String? @db.Text
+  codeMESO        String? @db.Text
+  codeMEContinentalesBV String? @db.Text
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+
+  otherNames             String?  @db.Text
+  depth                  Float?
+  isZre                  Boolean?
+  isBiologicalReservoir  Boolean?
+  streamName             String?  @db.Text
+  locationDescription    String?  @db.Text
+  geometryPrecision      String?  @db.Text
+  comment                String?  @db.Text
+  internalComment        String?  @db.Text
+  communeCode            String?  @db.Text
+  communeName            String?  @db.Text
 
   sourceId String? @db.Text
 
@@ -95,6 +110,7 @@ model DeclarantPointPrelevement {
 
   declarantUserId String    @db.Uuid
   declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+  documents  ResourceDocument[]
 
   pointPrelevementId String           @db.Uuid
   pointPrelevement   PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Cascade)
