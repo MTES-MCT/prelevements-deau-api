@@ -7,21 +7,23 @@ model ResourceDocument {
   declarantPointPrelevementId String?                    @db.Uuid
   declarantPointPrelevement   DeclarantPointPrelevement? @relation(fields: [declarantPointPrelevementId], references: [id], onDelete: SetNull)
 
+  rules ResourceRule[]
+
   title     String? @db.Text
   reference String? @db.Text
   nature    String? @db.Text
   comment   String? @db.Text
 
-  signatureDate DateTime? @db.Date
+  signatureDate   DateTime? @db.Date
   validityEndDate DateTime? @db.Date
 
-  filename   String @db.Text
+  filename   String  @db.Text
   mimeType   String? @db.Text
   size       Int?
-  storageKey String @unique @db.Text
+  storageKey String  @unique @db.Text
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   @@index([declarantUserId])

@@ -60,6 +60,9 @@ model Declarant {
   serviceAccountTokens     ServiceAccountToken[]
   apiImports               ApiImport[]
 
+  resourceDocuments ResourceDocument[]
+  resourceRules     ResourceRule[]
+
   lastDeclarationAt      DateTime?
   lastReminderMailSentAt DateTime?
 
@@ -79,8 +82,7 @@ model Declarant {
 
   phoneNumber String? @db.Text
 
-  sourceId          String?            @db.Text
-  resourceDocuments ResourceDocument[]
+  sourceId String? @db.Text
 
   @@unique([sourceId])
 }
