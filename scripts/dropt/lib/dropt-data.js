@@ -63,13 +63,13 @@ const COLUMN_ALIASES = {
   parcelle: ['parcelle'],
   coordX: ['Coordonnee X', 'Coordonnée X'],
   coordY: ['Coordonnee Y', 'Coordonnée Y'],
-  communeOuvrage: ["commune de l'ouvrage"],
-  usagePrincipal: ["Usage de l'eau principal"],
+  communeOuvrage: ['commune de l\'ouvrage'],
+  usagePrincipal: ['Usage de l\'eau principal'],
   typeRessourcePrelevement: ['Type de ressource de prelevement', 'Type de ressource de prélèvement'],
   typeRessourcePar: ['TYPE DE RESSOURCE DANS LE PAR'],
   ressourceLocale: ['Libelle local de la ressource de prelevement', 'Libellé local de la ressource de prélèvement'],
   methodeRemplissage: ['Methode de remplissage', 'Méthode de remplissage'],
-  volumeNominalStockage: ["Volume nominal (en m3) de l'unite de stockage temporaire de prelevement", "Volume nominal (en m3) de l'unité de stockage temporaire de prélèvement"],
+  volumeNominalStockage: ['Volume nominal (en m3) de l\'unite de stockage temporaire de prelevement', 'Volume nominal (en m3) de l\'unité de stockage temporaire de prélèvement'],
   compteurReference: ['Reference dispositif de comptage (N° de serie)', 'Référence dispositif de comptage (N° de série)'],
   compteurType: ['TYPE COMPTEUR'],
   compteurDateInstallation: ['Date installation'],
@@ -109,8 +109,8 @@ export function clean(value) {
   }
 
   const raw = String(value)
-    .replace(/\u00A0/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replaceAll('\u00A0', ' ')
+    .replaceAll(/\s+/g, ' ')
     .trim()
 
   return raw || null
@@ -149,10 +149,10 @@ function cellToText(value) {
 export function normalizeLookup(value) {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036F]/g, '')
-    .replace(/[’‘]/g, "'")
-    .replace(/[–—]/g, '-')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/[\u0300-\u036F]/g, '')
+    .replaceAll(/[’‘]/g, '\'')
+    .replaceAll(/[–—]/g, '-')
+    .replaceAll(/\s+/g, ' ')
     .trim()
     .toLocaleLowerCase('fr-FR')
 }
@@ -160,10 +160,10 @@ export function normalizeLookup(value) {
 export function slug(value) {
   const s = String(clean(value) ?? 'non-renseigne')
     .normalize('NFD')
-    .replace(/[\u0300-\u036F]/g, '')
+    .replaceAll(/[\u0300-\u036F]/g, '')
     .toLocaleLowerCase('fr-FR')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replaceAll(/[^a-z\d]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '')
     .slice(0, 120)
 
   return s || 'non-renseigne'
@@ -176,7 +176,7 @@ export function parseNumber(value) {
   }
 
   const normalized = raw
-    .replace(/\s/g, '')
+    .replaceAll(/\s/g, '')
     .replace(',', '.')
 
   const n = Number(normalized)
@@ -189,7 +189,7 @@ export function normalizeSiret(value) {
     return null
   }
 
-  const digits = raw.replace(/\D/g, '')
+  const digits = raw.replaceAll(/\D/g, '')
   if (!digits || /^0+$/.test(digits)) {
     return null
   }
@@ -205,7 +205,7 @@ function normalizeIdentifier(value) {
 
   return raw
     .replace(/\.0$/, '')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/\s+/g, ' ')
     .trim()
 }
 
@@ -445,7 +445,7 @@ function oneDigitDeletionNumbers(rawValue) {
   }
 
   const sign = raw.trim().startsWith('-') ? '-' : ''
-  const digits = raw.replace(/\D/g, '')
+  const digits = raw.replaceAll(/\D/g, '')
   if (digits.length < 8) {
     return []
   }
