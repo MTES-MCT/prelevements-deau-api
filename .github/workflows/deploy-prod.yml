@@ -70,7 +70,7 @@ jobs:
 
       - name: Install Scaleway CLI
         run: |
-          curl -fsSL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | VERSION=2.56.0 sh
           scw version
 
       - name: Run DB migrations (blocking)
@@ -99,7 +99,7 @@ jobs:
           SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
           scw container container update "$SCW_SERVERLESS_CONTAINER_ID_PROD_API" \
-            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest"
+            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest"
 
       - name: Deploy WORKER to Scaleway Serverless Container (prod)
         env:
@@ -112,6 +112,6 @@ jobs:
           SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
           scw container container update "$SCW_SERVERLESS_CONTAINER_ID_PROD_WORKER" \
-            registry-image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest" \
+            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest" \
             command.0=node \
             command.1=worker.js

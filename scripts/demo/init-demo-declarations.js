@@ -19,6 +19,7 @@ import {addJobProcessDeclaration} from '../../lib/queues/jobs.js'
 import {closeQueues} from '../../lib/queues/config.js'
 import {closeRedis} from '../../lib/queues/redis.js'
 import {updateLastDeclarationAt} from '../../lib/models/declarant.js'
+import {notifyDeclarationUploaded} from "../../lib/services/orchestration-client.js";
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -411,7 +412,7 @@ async function upsertDeclarationAndReplaceFile({
       }
     })
 
-    await addJobProcessDeclaration(declaration.id)
+    await notifyDeclarationUploaded({declarationId: declaration.id})
 
     return declaration
   } catch (error) {
