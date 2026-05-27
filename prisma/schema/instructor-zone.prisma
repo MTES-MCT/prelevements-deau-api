@@ -11,6 +11,8 @@ model InstructorZone {
   startDate DateTime  @db.Date
   endDate   DateTime? @db.Date
 
+  zoneAttachmentMailSentAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -12,10 +12,11 @@ model User {
   firstName String?
   lastName  String?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-  lastLoginAt DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
+  lastLoginAt               DateTime?
+  accountCreationMailSentAt DateTime?
 
   declarant  Declarant?  @relation("UserDeclarant")
   instructor Instructor? @relation("UserInstructor")
