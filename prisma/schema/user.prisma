@@ -6,7 +6,7 @@ enum UserRole {
 
 model User {
   id    String   @id @default(uuid()) @db.Uuid
-  email String   @unique @db.Citext
+  email String?  @unique @db.Citext
   role  UserRole
 
   firstName String?
@@ -45,6 +45,11 @@ enum DeclarantType {
   LEGAL_PERSON
 }
 
+enum DeclarantRole {
+  PRELEVEUR
+  COLLECTEUR
+}
+
 enum Civility {
   MR
   MRS
@@ -54,9 +59,11 @@ model Declarant {
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
-  declarations             Declaration[]
+  declarations             Declaration[]                    @relation("DeclarationDeclarant")
+  declarationsCreated      Declaration[]                    @relation("DeclarationCreatedByDeclarant")
   declarationTypes         DeclarantDeclarationType[]
   pointPrelevements        DeclarantPointPrelevement[]
+  collecteurExploitations  DeclarantCollecteurExploitation[] @relation("CollecteurDeclarant")
   serviceAccountDeclarants ServiceAccountDeclarant[]
   serviceAccountTokens     ServiceAccountToken[]
   apiImports               ApiImport[]
@@ -68,6 +75,7 @@ model Declarant {
   lastReminderMailSentAt DateTime?
 
   declarantType DeclarantType @default(NATURAL_PERSON)
+  declarantRole DeclarantRole @default(PRELEVEUR)
 
   jobTitle     String? @db.Text
   socialReason String? @db.Text
@@ -86,6 +94,7 @@ model Declarant {
   sourceId String? @db.Text
 
   @@unique([sourceId])
+  @@index([declarantRole])
 }
 
 model Instructor {

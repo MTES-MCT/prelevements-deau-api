@@ -2,9 +2,14 @@ model Declaration {
   id   String @id @default(uuid()) @db.Uuid
   code String @unique @db.VarChar(6)
 
-  // Relation déclarant
+  // Déclarant métier : le préleveur pour lequel les volumes sont déclarés.
   declarantUserId String    @db.Uuid
-  declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+  declarant       Declarant @relation("DeclarationDeclarant", fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  // Auteur technique : le compte qui a déposé la déclaration.
+  // Il est différent de declarantUserId lorsqu'un collecteur déclare pour un préleveur.
+  createdByDeclarantUserId String?    @db.Uuid
+  createdByDeclarant       Declarant? @relation("DeclarationCreatedByDeclarant", fields: [createdByDeclarantUserId], references: [userId], onDelete: SetNull)
 
   // Fichiers liés
   files DeclarationFile[]
@@ -30,6 +35,7 @@ model Declaration {
 
   @@unique([importSourceId])
   @@index([declarantUserId])
+  @@index([createdByDeclarantUserId])
   @@index([dataSourceType])
   @@index([waterWithdrawalType])
   @@index([consolidatedAt])

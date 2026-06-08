@@ -1,9 +1,3 @@
-enum DeclarantPointPrelevementType {
-  PRELEVEUR_DECLARANT
-  PRELEVEUR_NON_DECLARANT
-  COLLECTEUR
-}
-
 enum DeclarantPointPrelevementStatus {
   EN_ACTIVITE
   NON_RENSEIGNE
@@ -114,8 +108,6 @@ model DeclarantPointPrelevement {
   pointPrelevementId String           @db.Uuid
   pointPrelevement   PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Cascade)
 
-  type DeclarantPointPrelevementType
-
   status    DeclarantPointPrelevementStatus @default(NON_RENSEIGNE)
   startDate DateTime?                       @db.Date
   endDate   DateTime?                       @db.Date
@@ -132,6 +124,7 @@ model DeclarantPointPrelevement {
   mostRecentAvailableDate DateTime? @db.Date
 
   connectors DeclarantPointPrelevementConnector[]
+  collecteurs DeclarantCollecteurExploitation[]
   documents  ResourceDocument[]
   rules      ResourceRuleExploitation[]
 
@@ -139,11 +132,27 @@ model DeclarantPointPrelevement {
   @@unique([declarantUserId, pointPrelevementId])
   @@index([declarantUserId])
   @@index([pointPrelevementId])
-  @@index([type])
   @@index([status])
   @@index([startDate])
   @@index([endDate])
   @@index([usages], type: Gin)
+}
+
+model DeclarantCollecteurExploitation {
+  id String @id @default(uuid()) @db.Uuid
+
+  collecteurUserId String    @db.Uuid
+  collecteur       Declarant @relation("CollecteurDeclarant", fields: [collecteurUserId], references: [userId], onDelete: Cascade)
+
+  exploitationId String                    @db.Uuid
+  exploitation   DeclarantPointPrelevement @relation(fields: [exploitationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([collecteurUserId, exploitationId])
+  @@index([collecteurUserId])
+  @@index([exploitationId])
 }
 
 model DeclarantPointPrelevementConnector {
