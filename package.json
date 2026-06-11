@@ -9,6 +9,7 @@
     "start-dev": "nodemon --watch './**/*.js' --exec 'node api.js'",
     "start:worker": "node worker.js",
     "import-reference-data": "node scripts/import-reference-data.js",
+    "import-bvtech": "node scripts/import-bvtech.js",
     "migrate:prisma": "prisma migrate deploy",
     "user:create": "node scripts/create-user.js",
     "lint": "xo",

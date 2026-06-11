@@ -28,8 +28,24 @@ enum UsageEau {
 
 enum WaterBodyType {
   SURFACE
+  SUPERFICIELLE
   SOUTERRAIN
   TRANSITION
+}
+
+enum PointPrelevementNature {
+  NAPPE
+  NAPPE_ACCOMPAGNEMENT
+  COURS_EAU
+  SOURCE
+  PLAN_EAU
+}
+
+enum PrelevementType {
+  LITTORAL
+  CONTINENTAL
+  SOUTERRAIN
+  STOCKAGE
 }
 
 model PointPrelevement {
@@ -37,6 +53,9 @@ model PointPrelevement {
 
   name          String         @db.Text
   waterBodyType WaterBodyType?
+
+  nature         PointPrelevementNature?
+  withdrawalType PrelevementType?
 
   coordinates Unsupported("geometry(Point,4326)")?
 
@@ -50,32 +69,44 @@ model PointPrelevement {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
-  otherNames            String?  @db.Text
+  otherNames            String? @db.Text
+  names                 Json    @default("[]") @db.Json
+  identifiers           Json    @default("{}") @db.Json
   depth                 Float?
   isZre                 Boolean?
   isBiologicalReservoir Boolean?
-  streamName            String?  @db.Text
-  locationDescription   String?  @db.Text
-  geometryPrecision     String?  @db.Text
-  comment               String?  @db.Text
-  internalComment       String?  @db.Text
-  communeCode           String?  @db.Text
-  communeName           String?  @db.Text
+  streamName            String? @db.Text
+  locationDescription   String? @db.Text
+  geometryPrecision     String? @db.Text
+  comment               String? @db.Text
+  internalComment       String? @db.Text
+  communeCode           String? @db.Text
+  communeName           String? @db.Text
+
+  watershed       String? @db.Text
+  underWatershed  String? @db.Text
+  resourceName    String? @db.Text
+  managementUnit  String? @db.Text
+  managementSubUnit String? @db.Text
+  aquiferName     String? @db.Text
 
   sourceId String? @db.Text
 
-  codeEUMasseDEau        String? @db.Text
-  codePTP                String? @db.Text
-  codeOPR                String? @db.Text
-  codeBDLISA             String? @db.Text
-  codeBSS                String? @db.Text
-  codeAIOT               String? @db.Text
-  codeBDCarthage         String? @db.Text
-  codeBDTopage           String? @db.Text
-  codeSISPEA             String? @db.Text
-  codeBNPE               String? @db.Text
-  codeMESO               String? @db.Text
-  codeMEContinentalesBV  String? @db.Text
+  codeEUMasseDEau       String? @db.Text
+  codePTP               String? @db.Text
+  codeOPR               String? @db.Text
+  codeBDLISA            String? @db.Text
+  codeBSS               String? @db.Text
+  codeAIOT              String? @db.Text
+  codeBDCarthage        String? @db.Text
+  codeBDTopage          String? @db.Text
+  codeSISPEA            String? @db.Text
+  codeBNPE              String? @db.Text
+  codeMESO              String? @db.Text
+  codeMEContinentalesBV String? @db.Text
+  codeSISEAUX           String? @db.Text
+  codeINSEE             String? @db.Text
+  codeROE               String? @db.Text
 
   @@unique([sourceId])
   @@unique([name])
@@ -123,10 +154,10 @@ model DeclarantPointPrelevement {
 
   mostRecentAvailableDate DateTime? @db.Date
 
-  connectors DeclarantPointPrelevementConnector[]
+  connectors  DeclarantPointPrelevementConnector[]
   collecteurs DeclarantCollecteurExploitation[]
-  documents  ResourceDocument[]
-  rules      ResourceRuleExploitation[]
+  documents   ResourceDocument[]
+  rules       ResourceRuleExploitation[]
 
   @@unique([sourceId])
   @@unique([declarantUserId, pointPrelevementId])
