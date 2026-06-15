@@ -1,4 +1,3 @@
-
 import '../../lib/config/env.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -8,6 +7,9 @@ import {prisma} from '../../db/prisma.js'
 
 const DEFAULT_CSV_PATH
   = 'data/blv/pisciculteurs-template-file/orange-live-objects-connectors.csv'
+
+const CONNECTOR_TYPE = 'orange_live_objects'
+const CONNECTOR_LABEL = 'orange'
 
 function parseArgValue(args, argName) {
   const arg = args.find(item => item.startsWith(`--${argName}=`))
@@ -45,6 +47,18 @@ function detectDelimiter(content) {
   return firstLine.includes(';') ? ';' : ','
 }
 
+function normalizeRate(value, rowNumber) {
+  const rate = Number(String(value ?? '100').replace(',', '.'))
+
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 100) {
+    throw new Error(
+      `[${CONNECTOR_LABEL}] Ligne CSV #${rowNumber}: rate invalide "${value}". Valeur attendue: > 0 et <= 100.`
+    )
+  }
+
+  return rate
+}
+
 async function readMappings(csvPath) {
   const absolutePath = path.resolve(csvPath)
   const content = await fs.readFile(absolutePath, 'utf8')
@@ -59,8 +73,13 @@ async function readMappings(csvPath) {
   })
 
   return rows.map((row, index) => {
+    const rowNumber = index + 2
+
     const pointName = getColumn(row, [
       'point_name',
+      'PP identifié',
+      'PP identifie',
+      'pp_identifie',
       'nom_forage',
       'Nom forage',
       'nom_point',
@@ -68,7 +87,7 @@ async function readMappings(csvPath) {
       'Point'
     ])
 
-    const sourcePointId = getColumn(row, [
+    const liveObjectsStreamId = getColumn(row, [
       'live_objects_stream_id',
       'identifiant_live_objects',
       'Identifiant Live Objects',
@@ -77,27 +96,92 @@ async function readMappings(csvPath) {
       'stream_id'
     ])
 
-    if (!pointName) {
-      throw new Error(`Ligne CSV #${index + 2}: colonne point_name manquante`)
-    }
+    const rate = normalizeRate(getColumn(row, ['rate', 'ratio']), rowNumber)
 
-    if (!sourcePointId) {
+    if (!pointName) {
       throw new Error(
-        `Ligne CSV #${index + 2}: colonne live_objects_stream_id manquante`
+        `[${CONNECTOR_LABEL}] Ligne CSV #${rowNumber}: colonne point_name manquante`
       )
     }
 
-    if (!sourcePointId.startsWith('urn:lo:nsid:imei:')) {
+    if (!liveObjectsStreamId) {
       throw new Error(
-        `Ligne CSV #${index + 2}: identifiant Live Objects invalide: ${sourcePointId}`
+        `[${CONNECTOR_LABEL}] Ligne CSV #${rowNumber}: colonne live_objects_stream_id manquante`
+      )
+    }
+
+    if (!liveObjectsStreamId.startsWith('urn:lo:nsid:imei:')) {
+      throw new Error(
+        `[${CONNECTOR_LABEL}] Ligne CSV #${rowNumber}: identifiant Live Objects invalide "${liveObjectsStreamId}"`
       )
     }
 
     return {
       pointName,
-      sourcePointId
+      sourcePointId: liveObjectsStreamId,
+      liveObjectsStreamId,
+      rate
     }
   })
+}
+
+function validateMappings(mappings) {
+  const seenMappingKeys = new Set()
+  const duplicateMappings = []
+  const ratesBySourcePointId = new Map()
+
+  for (const mapping of mappings) {
+    const key = `${mapping.sourcePointId}:${normalizeName(mapping.pointName)}`
+
+    if (seenMappingKeys.has(key)) {
+      duplicateMappings.push(`${mapping.sourcePointId} -> ${mapping.pointName}`)
+    }
+
+    seenMappingKeys.add(key)
+
+    const rates = ratesBySourcePointId.get(mapping.sourcePointId) ?? []
+    rates.push(mapping.rate)
+    ratesBySourcePointId.set(mapping.sourcePointId, rates)
+  }
+
+  if (duplicateMappings.length > 0) {
+    throw new Error(
+      `[${CONNECTOR_LABEL}] Mappings dupliqués dans le CSV: ${duplicateMappings.join(', ')}`
+    )
+  }
+
+  for (const [sourcePointId, rates] of ratesBySourcePointId.entries()) {
+    const total = rates.reduce((sum, rate) => sum + rate, 0)
+
+    if (total > 100) {
+      throw new Error(
+        `[${CONNECTOR_LABEL}] Le total des ratios du connecteur ${sourcePointId} dépasse 100%: ${total}%.`
+      )
+    }
+
+    if (rates.length > 1 && Math.abs(total - 100) > 0.000_001) {
+      throw new Error(
+        `[${CONNECTOR_LABEL}] Le connecteur ${sourcePointId} est partagé entre plusieurs PP, mais le total des ratios vaut ${total}% au lieu de 100%.`
+      )
+    }
+  }
+}
+
+function groupMappingsByPointName(mappings) {
+  const groupedMappings = new Map()
+
+  for (const mapping of mappings) {
+    const key = normalizeName(mapping.pointName)
+    const group = groupedMappings.get(key) ?? {
+      pointName: mapping.pointName,
+      mappings: []
+    }
+
+    group.mappings.push(mapping)
+    groupedMappings.set(key, group)
+  }
+
+  return [...groupedMappings.values()]
 }
 
 async function findPointByName(pointName) {
@@ -146,7 +230,7 @@ async function findPointByName(pointName) {
 
   if (candidates.length > 1) {
     console.warn(
-      `[orange] Plusieurs points candidats pour "${pointName}", aucun choix automatique:`
+      `[${CONNECTOR_LABEL}] Plusieurs points candidats pour "${pointName}", aucun choix automatique:`
     )
 
     for (const candidate of candidates) {
@@ -157,14 +241,78 @@ async function findPointByName(pointName) {
   return null
 }
 
-async function updateExploitationsForMapping(mapping, options) {
-  const point = await findPointByName(mapping.pointName)
+function getSourcePointIdFromConnector(connector) {
+  const parameters = connector.connectorParameters
+
+  if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
+    return null
+  }
+
+  const sourcePointId = [
+    parameters.sourcePointId,
+    parameters.liveObjectsStreamId,
+    parameters.live_objects_stream_id,
+    parameters.streamId
+  ].find(value => typeof value === 'string' && value.trim())
+
+  return sourcePointId ?? null
+}
+
+function buildConnectorParameters(mapping) {
+  return {
+    sourcePointId: mapping.sourcePointId,
+    liveObjectsStreamId: mapping.liveObjectsStreamId
+  }
+}
+
+async function upsertConnectorForExploitation(exploitation, mapping, options) {
+  const existingConnector = exploitation.connectors.find(
+    connector => getSourcePointIdFromConnector(connector) === mapping.sourcePointId
+  )
+
+  const connectorParameters = buildConnectorParameters(mapping)
+
+  if (options.dryRun) {
+    console.log(
+      `[${CONNECTOR_LABEL}] [dry-run] exploitation=${exploitation.id}, declarant=${exploitation.declarantUserId}, stream=${mapping.sourcePointId}, rate=${mapping.rate}`
+    )
+
+    return
+  }
+
+  if (existingConnector) {
+    await prisma.declarantPointPrelevementConnector.update({
+      where: {
+        id: existingConnector.id
+      },
+      data: {
+        connectorParameters,
+        rate: mapping.rate
+      }
+    })
+
+    return
+  }
+
+  await prisma.declarantPointPrelevementConnector.create({
+    data: {
+      declarantPointPrelevementId: exploitation.id,
+      connectorType: CONNECTOR_TYPE,
+      connectorParameters,
+      rate: mapping.rate
+    }
+  })
+}
+
+async function updateExploitationsForPointMappings(pointMappings, options) {
+  const point = await findPointByName(pointMappings.pointName)
 
   if (!point) {
-    console.warn(`[orange] Point introuvable: "${mapping.pointName}"`)
+    console.warn(`[${CONNECTOR_LABEL}] Point introuvable: "${pointMappings.pointName}"`)
+
     return {
       pointFound: false,
-      updatedCount: 0
+      updatedConnectorCount: 0
     }
   }
 
@@ -178,7 +326,7 @@ async function updateExploitationsForMapping(mapping, options) {
       pointPrelevementId: true,
       connectors: {
         where: {
-          connectorType: 'orange_live_objects'
+          connectorType: CONNECTOR_TYPE
         },
         select: {
           id: true,
@@ -197,68 +345,38 @@ async function updateExploitationsForMapping(mapping, options) {
 
   if (exploitations.length === 0) {
     console.warn(
-      `[orange] Aucune exploitation pour le point "${point.name}" (${point.id})`
+      `[${CONNECTOR_LABEL}] Aucune exploitation pour le point "${point.name}" (${point.id})`
     )
 
     return {
       pointFound: true,
-      updatedCount: 0
+      updatedConnectorCount: 0
     }
   }
 
   console.log(
-    `[orange] Point "${point.name}" (${point.id}) -> ${mapping.sourcePointId}`
+    `[${CONNECTOR_LABEL}] Point "${point.name}" (${point.id}) -> ${pointMappings.mappings.length} connecteur(s)`
   )
-  console.log(`[orange] Exploitations trouvées: ${exploitations.length}`)
+  console.log(`[${CONNECTOR_LABEL}] Exploitations trouvées: ${exploitations.length}`)
 
-  let updatedCount = 0
+  let updatedConnectorCount = 0
 
   for (const exploitation of exploitations) {
     console.log(
-      `[orange] ${
+      `[${CONNECTOR_LABEL}] ${
         options.dryRun ? '[dry-run] ' : ''
       }exploitation=${exploitation.id}, declarant=${exploitation.declarantUserId}`
     )
 
-    const existingConnector = exploitation.connectors.find(connector => {
-      const parameters = connector.connectorParameters
-
-      return parameters?.sourcePointId === mapping.sourcePointId
-    })
-
-    if (!options.dryRun) {
-      if (existingConnector) {
-        await prisma.declarantPointPrelevementConnector.update({
-          where: {
-            id: existingConnector.id
-          },
-          data: {
-            connectorParameters: {
-              sourcePointId: mapping.sourcePointId
-            },
-            rate: existingConnector.rate ?? 100
-          }
-        })
-      } else {
-        await prisma.declarantPointPrelevementConnector.create({
-          data: {
-            declarantPointPrelevementId: exploitation.id,
-            connectorType: 'orange_live_objects',
-            connectorParameters: {
-              sourcePointId: mapping.sourcePointId
-            },
-            rate: 100
-          }
-        })
-      }
+    for (const mapping of pointMappings.mappings) {
+      await upsertConnectorForExploitation(exploitation, mapping, options)
+      updatedConnectorCount++
     }
-
-    updatedCount++
   }
 
   return {
     pointFound: true,
-    updatedCount
+    updatedConnectorCount
   }
 }
 
@@ -267,41 +385,28 @@ async function main() {
   const dryRun = args.includes('--dry-run')
   const csvPath = parseArgValue(args, 'file') ?? DEFAULT_CSV_PATH
 
-  console.log(`[orange] CSV: ${csvPath}`)
-  console.log(`[orange] Mode: ${dryRun ? 'dry-run' : 'apply'}`)
+  console.log(`[${CONNECTOR_LABEL}] CSV: ${csvPath}`)
+  console.log(`[${CONNECTOR_LABEL}] Mode: ${dryRun ? 'dry-run' : 'apply'}`)
   console.log('')
 
   const mappings = await readMappings(csvPath)
 
   if (mappings.length === 0) {
-    throw new Error(`[orange] Aucun mapping trouvé dans ${csvPath}`)
+    throw new Error(`[${CONNECTOR_LABEL}] Aucun mapping trouvé dans ${csvPath}`)
   }
 
-  const seenPointNames = new Set()
-  const duplicatePointNames = []
+  validateMappings(mappings)
 
-  for (const mapping of mappings) {
-    const key = normalizeName(mapping.pointName)
-
-    if (seenPointNames.has(key)) {
-      duplicatePointNames.push(mapping.pointName)
-    }
-
-    seenPointNames.add(key)
-  }
-
-  if (duplicatePointNames.length > 0) {
-    throw new Error(
-      `[orange] Points dupliqués dans le CSV: ${duplicatePointNames.join(', ')}`
-    )
-  }
+  const groupedMappings = groupMappingsByPointName(mappings)
 
   let foundPoints = 0
   let missingPoints = 0
-  let updatedExploitations = 0
+  let updatedConnectors = 0
 
-  for (const mapping of mappings) {
-    const result = await updateExploitationsForMapping(mapping, {dryRun})
+  for (const pointMappings of groupedMappings) {
+    const result = await updateExploitationsForPointMappings(pointMappings, {
+      dryRun
+    })
 
     if (result.pointFound) {
       foundPoints++
@@ -309,15 +414,16 @@ async function main() {
       missingPoints++
     }
 
-    updatedExploitations += result.updatedCount
+    updatedConnectors += result.updatedConnectorCount
   }
 
   console.log('')
-  console.log('[orange] Résumé')
+  console.log(`[${CONNECTOR_LABEL}] Résumé`)
   console.log(`- mappings lus: ${mappings.length}`)
+  console.log(`- points distincts dans le CSV: ${groupedMappings.length}`)
   console.log(`- points trouvés: ${foundPoints}`)
   console.log(`- points introuvables: ${missingPoints}`)
-  console.log(`- exploitations ${dryRun ? 'à mettre à jour' : 'mises à jour'}: ${updatedExploitations}`)
+  console.log(`- connecteurs ${dryRun ? 'à créer/mettre à jour' : 'créés/mis à jour'}: ${updatedConnectors}`)
 }
 
 try {
