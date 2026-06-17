@@ -64,6 +64,8 @@ model Chunk {
   pointPrelevementId String?           @db.Uuid
   pointPrelevement   PointPrelevement? @relation(fields: [pointPrelevementId], references: [id], onDelete: SetNull)
 
+  usage UsageEau?
+
   instructionStatus            ChunkInstructionStatus @default(PENDING)
   instructedAt                 DateTime?
   instructedByInstructorUserId String?                @db.Uuid
@@ -83,6 +85,7 @@ model Chunk {
   updatedAt DateTime @updatedAt
 
   @@index([instructionStatus])
+  @@index([usage])
 }
 
 enum ChunkValueKind {
