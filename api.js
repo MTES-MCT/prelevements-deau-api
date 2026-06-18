@@ -21,6 +21,7 @@ validateEmailConfig()
 
 const PORT = process.env.PORT || 5000
 const DEV = process.env.NODE_ENV !== 'production'
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '50mb'
 
 const app = express()
 
@@ -38,7 +39,7 @@ if (DEV) {
 }
 
 // Setup JSON parsing
-app.use(express.json())
+app.use(express.json({limit: JSON_BODY_LIMIT}))
 
 // Ensure body is always an object
 app.use((req, res, next) => {
