@@ -138,9 +138,13 @@ model SessionToken {
   userId String @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  impersonatedByUserId String?   @db.Uuid
+  impersonatedByRole   UserRole?
+
   createdAt DateTime @default(now())
   expiresAt DateTime
 
   @@index([userId])
+  @@index([impersonatedByUserId])
   @@index([expiresAt])
 }
