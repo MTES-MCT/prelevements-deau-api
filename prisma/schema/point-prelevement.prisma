@@ -143,6 +143,7 @@ model DeclarantPointPrelevement {
   startDate DateTime?                       @db.Date
   endDate   DateTime?                       @db.Date
   usages    UsageEau[]                      @default([])
+  pointPrelevementNameAliases String[]      @default([])
 
   abandonReason String? @db.Text
   comment       String? @db.Text
@@ -167,6 +168,7 @@ model DeclarantPointPrelevement {
   @@index([startDate])
   @@index([endDate])
   @@index([usages], type: Gin)
+  @@index([pointPrelevementNameAliases], type: Gin)
 }
 
 model DeclarantCollecteurExploitation {
