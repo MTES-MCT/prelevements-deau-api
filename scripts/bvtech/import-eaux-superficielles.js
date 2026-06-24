@@ -10,7 +10,6 @@ import {deburr} from 'lodash-es'
 import proj4 from 'proj4'
 
 import {prisma} from '../../db/prisma.js'
-import {allowDeclarationTypeForDeclarant} from '../../lib/models/declaration-type.js'
 import {
   insertPointPrelevement,
   updatePointPrelevementById
@@ -19,8 +18,6 @@ import {
 const DEFAULT_INPUT = 'data/bvtech/bvtech-eaux-superficielles.xlsx'
 const DEFAULT_INPUT_FILENAME = 'bvtech-eaux-superficielles.xlsx'
 const SOURCE = 'BVTECH'
-const DECLARATION_TYPE_CODE = 'bv-tech'
-const DECLARATION_TYPE_NAME = 'BV Tech'
 const POINT_SOURCE_PREFIX = 'bvtech:point-prelevement'
 const DECLARANT_SOURCE_PREFIX = 'bvtech:preleveur'
 const OWNER_DECLARANT_SOURCE_PREFIX = 'bvtech:preleveur-owner'
@@ -1054,16 +1051,6 @@ async function syncAliases(userId, emails) {
   })
 }
 
-async function allowBvTechDeclarationType(declarantUserId) {
-  await allowDeclarationTypeForDeclarant({
-    declarantUserId,
-    code: DECLARATION_TYPE_CODE,
-    name: DECLARATION_TYPE_NAME,
-    version: 1,
-    isAvailable: true
-  })
-}
-
 async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userData, declarantData}) {
   const existingDeclarant = await prisma.declarant.findUnique({
     where: {sourceId},
@@ -1091,7 +1078,6 @@ async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userDat
     })
 
     await syncAliases(existingDeclarant.userId, [email ? null : primaryEmail, ...secondaryEmails])
-    await allowBvTechDeclarationType(existingDeclarant.userId)
     return existingDeclarant.userId
   }
 
@@ -1111,7 +1097,6 @@ async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userDat
   })
 
   await syncAliases(userId, [email ? null : primaryEmail, ...secondaryEmails])
-  await allowBvTechDeclarationType(userId)
   return userId
 }
 
