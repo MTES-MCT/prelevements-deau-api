@@ -1,0 +1,1 @@
+ALTER TABLE "SandreWaterUse" ALTER COLUMN "updatedAt" DROP DEFAULT;

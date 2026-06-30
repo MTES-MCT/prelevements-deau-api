@@ -14,6 +14,7 @@ import {
   insertPointPrelevement,
   updatePointPrelevementById
 } from '../../lib/models/point-prelevement.js'
+import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
 
 const DEFAULT_INPUT = 'data/bvtech/bvtech-eaux-superficielles.xlsx'
 const DEFAULT_INPUT_FILENAME = 'bvtech-eaux-superficielles.xlsx'
@@ -684,6 +685,11 @@ function normalizedUsages(value) {
   return usages.length > 0 ? usages : ['INCONNU']
 }
 
+async function resolveUsageId(usages) {
+  const waterUse = await getWaterUseByLegacyUsage(usages.find(Boolean) ?? 'INCONNU', {rootOnly: true})
+  return waterUse.id
+}
+
 function buildNormalizedPointPayload(row) {
   const name = rowCell(row, NORMALIZED_POINT_COLUMNS.name)
   const longitude = rowNumericCell(row, NORMALIZED_POINT_COLUMNS.longitude)
@@ -849,7 +855,7 @@ async function importNormalizedPoints(workbook) {
   return summary
 }
 
-async function upsertNormalizedExploitation({point, declarant, sourceId, usages, startDate, endDate, comment}) {
+async function upsertNormalizedExploitation({point, declarant, sourceId, legacyUsages, startDate, endDate, comment}) {
   const existing = await prisma.declarantPointPrelevement.findFirst({
     where: {
       OR: [
@@ -867,7 +873,7 @@ async function upsertNormalizedExploitation({point, declarant, sourceId, usages,
     declarantUserId: declarant.userId,
     pointPrelevementId: point.id,
     status: 'EN_ACTIVITE',
-    usages,
+    usageId: await resolveUsageId(legacyUsages),
     startDate,
     endDate,
     sourceId,
@@ -923,7 +929,7 @@ async function importNormalizedExploitations(workbook, declarants, points) {
       point,
       declarant,
       sourceId,
-      usages: normalizedUsages(rowCell(row, NORMALIZED_EXPLOITATION_COLUMNS.usages)),
+      legacyUsages: normalizedUsages(rowCell(row, NORMALIZED_EXPLOITATION_COLUMNS.usages)),
       startDate: rowDateCell(row, NORMALIZED_EXPLOITATION_COLUMNS.startDate),
       endDate: rowDateCell(row, NORMALIZED_EXPLOITATION_COLUMNS.endDate),
       comment: rowCell(row, NORMALIZED_EXPLOITATION_COLUMNS.comment)
@@ -1413,7 +1419,7 @@ async function upsertPointDeclarantLink({point, pointPayload, declarant, rawUsag
     declarantUserId: declarant.userId,
     pointPrelevementId: point.id,
     status: 'EN_ACTIVITE',
-    usages: mapUsages(rawUsage),
+    usageId: await resolveUsageId(mapUsages(rawUsage)),
     sourceId,
     comment: compactLines([
       ['Usage source', cell(row, PP_COLUMNS.usage)],

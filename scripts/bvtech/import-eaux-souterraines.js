@@ -15,6 +15,7 @@ import {
   insertPointPrelevement,
   updatePointPrelevementById
 } from '../../lib/models/point-prelevement.js'
+import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
 
 const SOURCE = 'BVTECH'
 const POINT_SOURCE_PREFIX = 'bvtech:eaux-souterraines:point-prelevement'
@@ -519,8 +520,13 @@ function mapUsage(rawUsage) {
 }
 
 function mapUsages(values) {
-  const usages = unique(values.map(value => mapUsage(value)))
+  const usages = unique(values.map(value => mapUsage(value)).filter(Boolean))
   return usages.length > 0 ? usages : ['INCONNU']
+}
+
+async function resolveUsageId(usages) {
+  const waterUse = await getWaterUseByLegacyUsage(usages.find(Boolean) ?? 'INCONNU', {rootOnly: true})
+  return waterUse.id
 }
 
 function generatedPointSourceId(row) {
@@ -686,7 +692,7 @@ function buildExploitationRecord(row) {
   return {
     pointName,
     declarantSelector,
-    usages: mapUsages([
+    legacyUsages: mapUsages([
       rowCell(row, EXPLOITATION_COLUMNS.mainUsage),
       rowCell(row, EXPLOITATION_COLUMNS.usage2),
       rowCell(row, EXPLOITATION_COLUMNS.usage3)
@@ -1154,7 +1160,7 @@ async function upsertExploitation({
   point,
   declarant,
   sourceId,
-  usages,
+  legacyUsages,
   startDate,
   endDate,
   comment,
@@ -1177,7 +1183,7 @@ async function upsertExploitation({
     declarantUserId: declarant.userId,
     pointPrelevementId: point.id,
     status: 'EN_ACTIVITE',
-    usages,
+    usageId: await resolveUsageId(legacyUsages),
     startDate,
     endDate,
     sourceId,
@@ -1249,7 +1255,7 @@ async function importExploitations({records, declarants, points, dataset, collec
       point,
       declarant,
       sourceId,
-      usages: record.usages,
+      legacyUsages: record.legacyUsages,
       startDate: record.startDate,
       endDate: record.endDate,
       comment: compactLines([

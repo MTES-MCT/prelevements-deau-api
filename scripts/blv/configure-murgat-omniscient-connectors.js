@@ -10,6 +10,7 @@ const DECLARANT_SOURCE_ID
 const EXPLOITATION_SOURCE_ID_PREFIX
   = 'blv-pisciculteurs-template-file-murgat-exploitation-06850221000013'
 const POINT_SOURCE_ID_PREFIX = 'blv-pisciculteurs-template-file-murgat'
+const MURGAT_EXPLOITATION_USAGE_CODE = '3'
 
 const METERS = [
   {compteurId: '38-2018-00234', label: 'Pompe A1'},
@@ -26,16 +27,6 @@ const METERS = [
   {compteurId: '38-2018-00238', label: 'Pompe P4'},
   {compteurId: '38-2018-00241', label: 'Pompe P5'}
 ]
-
-function parseArgValue(args, argName) {
-  const arg = args.find(item => item.startsWith(`--${argName}=`))
-
-  if (!arg) {
-    return undefined
-  }
-
-  return arg.split('=').slice(1).join('=').replaceAll(/^["']|["']$/g, '')
-}
 
 function getPointSourceId(compteurId) {
   return `${POINT_SOURCE_ID_PREFIX}-${compteurId}`
@@ -76,67 +67,21 @@ function buildConnectorParameters(meter) {
   }
 }
 
-function appendUsage(usages, usage) {
-  const values = Array.isArray(usages) ? usages : []
-
-  return [...new Set([...values, usage])]
-}
-
-async function resolveServiceAccountId(explicitServiceAccountId) {
-  if (explicitServiceAccountId) {
-    const serviceAccount = await prisma.serviceAccount.findFirst({
-      where: {
-        id: explicitServiceAccountId,
-        deletedAt: null
-      },
-      select: {
-        id: true,
-        name: true
-      }
-    })
-
-    if (!serviceAccount) {
-      throw new Error(`Service account introuvable: ${explicitServiceAccountId}`)
-    }
-
-    return serviceAccount.id
-  }
-
-  const serviceAccounts = await prisma.serviceAccount.findMany({
+async function resolveMurgatUsageId() {
+  const waterUse = await prisma.sandreWaterUse.findUnique({
     where: {
-      isActive: true,
-      deletedAt: null
+      code: MURGAT_EXPLOITATION_USAGE_CODE
     },
     select: {
-      id: true,
-      name: true
-    },
-    orderBy: {
-      createdAt: 'asc'
+      id: true
     }
   })
 
-  if (serviceAccounts.length === 1) {
-    return serviceAccounts[0].id
+  if (!waterUse) {
+    throw new Error(`Usage SANDRE ${MURGAT_EXPLOITATION_USAGE_CODE} introuvable.`)
   }
 
-  if (serviceAccounts.length > 1) {
-    console.warn(
-      '[murgat-omniscient] Plusieurs service accounts actifs trouvés. '
-      + 'Aucun rattachement automatique ne sera créé; relancer avec --service-account-id=<id>.'
-    )
-
-    for (const serviceAccount of serviceAccounts) {
-      console.warn(`  - ${serviceAccount.name} (${serviceAccount.id})`)
-    }
-  } else {
-    console.warn(
-      '[murgat-omniscient] Aucun service account actif trouvé. '
-      + 'Les connecteurs seront créés, mais l’orchestrateur ne les verra pas avant rattachement.'
-    )
-  }
-
-  return null
+  return waterUse.id
 }
 
 async function resolveDeclarant() {
@@ -241,45 +186,6 @@ function findExistingConnector(exploitation, meter) {
   ) ?? exploitation.connectors[0] ?? null
 }
 
-async function upsertServiceAccountDeclarant(tx, serviceAccountId, declarantUserId) {
-  if (!serviceAccountId) {
-    return false
-  }
-
-  const existingLink = await tx.serviceAccountDeclarant.findFirst({
-    where: {
-      serviceAccountId,
-      declarantUserId
-    },
-    orderBy: {
-      startDate: 'asc'
-    }
-  })
-
-  if (existingLink) {
-    await tx.serviceAccountDeclarant.update({
-      where: {
-        id: existingLink.id
-      },
-      data: {
-        endDate: null
-      }
-    })
-
-    return false
-  }
-
-  await tx.serviceAccountDeclarant.create({
-    data: {
-      serviceAccountId,
-      declarantUserId,
-      startDate: CONNECTOR_START_DATE
-    }
-  })
-
-  return true
-}
-
 async function getExistingConnectorDataCounts(client = prisma) {
   const [sourceRows, chunkRows, chunkValueRows] = await Promise.all([
     client.$queryRaw`
@@ -321,10 +227,10 @@ async function applyConfiguration({
   dryRun,
   keepMostRecent,
   resetExistingConnectorData,
-  serviceAccountId,
-  declarant,
   mappings
 }) {
+  const murgatUsageId = await resolveMurgatUsageId()
+
   if (dryRun) {
     console.log('[murgat-omniscient] Dry-run, aucune écriture.')
 
@@ -350,12 +256,6 @@ async function applyConfiguration({
       )
     }
 
-    if (serviceAccountId) {
-      console.log(
-        `[murgat-omniscient] serviceAccountDeclarant declarant=${declarant.userId} serviceAccount=${serviceAccountId}`
-      )
-    }
-
     return
   }
 
@@ -367,12 +267,6 @@ async function applyConfiguration({
     if (resetExistingConnectorData) {
       deletedSources = await deleteExistingConnectorData(tx)
     }
-
-    const linkedServiceAccount = await upsertServiceAccountDeclarant(
-      tx,
-      serviceAccountId,
-      declarant.userId
-    )
 
     for (const mapping of mappings) {
       const connectorParameters = buildConnectorParameters(mapping.meter)
@@ -409,7 +303,7 @@ async function applyConfiguration({
           id: mapping.exploitation.id
         },
         data: {
-          usages: appendUsage(mapping.exploitation.usages, 'AQUACULTURE'),
+          usageId: murgatUsageId,
           ...(keepMostRecent ? {} : {mostRecentAvailableDate: null})
         }
       })
@@ -418,24 +312,21 @@ async function applyConfiguration({
     return {
       createdConnectors,
       updatedConnectors,
-      deletedSources,
-      linkedServiceAccount
+      deletedSources
     }
   })
 
   console.log(
     `[murgat-omniscient] terminé: created=${result.createdConnectors}, `
-    + `updated=${result.updatedConnectors}, deletedSources=${result.deletedSources}, `
-    + `serviceAccountLinked=${result.linkedServiceAccount}`
+    + `updated=${result.updatedConnectors}, deletedSources=${result.deletedSources}`
   )
 }
 
 async function main() {
-  const args = process.argv.slice(2)
-  const dryRun = args.includes('--dry-run')
-  const keepMostRecent = args.includes('--keep-most-recent')
-  const resetExistingConnectorData = args.includes('--reset-existing-connector-data')
-  const explicitServiceAccountId = parseArgValue(args, 'service-account-id')
+  const args = new Set(process.argv.slice(2))
+  const dryRun = args.has('--dry-run')
+  const keepMostRecent = args.has('--keep-most-recent')
+  const resetExistingConnectorData = args.has('--reset-existing-connector-data')
 
   console.log('[murgat-omniscient] start')
   console.log(`[murgat-omniscient] connectorType=${CONNECTOR_TYPE}`)
@@ -443,10 +334,7 @@ async function main() {
   console.log(`[murgat-omniscient] keepMostRecent=${keepMostRecent}`)
   console.log(`[murgat-omniscient] resetExistingConnectorData=${resetExistingConnectorData}`)
 
-  const [declarant, serviceAccountId] = await Promise.all([
-    resolveDeclarant(),
-    resolveServiceAccountId(explicitServiceAccountId)
-  ])
+  const declarant = await resolveDeclarant()
 
   const mappings = await resolveMappings(declarant.userId)
 
@@ -458,8 +346,6 @@ async function main() {
     dryRun,
     keepMostRecent,
     resetExistingConnectorData,
-    serviceAccountId,
-    declarant,
     mappings
   })
 }

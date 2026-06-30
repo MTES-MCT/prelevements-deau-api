@@ -53,6 +53,34 @@ components:
       type: string
       pattern: '^[0-9a-fA-F]{24}$'
       description: Identifiant MongoDB
+    WaterUse:
+      type: object
+      description: Usage ou sous-usage de l'eau issu du référentiel SANDRE
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: '13A' }
+        kind: { type: string, enum: [USAGE, SUB_USAGE] }
+        parentId: { type: string, format: uuid, nullable: true }
+        mnemonic: { type: string, nullable: true }
+        label: { type: string }
+        definition: { type: string, nullable: true }
+        status: { type: string, nullable: true }
+        color: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+        dashboardVisible: { type: boolean }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/WaterUse' }
+    WaterUsesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          description: Liste plate des usages et sous-usages.
+          items: { $ref: '#/components/schemas/WaterUse' }
+        usages:
+          type: array
+          description: Arbre des usages racines avec leurs sous-usages.
+          items: { $ref: '#/components/schemas/WaterUse' }
     Dossier:
       type: object
       properties:
@@ -145,9 +173,7 @@ components:
             usages:
               type: array
               description: Liste unique des usages de toutes les exploitations du point
-              items:
-                type: string
-                enum: ['Eau potable', 'Agriculture', 'Industrie', 'Eau embouteillée', 'Thermalisme', 'Hydroélectricité', 'Autre', 'Non renseigné']
+              items: { $ref: '#/components/schemas/WaterUse' }
     PreleveurLight:
       type: object
       properties:
@@ -165,7 +191,8 @@ components:
         date_debut: { type: string, format: date }
         date_fin: { type: string, format: date, nullable: true }
         statut: { type: string }
-        usages: { type: array, items: { type: string } }
+        usageId: { type: string, format: uuid, nullable: true }
+        usage: { $ref: '#/components/schemas/WaterUse' }
         documents: { type: array, items: { type: object }, description: "Documents associés (décorés si disponibles)" }
     Document:
       type: object
@@ -2047,6 +2074,18 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: OK }
+  /referentiels/usages-eau:
+    get:
+      tags: [Référentiels]
+      summary: Usages de l'eau SANDRE
+      description: Retourne le référentiel SANDRE des usages et sous-usages de l'eau, avec couleur et visibilité tableau de bord.
+      operationId: listReferentielUsagesEau
+      responses:
+        '200':
+          description: Référentiel des usages de l'eau.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WaterUsesResponse' }
   /stats:
     get:
       tags: [Stats]

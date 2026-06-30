@@ -14,36 +14,6 @@ Renvoie :
 serviceAccountId: 95ef1e0a-f2f8-40e1-8555-29561f3615f6
 ```
 
-## Association du compte de service à des déclarants
-
-```
-node -e '
-import("dotenv/config");
-import("./db/prisma.js").then(async ({prisma}) => {
-  await prisma.$executeRaw`
-    INSERT INTO "ServiceAccountDeclarant" (
-      "id",
-      "serviceAccountId",
-      "declarantUserId",
-      "startDate",
-      "createdAt",
-      "updatedAt"
-    )
-    SELECT
-      gen_random_uuid(),
-      ${"95ef1e0a-f2f8-40e1-8555-29561f3615f6"},
-      d."userId",
-      ${new Date("2026-01-01")},
-      ${new Date()},
-      ${new Date()}
-    FROM "Declarant" d
-    ON CONFLICT DO NOTHING
-  `;
-  await prisma.$disconnect();
-})'
-```
-
-
 ## Création des credentials associés au compte de service
 
 ```
@@ -74,7 +44,7 @@ Renvoie :
 a202836c-f2c7-4043-b8eb-670716bb1dbb016b7a99bec40dd17540e0f0e582a1dc65248132632b9ba1
 ```
 
-## Utilisation du token pour récupérer les déclarants associés au compte de service
+## Utilisation du token pour récupérer les déclarants traitables
 
 ```
 curl -X GET http://localhost:5000/service-accounts/me/declarants \
@@ -87,6 +57,9 @@ Renvoie :
 ```
 00230bb0-3b2c-48ba-b20a-645edbedbd3d
 ```
+
+Un compte de service actif peut traiter tous les déclarants actifs. Cette route
+sert uniquement à découvrir les déclarants à parcourir.
 
 ## Récupération du contexte du déclarant
 

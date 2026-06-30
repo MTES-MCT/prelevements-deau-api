@@ -1,5 +1,5 @@
-
 import '../../lib/config/env.js'
+
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -10,7 +10,7 @@ const DEFAULT_CSV_PATH
   = 'data/blv/pisciculteurs-template-file/willie-connectors.csv'
 
 const CONNECTOR_TYPE = 'willie'
-const DEFAULT_EXPLOITATION_TYPE = 'COLLECTEUR'
+const DEFAULT_COLLECTEUR_ROLE = 'COLLECTEUR'
 
 function parseArgValue(args, argName) {
   const arg = args.find(item => item.startsWith(`--${argName}=`))
@@ -135,16 +135,17 @@ function validateRatesByStation(mappings) {
 
   for (const [sourcePointId, rates] of ratesByStation.entries()) {
     const total = rates.reduce((sum, rate) => sum + rate, 0)
+    const roundedTotal = Math.round(total * 100) / 100
 
-    if (total > 100) {
+    if (roundedTotal > 100) {
       throw new Error(
-        `[willie] Le total des ratios du compteur ${sourcePointId} dépasse 100%: ${total}%.`
+        `[willie] Le total des ratios du compteur ${sourcePointId} dépasse 100%: ${roundedTotal}%.`
       )
     }
 
-    if (rates.length > 1 && total !== 100) {
+    if (rates.length > 1 && Math.abs(roundedTotal - 100) > 0.001) {
       throw new Error(
-        `[willie] Le compteur ${sourcePointId} est partagé entre plusieurs PP, mais le total des ratios vaut ${total}% au lieu de 100%.`
+        `[willie] Le compteur ${sourcePointId} est partagé entre plusieurs PP, mais le total des ratios vaut ${roundedTotal}% au lieu de 100%.`
       )
     }
   }
@@ -220,7 +221,9 @@ function getSourcePointIdFromConnector(connector) {
 }
 
 async function upsertConnectorForExploitation(exploitation, mapping, options) {
-  const existingConnector = exploitation.connectors.find(connector => getSourcePointIdFromConnector(connector) === mapping.sourcePointId)
+  const existingConnector = exploitation.connectors.find(
+    connector => getSourcePointIdFromConnector(connector) === mapping.sourcePointId
+  )
 
   const connectorParameters = {
     sourcePointId: mapping.sourcePointId,
@@ -261,24 +264,46 @@ async function upsertConnectorForExploitation(exploitation, mapping, options) {
   })
 }
 
+function buildExploitationWhere(pointId, options) {
+  const where = {
+    pointPrelevementId: pointId
+  }
+
+  // Ancien modèle :
+  //   DeclarantPointPrelevement.type = COLLECTEUR
+  //
+  // Nouveau modèle :
+  //   les anciennes lignes COLLECTEUR ont été supprimées,
+  //   puis remplacées par DeclarantCollecteurExploitation.
+  //
+  // Par défaut on importe donc sur les exploitations qui ont au moins
+  // un collecteur autorisé.
+  if (!options.allExploitations) {
+    where.collecteurs = {
+      some: {
+        collecteur: {
+          declarantRole: DEFAULT_COLLECTEUR_ROLE
+        }
+      }
+    }
+  }
+
+  return where
+}
+
 async function updateExploitationsForMapping(mapping, options) {
   const point = await findPointByName(mapping.pointName)
 
   if (!point) {
     console.warn(`[willie] Point introuvable: "${mapping.pointName}"`)
+
     return {
       pointFound: false,
       updatedCount: 0
     }
   }
 
-  const exploitationWhere = {
-    pointPrelevementId: point.id
-  }
-
-  if (!options.allTypes) {
-    exploitationWhere.type = DEFAULT_EXPLOITATION_TYPE
-  }
+  const exploitationWhere = buildExploitationWhere(point.id, options)
 
   const exploitations = await prisma.declarantPointPrelevement.findMany({
     where: exploitationWhere,
@@ -286,7 +311,34 @@ async function updateExploitationsForMapping(mapping, options) {
       id: true,
       declarantUserId: true,
       pointPrelevementId: true,
-      type: true,
+      status: true,
+      declarant: {
+        select: {
+          declarantRole: true,
+          socialReason: true,
+          user: {
+            select: {
+              email: true
+            }
+          }
+        }
+      },
+      collecteurs: {
+        select: {
+          collecteurUserId: true,
+          collecteur: {
+            select: {
+              socialReason: true,
+              declarantRole: true,
+              user: {
+                select: {
+                  email: true
+                }
+              }
+            }
+          }
+        }
+      },
       connectors: {
         where: {
           connectorType: CONNECTOR_TYPE
@@ -308,7 +360,7 @@ async function updateExploitationsForMapping(mapping, options) {
 
   if (exploitations.length === 0) {
     console.warn(
-      `[willie] Aucune exploitation ${options.allTypes ? '' : DEFAULT_EXPLOITATION_TYPE} pour le point "${point.name}" (${point.id})`
+      `[willie] Aucune exploitation ${options.allExploitations ? '' : 'avec droit collecteur '}pour le point "${point.name}" (${point.id})`
     )
 
     return {
@@ -325,10 +377,18 @@ async function updateExploitationsForMapping(mapping, options) {
   let updatedCount = 0
 
   for (const exploitation of exploitations) {
+    const declarantLabel = exploitation.declarant?.socialReason
+      ?? exploitation.declarant?.user?.email
+      ?? exploitation.declarantUserId
+
+    const collecteurLabels = exploitation.collecteurs
+      .map(({collecteur}) => collecteur.socialReason ?? collecteur.user?.email ?? 'collecteur inconnu')
+      .join(', ')
+
     console.log(
       `[willie] ${
         options.dryRun ? '[dry-run] ' : ''
-      }exploitation=${exploitation.id}, declarant=${exploitation.declarantUserId}, type=${exploitation.type}`
+      }exploitation=${exploitation.id}, declarant=${declarantLabel}, role=${exploitation.declarant?.declarantRole}, collecteurs=${collecteurLabels || '-'}`
     )
 
     await upsertConnectorForExploitation(exploitation, mapping, options)
@@ -341,25 +401,7 @@ async function updateExploitationsForMapping(mapping, options) {
   }
 }
 
-async function main() {
-  const args = process.argv.slice(2)
-  const dryRun = args.includes('--dry-run')
-  const allTypes = args.includes('--all-types')
-  const csvPath = parseArgValue(args, 'file') ?? DEFAULT_CSV_PATH
-
-  console.log(`[willie] CSV: ${csvPath}`)
-  console.log(`[willie] Mode: ${dryRun ? 'dry-run' : 'apply'}`)
-  console.log(`[willie] Type exploitation: ${allTypes ? 'tous' : DEFAULT_EXPLOITATION_TYPE}`)
-  console.log('')
-
-  const mappings = await readMappings(csvPath)
-
-  if (mappings.length === 0) {
-    throw new Error(`[willie] Aucun mapping trouvé dans ${csvPath}`)
-  }
-
-  validateRatesByStation(mappings)
-
+function validateDuplicateMappings(mappings) {
   const seenMappingKeys = new Set()
   const duplicateMappings = []
 
@@ -378,6 +420,33 @@ async function main() {
       `[willie] Mappings dupliqués dans le CSV: ${duplicateMappings.join(', ')}`
     )
   }
+}
+
+async function main() {
+  const args = process.argv.slice(2)
+  const dryRun = args.includes('--dry-run')
+
+  // Alias conservé pour ne pas casser tes anciennes commandes.
+  // --all-types ne veut plus dire grand-chose depuis la suppression de DPP.type.
+  const allExploitations = args.includes('--all-exploitations') || args.includes('--all-types')
+
+  const csvPath = parseArgValue(args, 'file') ?? DEFAULT_CSV_PATH
+
+  console.log(`[willie] CSV: ${csvPath}`)
+  console.log(`[willie] Mode: ${dryRun ? 'dry-run' : 'apply'}`)
+  console.log(`[willie] Portée: ${allExploitations ? 'toutes les exploitations du PP' : 'exploitations avec droit collecteur'}`)
+  console.log('')
+
+  const mappings = await readMappings(csvPath)
+
+  if (mappings.length === 0) {
+    throw new Error(`[willie] Aucun mapping trouvé dans ${csvPath}`)
+  }
+
+  console.log(`[willie] Mappings lus: ${mappings.length}`)
+
+  validateRatesByStation(mappings)
+  validateDuplicateMappings(mappings)
 
   let foundPoints = 0
   let missingPoints = 0
@@ -386,7 +455,7 @@ async function main() {
   for (const mapping of mappings) {
     const result = await updateExploitationsForMapping(mapping, {
       dryRun,
-      allTypes
+      allExploitations
     })
 
     if (result.pointFound) {
@@ -408,6 +477,15 @@ async function main() {
 
 try {
   await main()
+} catch (error) {
+  console.error(error)
+  process.exitCode = 1
 } finally {
   await prisma.$disconnect()
+
+  // Le projet utilise un Pool pg global avec PrismaPg.
+  // Ça évite que le process reste ouvert après la fin du script.
+  if (globalThis.pgPool && typeof globalThis.pgPool.end === 'function') {
+    await globalThis.pgPool.end()
+  }
 }

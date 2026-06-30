@@ -1,6 +1,7 @@
 import '../../lib/config/env.js'
 import {prisma} from '../../db/prisma.js'
 import {allowTemplateDeclarationTypeForDeclarant} from '../../lib/models/declaration-type.js'
+import {legacyUsageToRootUsageCode} from '../../lib/constants/sandre-water-uses.js'
 
 const DEMO_SERIES = [
   {prefix: 'ougc', count: 50, waterBodyTypes: ['SOUTERRAIN', 'SURFACE'], labels: ['Forage', 'Pompage']},
@@ -53,7 +54,7 @@ const DEMO_DECLARANTS = [
     sourceId: 'demo-declarant-ougc',
     pointPrefix: 'demo-ougc-',
     type: 'COLLECTEUR',
-    usages: ['IRRIGATION']
+    usage: 'IRRIGATION'
   },
   {
     key: 'gidaf',
@@ -64,7 +65,7 @@ const DEMO_DECLARANTS = [
     sourceId: 'demo-declarant-gidaf',
     pointPrefix: 'demo-gidaf-',
     type: 'COLLECTEUR',
-    usages: ['INDUSTRIE']
+    usage: 'INDUSTRIE'
   },
   {
     key: 'aep-1',
@@ -75,7 +76,7 @@ const DEMO_DECLARANTS = [
     sourceId: 'demo-declarant-aep-1',
     pointPrefix: 'demo-aep-1-',
     type: 'PRELEVEUR_DECLARANT',
-    usages: ['AEP']
+    usage: 'AEP'
   },
   {
     key: 'aep-2',
@@ -86,7 +87,7 @@ const DEMO_DECLARANTS = [
     sourceId: 'demo-declarant-aep-2',
     pointPrefix: 'demo-aep-2-',
     type: 'PRELEVEUR_DECLARANT',
-    usages: ['AEP']
+    usage: 'AEP'
   },
   {
     key: 'aep-3',
@@ -97,7 +98,7 @@ const DEMO_DECLARANTS = [
     sourceId: 'demo-declarant-aep-3',
     pointPrefix: 'demo-aep-3-',
     type: 'PRELEVEUR_DECLARANT',
-    usages: ['AEP']
+    usage: 'AEP'
   }
 ]
 
@@ -198,7 +199,23 @@ async function upsertDeclarantAccount(config) {
   return user
 }
 
-async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, type, usages, sourceKey}) {
+async function resolveUsageId(usage) {
+  const code = legacyUsageToRootUsageCode(usage)
+
+  if (!code) {
+    return null
+  }
+
+  const waterUse = await prisma.sandreWaterUse.findUnique({
+    where: {code},
+    select: {id: true}
+  })
+
+  return waterUse?.id ?? null
+}
+
+async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, type, usage, sourceKey}) {
+  const usageId = await resolveUsageId(usage)
   const points = await prisma.pointPrelevement.findMany({
     where: {
       sourceId: {
@@ -235,7 +252,7 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, typ
       update: {
         type,
         status: 'EN_ACTIVITE',
-        usages,
+        usageId,
         startDate: null,
         endDate: null,
         abandonReason: null,
@@ -247,7 +264,7 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, typ
         pointPrelevementId: point.id,
         type,
         status: 'EN_ACTIVITE',
-        usages,
+        usageId,
         sourceId: `demo-dpp-${sourceKey}-${point.id}`
       }
     })
@@ -412,7 +429,7 @@ async function main() {
       declarantUserId: user.id,
       pointPrefix: config.pointPrefix,
       type: config.type,
-      usages: config.usages,
+      usage: config.usage,
       sourceKey: config.key
     })
 

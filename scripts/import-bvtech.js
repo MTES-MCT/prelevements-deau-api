@@ -13,6 +13,7 @@ import {
   insertPointPrelevement,
   updatePointPrelevementById
 } from '../lib/models/point-prelevement.js'
+import {getWaterUseByLegacyUsage} from '../lib/services/sandre-water-uses.js'
 
 const DEFAULT_INPUT = 'data/bvtech'
 const SOURCE = 'BVTECH'
@@ -732,7 +733,7 @@ async function upsertPointDeclarantLink(point, declarant, rawUsage) {
     return null
   }
 
-  const usage = mapUsage(rawUsage)
+  const waterUse = await getWaterUseByLegacyUsage(mapUsage(rawUsage), {rootOnly: true})
   const sourceId = `bvtech:exploitation:${declarant.userId}:${point.id}`
 
   return prisma.declarantPointPrelevement.upsert({
@@ -746,12 +747,12 @@ async function upsertPointDeclarantLink(point, declarant, rawUsage) {
       declarantUserId: declarant.userId,
       pointPrelevementId: point.id,
       status: 'EN_ACTIVITE',
-      usages: [usage],
+      usageId: waterUse.id,
       sourceId
     },
     update: {
       status: 'EN_ACTIVITE',
-      usages: [usage],
+      usageId: waterUse.id,
       sourceId
     }
   })

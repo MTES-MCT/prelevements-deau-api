@@ -64,7 +64,8 @@ model Chunk {
   pointPrelevementId String?           @db.Uuid
   pointPrelevement   PointPrelevement? @relation(fields: [pointPrelevementId], references: [id], onDelete: SetNull)
 
-  usage UsageEau?
+  usageId String         @db.Uuid
+  usage   SandreWaterUse @relation(fields: [usageId], references: [id], onDelete: Restrict)
 
   instructionStatus            ChunkInstructionStatus @default(PENDING)
   instructedAt                 DateTime?
@@ -85,7 +86,7 @@ model Chunk {
   updatedAt DateTime @updatedAt
 
   @@index([instructionStatus])
-  @@index([usage])
+  @@index([usageId])
 }
 
 enum ChunkValueKind {
@@ -107,7 +108,7 @@ model ChunkValue {
   /// Le pas de temps discret minimal du domaine est 15 minutes.
   periodStart DateTime @db.Timestamp(3)
   /// Fin de période. Pour du ponctuel, elle est calculée à partir de periodStart + frequency.
-  periodEnd DateTime @db.Timestamp(3)
+  periodEnd   DateTime @db.Timestamp(3)
 
   valueKind ChunkValueKind @default(DECLARED)
 

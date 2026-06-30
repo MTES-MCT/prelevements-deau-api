@@ -49,9 +49,26 @@ function stripDiacritics(value) {
     .replaceAll(/[\u0300-\u036F]/g, '')
 }
 
-function isPrelevementType(typePoint) {
+function getPointFlowType(typePoint) {
   const normalized = stripDiacritics(typePoint).toLowerCase()
-  return normalized.includes('alimentation')
+
+  if (!normalized) {
+    return null
+  }
+
+  if (normalized.includes('rejet')) {
+    return 'rejet'
+  }
+
+  if (normalized.includes('alimentation') || normalized.includes('prelevement')) {
+    return 'prelevement'
+  }
+
+  return null
+}
+
+function isPrelevementType(typePoint) {
+  return getPointFlowType(typePoint) !== 'rejet'
 }
 
 function computeAnnualLimit(volumeMax, periode) {
@@ -142,6 +159,75 @@ function readValue(sheet, rowIndex, columnMap, key, type = 'string') {
 
 function pushError(errors, message) {
   errors.push({message, severity: 'error'})
+}
+
+function pushWarning(errors, message) {
+  errors.push({message, severity: 'warning'})
+}
+
+function getPointTypeKey(codeInspection, pointId) {
+  const normalizedPointId = String(pointId ?? '').trim()
+  if (!normalizedPointId) {
+    return null
+  }
+
+  const normalizedCodeInspection = String(codeInspection ?? '').trim()
+  return normalizedCodeInspection
+    ? `${normalizedCodeInspection}::${normalizedPointId}`
+    : normalizedPointId
+}
+
+function setPointType(map, key, typePoint) {
+  if (!key || !typePoint) {
+    return
+  }
+
+  const existing = map.get(key)
+  if (existing && existing !== typePoint) {
+    map.set(key, null)
+    return
+  }
+
+  if (existing === undefined) {
+    map.set(key, typePoint)
+  }
+}
+
+function buildPointTypeLookup(pointsPrelevement) {
+  const byPoint = new Map()
+  const byCodeAndPoint = new Map()
+
+  for (const point of pointsPrelevement) {
+    const pointId = point.id_point_de_prelevement_ou_rejet
+    const typePoint = point.type_de_point
+
+    setPointType(byPoint, getPointTypeKey(null, pointId), typePoint)
+    setPointType(byCodeAndPoint, getPointTypeKey(point.code_aiot, pointId), typePoint)
+  }
+
+  return {byPoint, byCodeAndPoint}
+}
+
+function createEmptyPointTypeLookup() {
+  return {byPoint: new Map(), byCodeAndPoint: new Map()}
+}
+
+function resolvePointType({codeInspection, pointId, typePoint, pointTypeLookup}) {
+  if (typePoint) {
+    return String(typePoint).trim()
+  }
+
+  const byCodeAndPointKey = getPointTypeKey(codeInspection, pointId)
+  const byCodeAndPoint = byCodeAndPointKey
+    ? pointTypeLookup.byCodeAndPoint.get(byCodeAndPointKey)
+    : null
+
+  if (byCodeAndPoint) {
+    return byCodeAndPoint
+  }
+
+  const byPointKey = getPointTypeKey(null, pointId)
+  return byPointKey ? pointTypeLookup.byPoint.get(byPointKey) : null
 }
 
 function extractCadresData(sheet) {
@@ -244,9 +330,12 @@ function extractCadresData(sheet) {
 // Extraction des volumes GIDAF.
 // Note métier : GIDAF ne fournit pas d'index aujourd'hui, uniquement des volumes.
 // On conserve une structure simple pour rester compatible avec un futur ajout d'index.
-function extractPrelevementsData(sheet) {
+function extractPrelevementsData(sheet, pointTypeLookup) {
+  pointTypeLookup ||= createEmptyPointTypeLookup()
+
   const data = {rows: []}
   const errors = []
+  const warnedDefaultedPointIds = new Set()
 
   if (!sheet['!ref']) {
     pushError(errors, 'La feuille du fichier "Prelevements" est vide.')
@@ -262,6 +351,7 @@ function extractPrelevementsData(sheet) {
   const columnMap = mapColumns(sheet, headerRow, range, PRELEVEMENTS_COLUMNS)
 
   for (let r = headerRow + 1; r <= range.e.r; r++) {
+    const codeInspection = readValue(sheet, r, columnMap, 'codeInspection')
     const pointSurveillance = readValue(sheet, r, columnMap, 'pointSurveillance')
     const typePoint = readValue(sheet, r, columnMap, 'typePoint')
     const dateMesure = readValue(sheet, r, columnMap, 'dateMesure', 'date')
@@ -301,7 +391,18 @@ function extractPrelevementsData(sheet) {
     const dateDebut = `${year}-${String(month).padStart(2, '0')}-01`
 
     const pointId = String(pointSurveillance).trim()
-    const isPrelevement = isPrelevementType(typePoint)
+    const resolvedTypePoint = resolvePointType({codeInspection, pointId, typePoint, pointTypeLookup})
+    const pointFlowType = getPointFlowType(resolvedTypePoint)
+
+    if (!pointFlowType && !warnedDefaultedPointIds.has(pointId)) {
+      warnedDefaultedPointIds.add(pointId)
+      pushWarning(
+        errors,
+        `Le type du point "${pointId}" est absent ou non reconnu; le volume GIDAF est classé en "volume prélevé" par défaut.`
+      )
+    }
+
+    const isPrelevement = pointFlowType !== 'rejet'
 
     data.rows.push({
       pointId,
@@ -467,7 +568,8 @@ export async function extractGidaf(cadresBufferOrOptions, prelevementsBuffer) {
   const cadresResult = extractCadresData(cadresSheet)
   errors.push(...cadresResult.errors)
 
-  const prelevementsResult = extractPrelevementsData(prelevementsSheet)
+  const pointTypeLookup = buildPointTypeLookup(cadresResult.data.pointsPrelevement)
+  const prelevementsResult = extractPrelevementsData(prelevementsSheet, pointTypeLookup)
   errors.push(...prelevementsResult.errors)
 
   const rawData = {
@@ -501,4 +603,3 @@ function formatError(error) {
 
   return errorObj
 }
-

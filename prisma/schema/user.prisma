@@ -59,8 +59,8 @@ model Declarant {
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
-  declarations             Declaration[]                    @relation("DeclarationDeclarant")
-  declarationsCreated      Declaration[]                    @relation("DeclarationCreatedByDeclarant")
+  declarations             Declaration[]                     @relation("DeclarationDeclarant")
+  declarationsCreated      Declaration[]                     @relation("DeclarationCreatedByDeclarant")
   declarationTypes         DeclarantDeclarationType[]
   pointPrelevements        DeclarantPointPrelevement[]
   collecteurExploitations  DeclarantCollecteurExploitation[] @relation("CollecteurDeclarant")

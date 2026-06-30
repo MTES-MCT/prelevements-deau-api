@@ -2,11 +2,20 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import {fileURLToPath} from 'node:url'
 import test from 'ava'
+import XLSX from 'xlsx'
 import {extractGidaf} from '../index.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const testFilesPath = path.join(__dirname, 'test-files')
+
+function createWorkbookBuffer(rows) {
+  const workbook = XLSX.utils.book_new()
+  const sheet = XLSX.utils.aoa_to_sheet(rows)
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Feuil1')
+
+  return XLSX.write(workbook, {bookType: 'xlsx', type: 'buffer'})
+}
 
 test('extractGidaf - valid files', async t => {
   const cadresBuffer = await fs.readFile(path.join(testFilesPath, 'cadres-valid.xlsx'))
@@ -72,3 +81,60 @@ test('extractGidaf - missing point_de_surveillance column', async t => {
   t.deepEqual(data.series, [])
 })
 
+test('extractGidaf - prelevements without type_de_point use cadres type', async t => {
+  const cadresBuffer = createWorkbookBuffer([
+    ['Code Inspection', 'Point de surveillance', 'SIRET', 'Raison sociale', 'Type de point'],
+    ['0001', 'Forage usine', '12345678901234', 'Usine A', 'Point d\'alimentation (amont)'],
+    ['0001', 'Rejet station', '12345678901234', 'Usine A', 'Point de rejet en milieu naturel direct (aval)']
+  ])
+
+  const prelevementsBuffer = createWorkbookBuffer([
+    ['Code Inspection', 'Point de surveillance', 'Date de mesure', 'Volume (m3)'],
+    ['0001', 'Forage usine', '31/08/2025', 42],
+    ['0001', 'Rejet station', '31/08/2025', 7]
+  ])
+
+  const {errors, data} = await extractGidaf(cadresBuffer, prelevementsBuffer)
+  const criticalErrors = errors.filter(e => e.severity === 'error')
+  t.is(criticalErrors.length, 0, `Erreurs critiques: ${JSON.stringify(criticalErrors)}`)
+
+  const prelevementSeries = data.series.find(serie =>
+    serie.pointPrelevement === 'Forage usine' && serie.parameter === 'volume prélevé'
+  )
+  const rejetSeries = data.series.find(serie =>
+    serie.pointPrelevement === 'Rejet station' && serie.parameter === 'volume rejeté'
+  )
+
+  t.truthy(prelevementSeries)
+  t.deepEqual(prelevementSeries.data, [{date: '2025-08-31', value: 42}])
+  t.truthy(rejetSeries)
+  t.deepEqual(rejetSeries.data, [{date: '2025-08-31', value: 7}])
+})
+
+test('extractGidaf - unknown point type defaults to prelevement', async t => {
+  const cadresBuffer = createWorkbookBuffer([
+    ['Code Inspection', 'Point de surveillance', 'SIRET', 'Raison sociale'],
+    ['0001', 'Point sans type', '12345678901234', 'Usine A']
+  ])
+
+  const prelevementsBuffer = createWorkbookBuffer([
+    ['Code Inspection', 'Point de surveillance', 'Date de mesure', 'Volume (m3)'],
+    ['0001', 'Point sans type', '31/08/2025', 42]
+  ])
+
+  const {errors, data} = await extractGidaf(cadresBuffer, prelevementsBuffer)
+  const criticalErrors = errors.filter(e => e.severity === 'error')
+  t.is(criticalErrors.length, 0, `Erreurs critiques: ${JSON.stringify(criticalErrors)}`)
+  t.true(errors.some(e => e.severity === 'warning' && e.message.includes('volume prélevé')))
+
+  const prelevementSeries = data.series.find(serie =>
+    serie.pointPrelevement === 'Point sans type' && serie.parameter === 'volume prélevé'
+  )
+  const rejetSeries = data.series.find(serie =>
+    serie.pointPrelevement === 'Point sans type' && serie.parameter === 'volume rejeté'
+  )
+
+  t.truthy(prelevementSeries)
+  t.deepEqual(prelevementSeries.data, [{date: '2025-08-31', value: 42}])
+  t.falsy(rejetSeries)
+})

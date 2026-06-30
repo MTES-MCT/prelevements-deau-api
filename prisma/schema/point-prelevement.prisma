@@ -5,27 +5,6 @@ enum DeclarantPointPrelevementStatus {
   TERMINEE
 }
 
-enum UsageEau {
-  INCONNU
-  PAS_D_USAGE
-  IRRIGATION
-  AGRICULTURE_ELEVAGE
-  AQUACULTURE
-  INDUSTRIE
-  AEP
-  ENERGIE
-  LOISIRS
-  EMBOUTEILLAGE
-  THERMALISME_THALASSO
-  DEFENSE_INCENDIE
-  REALIMENTATION_EAU
-  CANAUX
-  ETIAGE
-  ENTRETIEN_VOIRIES
-  ALIMENTATION_SOUTIEN_CANAL
-  DOMESTIQUE
-}
-
 enum WaterBodyType {
   SURFACE
   SUPERFICIELLE
@@ -65,30 +44,30 @@ model PointPrelevement {
 
   chunks Chunk[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  otherNames            String? @db.Text
-  names                 Json    @default("[]") @db.Json
-  identifiers           Json    @default("{}") @db.Json
+  otherNames            String?  @db.Text
+  names                 Json     @default("[]") @db.Json
+  identifiers           Json     @default("{}") @db.Json
   depth                 Float?
   isZre                 Boolean?
   isBiologicalReservoir Boolean?
-  streamName            String? @db.Text
-  locationDescription   String? @db.Text
-  geometryPrecision     String? @db.Text
-  comment               String? @db.Text
-  internalComment       String? @db.Text
-  communeCode           String? @db.Text
-  communeName           String? @db.Text
+  streamName            String?  @db.Text
+  locationDescription   String?  @db.Text
+  geometryPrecision     String?  @db.Text
+  comment               String?  @db.Text
+  internalComment       String?  @db.Text
+  communeCode           String?  @db.Text
+  communeName           String?  @db.Text
 
-  watershed       String? @db.Text
-  underWatershed  String? @db.Text
-  resourceName    String? @db.Text
-  managementUnit  String? @db.Text
+  watershed         String? @db.Text
+  underWatershed    String? @db.Text
+  resourceName      String? @db.Text
+  managementUnit    String? @db.Text
   managementSubUnit String? @db.Text
-  aquiferName     String? @db.Text
+  aquiferName       String? @db.Text
 
   sourceId String? @db.Text
 
@@ -139,11 +118,12 @@ model DeclarantPointPrelevement {
   pointPrelevementId String           @db.Uuid
   pointPrelevement   PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Cascade)
 
-  status    DeclarantPointPrelevementStatus @default(NON_RENSEIGNE)
-  startDate DateTime?                       @db.Date
-  endDate   DateTime?                       @db.Date
-  usages    UsageEau[]                      @default([])
-  pointPrelevementNameAliases String[]      @default([])
+  status                      DeclarantPointPrelevementStatus @default(NON_RENSEIGNE)
+  startDate                   DateTime?                       @db.Date
+  endDate                     DateTime?                       @db.Date
+  usageId                     String?                         @db.Uuid
+  usage                       SandreWaterUse?                 @relation(fields: [usageId], references: [id], onDelete: SetNull)
+  pointPrelevementNameAliases String[]                        @default([])
 
   abandonReason String? @db.Text
   comment       String? @db.Text
@@ -167,7 +147,7 @@ model DeclarantPointPrelevement {
   @@index([status])
   @@index([startDate])
   @@index([endDate])
-  @@index([usages], type: Gin)
+  @@index([usageId])
   @@index([pointPrelevementNameAliases], type: Gin)
 }
 

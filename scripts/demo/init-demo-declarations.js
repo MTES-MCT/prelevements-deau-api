@@ -71,23 +71,25 @@ function pseudoRandomInt(seed, min, max) {
 }
 
 function pickUsage(usages = []) {
-  if (usages.includes('IRRIGATION')) {
-    return 'IRRIGATION'
+  const codes = usages.map(usage => usage?.code ?? usage).filter(Boolean)
+
+  if (codes.includes('2')) {
+    return '2'
   }
 
-  if (usages.includes('INDUSTRIE')) {
-    return 'INDUSTRIE'
+  if (codes.includes('4')) {
+    return '4'
   }
 
-  if (usages.includes('AEP')) {
-    return 'AEP'
+  if (codes.includes('5')) {
+    return '5'
   }
 
-  return usages[0] ?? 'INCONNU'
+  return codes[0] ?? '0'
 }
 
 function monthSeasonalityFactor(usage, month) {
-  if (usage === 'IRRIGATION') {
+  if (usage === '2') {
     const factors = {
       1: 0.15,
       2: 0.2,
@@ -106,7 +108,7 @@ function monthSeasonalityFactor(usage, month) {
     return factors[month] ?? 1
   }
 
-  if (usage === 'AEP') {
+  if (usage === '5') {
     const factors = {
       1: 0.95,
       2: 0.92,
@@ -125,7 +127,7 @@ function monthSeasonalityFactor(usage, month) {
     return factors[month] ?? 1
   }
 
-  if (usage === 'INDUSTRIE') {
+  if (usage === '4') {
     const factors = {
       1: 0.92,
       2: 0.95,
@@ -157,6 +159,7 @@ function computeMonthlyVolume({usage, pointName, declarantSourceId, year, month,
   let noiseMax = 1.35
 
   switch (usage) {
+    case '2':
     case 'IRRIGATION': {
       baseMin = 1500
       baseMax = 9000
@@ -166,6 +169,7 @@ function computeMonthlyVolume({usage, pointName, declarantSourceId, year, month,
       break
     }
 
+    case '4':
     case 'INDUSTRIE': {
       baseMin = 800
       baseMax = 7000
@@ -175,6 +179,7 @@ function computeMonthlyVolume({usage, pointName, declarantSourceId, year, month,
       break
     }
 
+    case '5':
     case 'AEP': {
       baseMin = 3000
       baseMax = 14_000
@@ -240,7 +245,7 @@ async function listDemoDeclarants() {
           }
         },
         select: {
-          usages: true,
+          usage: true,
           pointPrelevement: {
             select: {
               id: true,
@@ -271,7 +276,7 @@ async function listDemoDeclarants() {
       id: item.pointPrelevement.id,
       name: item.pointPrelevement.name,
       sourceId: item.pointPrelevement.sourceId,
-      usage: pickUsage(item.usages)
+      usage: pickUsage(item.usage ? [item.usage] : [])
     }))
   }))
 }
@@ -301,7 +306,7 @@ async function generateWorkbookBuffer({declarant, year, month}) {
       pointIndex: index
     })
 
-    const isIndustrie = point.usage === 'INDUSTRIE'
+    const isIndustrie = point.usage === '4' || point.usage === 'INDUSTRIE'
 
     const volumeRejete = isIndustrie
       ? Math.round(

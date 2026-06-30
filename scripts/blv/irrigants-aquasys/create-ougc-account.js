@@ -218,16 +218,14 @@ async function upsertCollecteurExploitationsForPointsFromCsv(declarantUserId, de
         declarantUserId,
         pointPrelevementId: point.id,
         type: 'COLLECTEUR',
-        status: 'NON_RENSEIGNE',
-        usages: []
+        status: 'NON_RENSEIGNE'
       },
       create: {
         sourceId,
         declarantUserId,
         pointPrelevementId: point.id,
         type: 'COLLECTEUR',
-        status: 'NON_RENSEIGNE',
-        usages: []
+        status: 'NON_RENSEIGNE'
       }
     })
 
