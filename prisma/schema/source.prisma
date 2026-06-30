@@ -67,6 +67,8 @@ model Chunk {
   usageId String         @db.Uuid
   usage   SandreWaterUse @relation(fields: [usageId], references: [id], onDelete: Restrict)
 
+  legacyUsage UsageEau? @map("usage") @ignore
+
   instructionStatus            ChunkInstructionStatus @default(PENDING)
   instructedAt                 DateTime?
   instructedByInstructorUserId String?                @db.Uuid

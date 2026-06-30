@@ -123,6 +123,7 @@ model DeclarantPointPrelevement {
   endDate                     DateTime?                       @db.Date
   usageId                     String?                         @db.Uuid
   usage                       SandreWaterUse?                 @relation(fields: [usageId], references: [id], onDelete: SetNull)
+  usages                      UsageEau[]                      @default([]) @ignore
   pointPrelevementNameAliases String[]                        @default([])
 
   abandonReason String? @db.Text
