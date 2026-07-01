@@ -9,6 +9,7 @@
     "start-dev": "nodemon --watch './**/*.js' --exec 'node api.js'",
     "start:worker": "node worker.js",
     "import-bvtech": "node scripts/import-bvtech.js",
+    "audit:declaration-overlaps": "node scripts/audit-declaration-value-overlaps.js",
     "migrate:prisma": "prisma migrate deploy",
     "user:create": "node scripts/create-user.js",
     "lint": "xo",

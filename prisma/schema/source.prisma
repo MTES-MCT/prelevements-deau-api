@@ -120,3 +120,42 @@ model ChunkValue {
   @@index([metricTypeCode])
   @@index([chunkId, valueKind, metricTypeCode])
 }
+
+model ChunkValueReplacement {
+  id String @id @default(uuid()) @db.Uuid
+
+  replacedChunkValueId String @db.Uuid
+  replacedChunkId      String @db.Uuid
+  replacedSourceId     String @db.Uuid
+
+  replacementChunkValueId String? @db.Uuid
+  replacementChunkId      String? @db.Uuid
+  replacementSourceId     String? @db.Uuid
+
+  pointPrelevementId String? @db.Uuid
+
+  metricTypeCode String  @db.Text
+  unit           String? @db.Text
+  frequency      String  @db.Text
+
+  periodStart DateTime @db.Timestamp(3)
+  periodEnd   DateTime @db.Timestamp(3)
+
+  valueKind ChunkValueKind
+  value     Decimal        @db.Decimal(20, 4)
+
+  conflictPolicy String  @db.Text
+  replaceComment String? @db.Text
+  metadata       Json?
+
+  createdAt DateTime @default(now())
+
+  @@unique([replacedChunkValueId, replacementChunkValueId])
+  @@index([replacedChunkValueId])
+  @@index([replacedChunkId])
+  @@index([replacedSourceId])
+  @@index([replacementChunkId])
+  @@index([replacementSourceId])
+  @@index([pointPrelevementId])
+  @@index([metricTypeCode, periodStart, periodEnd])
+}

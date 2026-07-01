@@ -33,12 +33,24 @@ model Declaration {
   waterWithdrawalType String
   consolidatedAt      DateTime?
 
+  processingStatus       DeclarationProcessingStatus  @default(CREATED)
+  processingJobId        String?                      @db.Text
+  processingAttemptCount Int                          @default(0)
+  processingQueuedAt     DateTime?
+  processingStartedAt    DateTime?
+  processingCompletedAt  DateTime?
+  processingFailedAt     DateTime?
+  processingError        String?                      @db.Text
+  processingEvents       DeclarationProcessingEvent[]
+
   @@unique([importSourceId])
   @@index([declarantUserId])
   @@index([createdByDeclarantUserId])
   @@index([dataSourceType])
   @@index([waterWithdrawalType])
   @@index([consolidatedAt])
+  @@index([processingStatus])
+  @@index([processingQueuedAt])
 }
 
 enum DeclarationDataSourceType {
@@ -46,6 +58,33 @@ enum DeclarationDataSourceType {
   MANUAL
   SPREADSHEET
   API
+}
+
+enum DeclarationProcessingStatus {
+  CREATED
+  UPLOADED
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model DeclarationProcessingEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarationId String      @db.Uuid
+  declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
+  status   DeclarationProcessingStatus
+  message  String?                     @db.Text
+  metadata Json?
+
+  createdByUserId String?  @db.Uuid
+  createdAt       DateTime @default(now())
+
+  @@index([declarationId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model DeclarationFile {
