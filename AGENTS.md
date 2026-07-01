@@ -1,86 +1,92 @@
 ## Stack
-Node.js 24 (ESM), MongoDB 4.4, Redis, BullMQ v5, Express v5, AVA, XO, c8
 
-Internal packages:
-- `@fabnum/prelevements-deau-timeseries-parsers`: file validation & timeseries extraction
+Node.js 24, ESM, Express 5, Prisma/PostgreSQL/PostGIS, Redis, BullMQ v5, S3 compatible storage, AVA, XO, c8.
 
-## Code Style (XO)
+Internal package:
+
+- `@fabnum/prelevements-deau-timeseries-parsers`: validation and timeseries extraction for declaration files.
+
+## Code Style
+
+No semicolons. Two spaces. Explicit `.js` extensions. Prefer `async`/`await`. Keep API/database payloads aligned with Prisma field names.
+
 ```javascript
-import {ObjectId} from 'mongodb'
-import mongo from './lib/util/mongo.js'
+import {prisma} from './db/prisma.js'
 
-export async function getDossier(dossierId) {
-  const db = mongo.db
-  const dossier = await db.collection('dossiers').findOne({
-    _id: new ObjectId(dossierId)
+export async function getDeclaration(declarationId) {
+  return prisma.declaration.findUnique({
+    where: {id: declarationId},
+    include: {files: true}
   })
-
-  if (!dossier) {
-    throw createError(404, 'Dossier non trouvé')
-  }
-
-  return dossier
 }
 ```
-No semicolons • 2 spaces • `snake_case` for DB • No trailing commas • `.js` extensions • `async/await`
 
 ## Architecture
-```
-lib/
-├── models/          # MongoDB CRUD
-├── handlers/        # Route logic
-├── validation/      # Joi schemas
-├── services/        # Business logic
-├── queues/          # BullMQ (config, workers, jobs)
-└── util/            # mongo, errors
 
-api.js (HTTP) ←→ worker.js (BullMQ) → Redis + MongoDB
+```text
+lib/
+├── handlers/        # Express route logic
+├── models/          # Prisma-facing model helpers
+├── services/        # Business logic
+├── validation/      # Joi schemas
+├── queues/          # BullMQ config, workers, jobs
+└── util/            # shared helpers
+
+api.js (HTTP) -> Redis/BullMQ -> worker.js
+                 PostgreSQL/PostGIS via Prisma
+                 S3 compatible object storage
 ```
 
 ## Essentials
 
-**MongoDB**: `mongo.db` singleton, `new ObjectId()`, projections
+**Database**: use Prisma from `db/prisma.js`.
+
 ```javascript
-await db.collection('dossiers').findOne(
-  {_id: new ObjectId(id)},
-  {projection: {numero: 1}}
-)
+const declaration = await prisma.declaration.findUnique({
+  where: {id},
+  include: {files: true}
+})
 ```
 
-**Validation**: Joi in `lib/validation/`
+**Validation**: Joi schemas live in `lib/validation/`.
+
 ```javascript
-const {error} = schema.validate(req.body)
-if (error) throw createError(400, error.message)
+const {error, value} = schema.validate(req.body)
+if (error) {
+  throw createError(400, error.message)
+}
 ```
 
-**BullMQ**: See `lib/queues/README.md`
-- Cron: sync DS (1h), maintenance (3h), consolidation (4h)
-- On-demand: `addJobProcessAttachment(id)`, `addJobConsolidateDossier(id)`
+**BullMQ**: see `lib/queues/README.md`.
 
-**File parsing**: `@fabnum/prelevements-deau-timeseries-parsers`
+Current queues:
+
+- `process-declaration`
+- `process-api-import`
+- `reconstruct-volumes-from-index-for-point`
+
+**File parsing**: use `@fabnum/prelevements-deau-timeseries-parsers`.
+
 ```javascript
 const {data, errors} = await extractMultiParamFile(buffer)
-if (!data) throw createError(400, 'Invalid', {errors})
+if (!data) {
+  throw createError(400, 'Fichier invalide', {errors})
+}
 ```
 
 ## Commands
+
 ```bash
-npm start              # API
-npm run start:worker   # Workers
-npm run lint           # XO
-npm test               # AVA
+npm start
+npm run start:worker
+npm run lint
+npm test
+npm run coverage
 ```
 
-## Docs
-- `README.md`: complete guide
-- `lib/queues/README.md`: BullMQ
-- `docs/openapi.yaml`: API spec
-- `packages/timeseries-parsers/docs/`: validation
-
 ## Rules
-- Errors via `http-errors`
-- ESM with `.js` extensions
-- MongoDB via `mongo.db`
-- npm workspaces (`packages/*`)
-- **PRs in French**
-- **Conventional commits**
+
+- Errors via `http-errors`.
+- PRs and user-facing wording in French.
+- Conventional commits when committing.
+- Do not reintroduce legacy Mongo/DS import code.

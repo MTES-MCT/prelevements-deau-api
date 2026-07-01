@@ -1,17 +1,4 @@
 services:
-  mongo:
-    image: mongo:7.0
-    container_name: prelevement-mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_DATABASE: prelevements-deau
-    volumes:
-      - mongo_data:/data/db
-    networks:
-      - prelevement-network
-
   postgres:
     image: postgis/postgis:17-3.5
     container_name: prelevement-postgres
@@ -75,7 +62,6 @@ networks:
     name: prelevement-network
 
 volumes:
-  mongo_data:
   postgres_data:
   redis_data:
   minio_data:

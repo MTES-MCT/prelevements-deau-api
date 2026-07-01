@@ -1,235 +1,44 @@
-# Architecture BullMQ
+# BullMQ
 
-Ce dossier contient l'implémentation du système de files d'attente et de tâches planifiées basé sur [BullMQ](https://docs.bullmq.io/).
+Ce dossier contient les files d'attente et workers BullMQ.
 
-## Vue d'ensemble
+## Services
 
-Le système utilise **BullMQ v5** avec Redis comme backend pour gérer deux types de tâches :
-- **Tâches planifiées (cron)** : exécutées automatiquement selon un calendrier
-- **Tâches à la demande** : déclenchées par l'API ou d'autres processus
+BullMQ utilise Redis comme backend. En local, Redis est démarré par `docker compose up -d`.
 
-## Architecture
+## Files
 
-```
-┌─────────────┐       ┌─────────────┐
-│   api.js    │       │  worker.js  │
-│  (HTTP API) │       │  (Workers)  │
-└──────┬──────┘       └──────┬──────┘
-       │                     │
-       │  addJob()           │  processJob()
-       ├─────────────────────┤
-       │                     │
-       └──────┬──────────────┘
-              │
-        ┌─────▼─────┐
-        │   Redis   │
-        │  (Queues) │
-        └───────────┘
-```
+Les files déclarées dans `config.js` sont :
+
+| Queue | Producteur | Consommateur |
+| --- | --- | --- |
+| `process-declaration` | API | orchestration |
+| `process-api-import` | API/scripts | worker API |
+| `reconstruct-volumes-from-index-for-point` | API/services | worker API |
+
+`WORKER_JOBS` limite les jobs consommés par `worker.js` aux traitements internes à l'API.
 
 ## Fichiers
 
-### `config.js`
-Configuration centrale : connexion Redis, définition des files d'attente et des jobs.
+- `config.js` : connexion Redis, options par défaut, création des queues.
+- `jobs.js` : helpers d'ajout de jobs.
+- `workers.js` : création des workers locaux.
+- `scheduler.js` : synchronisation des schedulers BullMQ.
+- `board.js` : montage BullBoard.
 
-**Exports :**
-- `getConnection()` : Instance Redis partagée
-- `getQueue(name)` : Crée/récupère une queue
-- `JOBS` : Liste de tous les jobs (avec/sans cron)
+## Options par défaut
 
-**Jobs configurés :**
-| Nom | Type | Fréquence | Description |
-|-----|------|-----------|-------------|
-| `consolidate-dossiers-maintenance` | Cron | 1x/jour à 4h | Reconsolide les dossiers marqués |
-| `consolidate-dossier` | On-demand | - | Consolide un dossier spécifique |
+- `attempts: 3`
+- backoff exponentiel de 5 secondes
+- suppression automatique des jobs réussis
+- conservation des jobs échoués pour investigation
 
-### `scheduler.js`
-Planificateur qui configure les jobs récurrents au démarrage du worker.
+## BullBoard
 
-**Export :**
-- `startScheduler()` : Initialise les crons via `upsertJobScheduler`
+Si `BULLBOARD_PASSWORD` est défini, BullBoard est disponible sur :
 
-**Note importante :** Avec BullMQ v5, les options de répétition sont passées directement (pas dans un objet `repeat`).
-
-### `workers.js`
-Démarrage des workers qui consomment les jobs des queues.
-
-**Exports :**
-- `startWorkers()` : Crée un Worker par queue
-
-**Handlers :**
-Chaque job est mappé à une fonction de traitement :
-```javascript
-{
-  'process-attachment': async job => processAttachment(job.data.attachmentId),
-  // ...
-}
-```
-
-**Concurrence :**
-- `process-attachment` : 1 (séquentiel, pour éviter conflits d'écriture)
-- `consolidate-dossier` : 4 (parallélisation possible)
-- Autres : 1 (par défaut)
-
-### `jobs.js`
-Fonctions utilitaires pour créer des jobs à la demande.
-
-**Exports :**
-- `addJobProcessAttachment(attachmentId)` : Déclenche le traitement d'un attachment
-- `addJobConsolidateDossier(dossierId)` : Déclenche la consolidation d'un dossier
-
-**Déduplication :**
-Les jobs utilisent un `jobId` stable (`attachment-${id}` ou `dossier-${id}`) pour éviter les doublons.
-
-**Debounce :**
-- `process-attachment` : 2s (évite les traitements multiples lors de modifications rapides)
-- `consolidate-dossier` : 5s
-
-## Utilisation
-
-### Démarrer les workers
-
-```bash
-npm run start:worker
-```
-
-Cette commande :
-1. Se connecte à MongoDB
-2. Configure les schedulers (crons)
-3. Démarre les workers pour chaque queue
-
-### Ajouter un job depuis le code
-
-```javascript
-import {addJobProcessAttachment} from './lib/queues/jobs.js'
-
-// Déclenche le traitement d'un attachment
-await addJobProcessAttachment('67890abcdef')
-```
-
-### Mode test
-
-En mode test (`NODE_ENV=test`), `getConnection()` retourne `null` et les jobs ne sont pas créés (évite les dépendances Redis).
-
-## Retry & Gestion d'erreurs
-
-**Configuration par défaut** (dans `config.js`) :
-- `attempts: 3` (3 tentatives max)
-- `backoff: exponential, 5000ms` (délai progressif : 5s, 25s, 125s)
-- `removeOnComplete: true` (supprime jobs réussis automatiquement)
-- `removeOnFail: false` (conserve jobs en erreur pour investigation)
-
-Les jobs échoués restent dans Redis jusqu'à suppression manuelle ou retraitement.
-
-## Monitoring
-
-### Via BullBoard (recommandé)
-
-BullBoard fournit une interface web pour monitorer les queues en temps réel.
-
-**Configuration :**
-```bash
-# .env
-BULLBOARD_PASSWORD=your-secure-password
-```
-
-**Accès :**
-```
+```text
 http://localhost:5000/admin/queues
 ```
 
-Authentification Basic Auth requise (username libre, password = `BULLBOARD_PASSWORD`).
-
-**Fonctionnalités :**
-- Vue d'ensemble de toutes les queues
-- Statistiques en temps réel (waiting, active, completed, failed)
-- Détails de chaque job (données, résultat, stacktrace)
-- Actions manuelles :
-  - Retry de jobs échoués
-  - Nettoyage des jobs terminés
-  - Pause/reprise de queues
-  - Suppression de jobs
-
-**Exemple d'utilisation :**
-
-1. Configurer le mot de passe dans `.env` :
-   ```bash
-   BULLBOARD_PASSWORD=mon-mot-de-passe-secure
-   ```
-
-2. Démarrer l'API :
-   ```bash
-   npm start
-   # Affiche : 📊 BullBoard disponible sur /admin/queues
-   ```
-
-3. Ouvrir dans le navigateur :
-   ```
-   http://localhost:5000/admin/queues
-   ```
-
-4. Se connecter avec Basic Auth :
-   - Username : (n'importe quoi)
-   - Password : `mon-mot-de-passe-secure`
-
-**Implémentation :**
-- Fichier : `lib/queues/board.js`
-- Intégration : `api.js` (monté sur `/admin/queues`)
-- Sécurité : Authentification Basic obligatoire
-
-### Via CLI (bullmq-cli)
-
-```bash
-# Installer l'outil (optionnel)
-npm install -g bullmq-cli
-
-# Voir les jobs échoués
-bullmq jobs process-attachment failed
-```
-
-### Via code
-
-```javascript
-import {getQueue} from './lib/queues/config.js'
-
-const queue = getQueue('process-attachment')
-const failedJobs = await queue.getFailed()
-console.log(failedJobs)
-```
-
-## Dépendances
-
-- **bullmq** v5.61.0+ : Librairie de gestion de queues
-- **ioredis** v5.8.1+ : Client Redis
-- **@bull-board/api** v6.14.0 : Dashboard de monitoring (API)
-- **@bull-board/express** v6.14.0 : Adaptateur Express pour BullBoard
-- **@bull-board/ui** v6.14.0 : Interface utilisateur de BullBoard
-- **redis-server** : Instance Redis locale ou distante
-
-## Variables d'environnement
-
-```bash
-# URL de connexion Redis (optionnel)
-REDIS_URL=redis://localhost:6379
-
-# Mot de passe BullBoard (optionnel, active le monitoring)
-BULLBOARD_PASSWORD=your-secure-password
-
-# Mode test (désactive Redis)
-NODE_ENV=test
-```
-
-## Évolutions possibles
-
-- [x] Dashboard de monitoring (BullBoard) ✅
-- [ ] Métriques Prometheus/Grafana
-- [ ] Jobs prioritaires (via options `priority`)
-- [ ] Pause/reprise de queues dynamique
-- [ ] Notifications d'échec (email/Slack)
-- [ ] Nettoyage automatique des jobs anciens
-
-## Ressources
-
-- [Documentation BullMQ](https://docs.bullmq.io/)
-- [Guide de migration v4 → v5](https://docs.bullmq.io/guide/migration-to-v5)
-- [Patterns de retry](https://docs.bullmq.io/guide/retrying-failing-jobs)
+L'authentification est en Basic Auth. Le nom d'utilisateur est libre.

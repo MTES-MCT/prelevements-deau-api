@@ -1,321 +1,26 @@
 openapi: 3.1.0
 info:
-  title: API Prélèvements d'Eau
-  version: 0.1.0
-  description: |
-    Première ébauche de la définition OpenAPI. Certaines propriétés sont simplifiées ou notées TBD.
-    Les objets renvoyés correspondent à l'état courant de l'API Express.
-  contact:
-    name: Équipe Prélèvements d'Eau
+  title: Prélèvements d'eau API
+  version: 1.0.0
+  description: API HTTP de Partageons l'eau pour les déclarations, référentiels, séries temporelles et imports.
+servers:
+  - url: http://localhost:5000/api
+    description: Local
 tags:
   - name: Auth
-    description: Authentification et gestion de session
-  - name: Meta
-    description: Informations générales et de contexte
-  - name: Dossiers
-    description: Gestion des dossiers issus de démarches simplifiées
-  - name: Attachments
-    description: Pièces jointes des dossiers (fichiers importés)
-  - name: Intégrations
-    description: Journées / lignes intégrées issues des pièces jointes
-  - name: Séries
-    description: Séries temporelles de prélèvements (métadonnées et valeurs)
-  - name: Points
-    description: Points de prélèvements (captages / stations)
-  - name: Exploitations
-    description: Exploitations liées à des points et préleveurs
-  - name: Documents
-    description: Documents administratifs et justificatifs
-  - name: Règles
-    description: Règles de prélèvement (volumes, débits, horaires)
-  - name: Préleveurs
-    description: Acteurs réalisant les prélèvements
-  - name: Territoires
-    description: Accès par territoire administratif
-  - name: Référentiels
-    description: Données de référence externes (BNPE, BSS, etc.)
+  - name: Declarations
+  - name: Sources
+  - name: Instruction
+  - name: Referentiels
+  - name: Series
   - name: Stats
-    description: Statistiques agrégées
-servers:
-  - url: https://api.example.test
-    description: Environnement de test
-  - url: https://api.example.prod
-    description: Production (placeholder)
-security:
-  - bearerAuth: []
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-  schemas:
-    ObjectId:
-      type: string
-      pattern: '^[0-9a-fA-F]{24}$'
-      description: Identifiant MongoDB
-    WaterUse:
-      type: object
-      description: Usage ou sous-usage de l'eau issu du référentiel SANDRE
-      properties:
-        id: { type: string, format: uuid }
-        code: { type: string, example: '13A' }
-        kind: { type: string, enum: [USAGE, SUB_USAGE] }
-        parentId: { type: string, format: uuid, nullable: true }
-        mnemonic: { type: string, nullable: true }
-        label: { type: string }
-        definition: { type: string, nullable: true }
-        status: { type: string, nullable: true }
-        color: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
-        dashboardVisible: { type: boolean }
-        children:
-          type: array
-          items: { $ref: '#/components/schemas/WaterUse' }
-    WaterUsesResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          description: Liste plate des usages et sous-usages.
-          items: { $ref: '#/components/schemas/WaterUse' }
-        usages:
-          type: array
-          description: Arbre des usages racines avec leurs sous-usages.
-          items: { $ref: '#/components/schemas/WaterUse' }
-    Dossier:
-      type: object
-      properties:
-        _id: { $ref: '#/components/schemas/ObjectId' }
-        territoire: { type: string }
-        ds:
-          type: object
-          properties:
-            demarcheNumber: { type: integer }
-            dossierNumber: { type: integer }
-        status: { type: string }
-        result:
-          type: object
-          description: Résumé de consolidation du dossier
-          properties:
-            preleveur: { $ref: '#/components/schemas/ObjectId', nullable: true }
-            attachmentCount: { type: integer }
-            unprocessedAttachmentCount: { type: integer }
-            unparsedAttachmentCount: { type: integer }
-            parsedAttachmentCounts:
-              type: object
-              additionalProperties: { type: integer }
-            totalVolumePreleve:
-              type: number
-              description: "Volume total prélevé pour le dossier (somme des volumes de tous les attachments en m³)"
-            foundPointPrelevements: { type: array, items: { type: integer } }
-            notFoundPointPrelevements: { type: array, items: { type: integer } }
-            acceptedDaysCount: { type: integer }
-        consolidatedAt: { type: string, format: date-time, nullable: true }
-        files:
-          type: array
-          items: { $ref: '#/components/schemas/AttachmentSummary' }
-    AttachmentSummary:
-      type: object
-      properties:
-        storageKey: { type: string }
-        storageHash: { type: string }
-        validationStatus: { type: string, enum: [success, warning, error], nullable: true }
-        result:
-          type: object
-          properties:
-            seriesCount: { type: integer }
-            totalVolumePreleve:
-              type: number
-              description: "Volume total prélevé pour cette pièce jointe (somme des volumes de toutes les séries en m³)"
-            valueRowCount: { type: integer }
-            rawErrorsSize: { type: integer }
-            errorSummary:
-              type: object
-              additionalProperties: { type: integer }
-    IntegrationEntry:
-      type: object
-      properties:
-        point: { $ref: '#/components/schemas/ObjectId' }
-        date: { type: string, format: date }
-        pointInfo:
-          type: object
-          nullable: true
-          properties:
-            id_point: { type: integer }
-            nom: { type: string }
-    PointPrelevementLight:
-      type: object
-      description: Point de prélèvement (non décoré, sans usages ni préleveurs)
-      properties:
-        _id: { $ref: '#/components/schemas/ObjectId' }
-        id_point: { type: integer }
-        nom: { type: string, nullable: true }
-        bnpe:
-          type: object
-          nullable: true
-          properties:
-            nom: { type: string, nullable: true }
-    PointPrelevementDecorated:
-      type: object
-      description: Point de prélèvement décoré avec usages, préleveurs et statut des exploitations
-      allOf:
-        - $ref: '#/components/schemas/PointPrelevementLight'
-        - type: object
-          properties:
-            preleveurs:
-              type: array
-              description: Liste des préleveurs associés au point via les exploitations
-              items: { $ref: '#/components/schemas/PreleveurLight' }
-            exploitationsStartDate:
-              type: string
-              format: date
-              nullable: true
-              description: Date de début de la plus ancienne exploitation
-            usages:
-              type: array
-              description: Liste unique des usages de toutes les exploitations du point
-              items: { $ref: '#/components/schemas/WaterUse' }
-    PreleveurLight:
-      type: object
-      properties:
-        _id: { $ref: '#/components/schemas/ObjectId' }
-        nom: { type: string, nullable: true }
-        raison_sociale: { type: string, nullable: true }
-        siret: { type: string, nullable: true, description: "Numéro SIRET (14 caractères)" }
-        email: { type: string, nullable: true }
-    Exploitation:
-      type: object
-      properties:
-        _id: { $ref: '#/components/schemas/ObjectId' }
-        point: { $ref: '#/components/schemas/ObjectId' }
-        preleveur: { $ref: '#/components/schemas/ObjectId' }
-        date_debut: { type: string, format: date }
-        date_fin: { type: string, format: date, nullable: true }
-        statut: { type: string }
-        usageId: { type: string, format: uuid, nullable: true }
-        usage: { $ref: '#/components/schemas/WaterUse' }
-        documents: { type: array, items: { type: object }, description: "Documents associés (décorés si disponibles)" }
-    Document:
-      type: object
-      properties:
-        _id: { $ref: '#/components/schemas/ObjectId' }
-        preleveur: { $ref: '#/components/schemas/ObjectId' }
-        territoire: { type: string }
-        nom_fichier: { type: string, description: "Nom du fichier" }
-        reference: { type: string, nullable: true, description: "Référence administrative" }
-        nature: { type: string, enum: [autorisation, arrete_prefectoral, recepisse, autre] }
-        date_signature: { type: string, format: date }
-        date_fin_validite: { type: string, format: date, nullable: true }
-        date_ajout: { type: string, format: date }
-        remarque: { type: string, nullable: true }
-        taille: { type: integer, description: "Taille du fichier en octets" }
-        objectKey: { type: string, description: "Clé S3 du fichier" }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-        deletedAt: { type: string, format: date-time, nullable: true }
-        downloadUrl: { type: string, description: "URL de téléchargement pré-signée" }
-        hasRegles: { type: boolean, description: "Indique si le document est associé à des règles (décoré, uniquement dans la liste des documents d'un préleveur)" }
-        hasExploitations: { type: boolean, description: "Indique si le document est associé à des exploitations (décoré, uniquement dans la liste des documents d'un préleveur)" }
-    Regle:
-      type: object
-      properties:
-        _id: { $ref: '#/components/schemas/ObjectId' }
-        preleveur: { $ref: '#/components/schemas/ObjectId' }
-        territoire: { type: string }
-        document: { $ref: '#/components/schemas/ObjectId', nullable: true, description: "ObjectId du document (décoré dans les réponses)" }
-        exploitations:
-          type: array
-          items: { $ref: '#/components/schemas/ObjectId' }
-          description: "Tableau d'ObjectIds des exploitations (décorées dans les réponses)"
-        parametre:
-          type: string
-          description: "Paramètre de la règle (volume prélevé, débit prélevé, débit réservé, température, etc.)"
-          enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH]
-        frequence:
-          type: string
-          nullable: true
-          description: "Fréquence de la règle (uniquement pour les volumes prélevés : 1 day, 1 month, 1 year)"
-          enum: [1 day, 1 month, 1 year]
-        unite:
-          type: string
-          description: "Unité de mesure"
-          enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm]
-        valeur: { type: number, description: "Valeur numérique de la contrainte" }
-        contrainte:
-          type: string
-          description: "Opérateur de comparaison : min (valeur minimale), max (valeur maximale à ne pas dépasser)"
-          enum: [min, max]
-        debut_validite: { type: string, format: date, description: "Date de début de validité" }
-        fin_validite: { type: string, format: date, nullable: true, description: "Date de fin de validité" }
-        debut_periode: { type: string, format: date, nullable: true, description: "Début de période (ex: début saison)" }
-        fin_periode: { type: string, format: date, nullable: true, description: "Fin de période (ex: fin saison)" }
-        remarque: { type: string, nullable: true, description: "Remarque ou commentaire" }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-        deletedAt: { type: string, format: date-time, nullable: true }
-    Statistiques:
-      type: object
-      additionalProperties: true
-    SeriesSummary:
-      type: object
-      properties:
-        _id: { $ref: '#/components/schemas/ObjectId' }
-        parameter: { type: string }
-        unit: { type: string, nullable: true }
-        frequency: { type: string, description: "Fréquence normalisée (1 day, 15 minutes, 1 hour, 1 month, 1 quarter, 1 year)" }
-        valueType: { type: string }
-        originalFrequency: { type: string, nullable: true, description: "Fréquence d'origine avant expansion (volumes mensuels/trimestriels/annuels)" }
-        minDate: { type: string, format: date }
-        maxDate: { type: string, format: date }
-        hasSubDaily: { type: boolean, nullable: true }
-        numberOfValues: { type: integer, nullable: true }
-        pointPrelevement: { $ref: '#/components/schemas/ObjectId', nullable: true }
-        pointInfo:
-          type: object
-          nullable: true
-          properties:
-            id_point: { type: integer }
-            nom: { type: string }
-    SeriesValueDaily:
-      type: object
-      properties:
-        date: { type: string, format: date }
-        value: { type: number, nullable: true }
-        remark: { type: string, nullable: true }
-        originalValue: { type: number, nullable: true, description: "Valeur d'origine avant expansion (volumes mensuels/trimestriels/annuels)" }
-        originalDate: { type: string, format: date, nullable: true, description: "Date de début de période d'origine" }
-        originalFrequency: { type: string, nullable: true, description: "Fréquence d'origine (1 month, 1 quarter, 1 year)" }
-        daysCovered: { type: integer, nullable: true, description: "Nombre de jours couverts par la valeur d'origine" }
-    SeriesValueSubDaily:
-      type: object
-      properties:
-        date: { type: string, format: date }
-        values:
-          type: array
-          items:
-            type: object
-            properties:
-              time: { type: string, pattern: '^\\d{2}:\\d{2}:\\d{2}$' }
-              value: { type: number, nullable: true }
-              remark: { type: string, nullable: true }
-    Error:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Message d'erreur
-        statusCode:
-          type: integer
-          description: Code HTTP de l'erreur
 paths:
   /auth/request:
     post:
       tags: [Auth]
-      summary: Demander un magic link de connexion
-      description: |
-        Envoie un email avec des liens de connexion pour chaque territoire auquel l'utilisateur a accès.
-        Les liens sont valables 15 minutes.
       operationId: requestAuth
-      security: []
+      summary: Demander un lien de connexion
+      description: Envoie un jeton de connexion à l'adresse email fournie.
       requestBody:
         required: true
         content:
@@ -324,1786 +29,586 @@ paths:
               type: object
               required: [email]
               properties:
-                email:
-                  type: string
-                  format: email
-                  description: Adresse email de l'utilisateur
-                  example: "alice.dupont@example.com"
-                prefixUrl:
-                  type: string
-                  pattern: '^http://localhost:'
-                  description: |
-                    URL de base pour les liens dans l'email (localhost uniquement, pour le développement).
-                    Si non fourni, utilise la variable d'environnement API_URL.
-                  example: "http://localhost:5000"
+                email: {type: string, format: email}
       responses:
-        '200':
-          description: Email envoyé avec succès (message générique pour éviter l'énumération)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Si ce compte existe et dispose des droits nécessaires, un email de connexion a été envoyé"
-        '400':
-          description: Email manquant ou invalide
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /auth/verify/{token}:
-    get:
-      tags: [Auth]
-      summary: Vérifier un token d'authentification (legacy)
-      description: |
-        **Route legacy avec redirection automatique.**
-
-        Vérifie un token d'authentification reçu par email et crée une session.
-        Cette route redirige automatiquement vers le front-end avec le token de session.
-
-        Pour une utilisation sans redirection, préférer POST /auth/verify.
-      operationId: verifyAuth
-      deprecated: true
-      security: []
-      parameters:
-        - in: path
-          name: token
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Token d'authentification (UUID v4)
-        - in: query
-          name: territoire
-          required: true
-          schema:
-            type: string
-          description: Code du territoire pour lequel se connecter
-          example: "DEP-974"
-      responses:
-        '302':
-          description: Redirection vers le front-end (succès ou erreur)
-          headers:
-            Location:
-              schema:
-                type: string
-              description: |
-                URL de redirection vers le front-end.
-                - Succès : `/?token=...`
-                - Erreur : `/auth/error?reason=...`
+        '204': {description: Demande acceptée}
+        default: {$ref: '#/components/responses/Error'}
   /auth/verify:
     post:
       tags: [Auth]
-      summary: Vérifier un token d'authentification
-      description: |
-        Vérifie un token d'authentification reçu par email et crée une session.
-        Retourne le token de session en JSON sans redirection.
-
-        Cette route est préférée pour les clients API. Pour les emails avec liens cliquables,
-        utiliser GET /auth/verify/{token} qui redirige automatiquement.
       operationId: verifyAuthToken
-      security: []
+      summary: Vérifier un jeton de connexion
+      description: Crée une session à partir d'un jeton d'authentification valide.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [token, territoire]
+              required: [token]
               properties:
-                token:
-                  type: string
-                  format: uuid
-                  description: Token d'authentification (UUID v4)
-                  example: "550e8400-e29b-41d4-a716-446655440000"
-                territoire:
-                  type: string
-                  description: Code du territoire pour lequel se connecter
-                  example: "DEP-974"
+                token: {type: string}
       responses:
         '200':
-          description: Token de session créé avec succès
+          description: Session créée
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  token:
-                    type: string
-                    description: Token de session à utiliser dans l'en-tête Authorization
-                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-        '400':
-          description: Paramètres manquants ou invalides
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          description: Token invalide, expiré ou utilisateur non trouvé
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '403':
-          description: Territoire non autorisé pour cet utilisateur
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Territoire non trouvé
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+              schema: {$ref: '#/components/schemas/UserSession'}
+        default: {$ref: '#/components/responses/Error'}
   /auth/logout:
     post:
       tags: [Auth]
-      summary: Se déconnecter
-      description: Supprime la session de l'utilisateur
       operationId: logout
-      security:
-        - bearerAuth: []
+      summary: Fermer la session
+      description: Supprime la session courante.
       responses:
-        '200':
-          description: Déconnexion réussie
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  message:
-                    type: string
-                    example: "Déconnexion réussie"
-        '401':
-          description: Non authentifié ou token invalide
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        '204': {description: Session supprimée}
+        default: {$ref: '#/components/responses/Error'}
   /info:
     get:
-      tags: [Meta]
-      summary: Informations sur l'utilisateur authentifié
-      description: |
-        Retourne les informations de l'utilisateur authentifié et son territoire associé.
-        Nécessite un token de session valide ou un token legacy.
-
-        - Avec un token de session : retourne email + rôle + territoire
-        - Avec un token legacy : retourne rôle + territoire (pas d'email)
-      operationId: getUserInfo
-      security:
-        - bearerAuth: []
+      tags: [Auth]
+      operationId: getInfo
+      summary: Lire la session courante
+      description: Retourne l'utilisateur authentifié et ses rôles.
       responses:
         '200':
-          description: Informations utilisateur
+          description: Informations de session
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  user:
-                    type: object
-                    nullable: true
-                    description: Présent uniquement si authentifié via session (pas token legacy)
-                    properties:
-                      _id: { type: string }
-                      email: { type: string, format: email }
-                      nom: { type: string }
-                      prenom: { type: string }
-                      structure: { type: string, nullable: true }
-                  role:
-                    type: string
-                    enum: [reader, editor]
-                  territoire:
-                    type: object
-                    properties:
-                      code: { type: string }
-                      nom: { type: string }
-        '401':
-          description: Non authentifié ou token invalide/expiré
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '403':
-          description: Droits insuffisants
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /dossiers:
-    get:
-      tags: [Dossiers]
-      summary: Lister les dossiers
-      description: Liste paginée (future) ou simple des dossiers filtrables par statut, préleveur, type de prélèvement et mois de déclaration.
-      operationId: listDossiers
-      parameters:
-        - in: query
-          name: status
-          schema: { type: string }
-        - in: query
-          name: preleveur
-          schema: { type: string, description: ObjectId ou 'unknown' }
-        - in: query
-          name: typePrelevement
-          schema: { type: string }
-        - in: query
-          name: moisDeclaration
-          schema: { type: string }
-      responses:
-        '200':
-          description: Liste de dossiers
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Dossier' }
-  /dossiers/stats:
-    get:
-      tags: [Dossiers]
-      summary: Statistiques agrégées par statut de dossier
-      description: Compte le nombre de dossiers pour chaque statut.
-      operationId: getDossiersStats
-      responses:
-        '200':
-          description: Statistiques
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Statistiques' }
-  /dossiers/{dossierId}:
-    get:
-      tags: [Dossiers]
-      summary: Obtenir un dossier avec résumé des pièces jointes
-      description: Retourne le dossier ciblé et les métadonnées de ses pièces jointes.
-      operationId: getDossier
-      parameters:
-        - in: path
-          name: dossierId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Dossier complet
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Dossier' }
-        '404': { description: Introuvable }
-  /dossiers/{dossierId}/reconsolidate:
+              schema: {$ref: '#/components/schemas/UserSession'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations:
     post:
-      tags: [Dossiers]
-      summary: Marquer un dossier pour reconsolidation manuelle
-      description: |
-        Marque un dossier pour reconsolidation en supprimant son champ `consolidatedAt`.
-        Un job de consolidation est créé immédiatement pour retraiter le dossier.
-
-        **Cas d'usage** : Après la suppression d'un dossier concurrent, permet de récupérer
-        les jours libérés qui étaient en conflit (règle "premier arrivé, premier servi").
-      operationId: reconsolidateDossier
-      parameters:
-        - in: path
-          name: dossierId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '202':
-          description: Dossier marqué avec succès, job créé
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  dossierId:
-                    $ref: '#/components/schemas/ObjectId'
-                  message:
-                    type: string
-                    example: "Dossier marqué pour reconsolidation. Il sera retraité dès que possible."
-        '404': { description: Dossier non trouvé }
-  /dossiers/{dossierId}/files/{attachmentId}:
-    get:
-      tags: [Attachments]
-      summary: Obtenir le détail d'une pièce jointe
-      description: Retourne les métadonnées calculées pour une pièce jointe d'un dossier.
-      operationId: getDossierAttachment
-      parameters:
-        - in: path
-          name: dossierId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-        - in: path
-          name: attachmentId
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Pièce jointe
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AttachmentSummary' }
-        '404': { description: Introuvable }
-  /dossiers/{dossierId}/files/{attachmentId}/reprocess:
-    post:
-      tags: [Attachments]
-      summary: Retraiter une pièce jointe manuellement
-      description: |
-        Marque une pièce jointe pour retraitement en réinitialisant son état `processed` à `false`
-        et en supprimant ses données de traitement (`result`, `validationStatus`, `processingError`).
-        Un job de traitement est créé immédiatement pour retraiter le fichier.
-
-        **Cas d'usage** : Correction manuelle après une erreur de traitement ou mise à jour du parser.
-      operationId: reprocessAttachment
-      parameters:
-        - in: path
-          name: dossierId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-        - in: path
-          name: attachmentId
-          required: true
-          schema: { type: string }
-      responses:
-        '202':
-          description: Pièce jointe marquée avec succès, job créé
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  attachmentId:
-                    type: string
-                  message:
-                    type: string
-                    example: "Pièce jointe marquée pour retraitement. Elle sera retraitée dès que possible."
-        '404': { description: Introuvable }
-  /dossiers/{dossierId}/files/{attachmentId}/integrations:
-    get:
-      tags: [Intégrations]
-      summary: Jours intégrés pour une pièce jointe
-      description: Liste les entrées d'intégration (journées) produites depuis la pièce jointe.
-      operationId: listAttachmentIntegrations
-      parameters:
-        - in: path
-          name: dossierId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-        - in: path
-          name: attachmentId
-          required: true
-          schema: { type: string }
-        - in: query
-          name: withPoint
-          schema: { type: string, enum: ['0','1'], default: '0' }
-      responses:
-        '200':
-          description: Liste des intégrations
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  integrations:
-                    type: array
-                    items: { $ref: '#/components/schemas/IntegrationEntry' }
-  /dossiers/{dossierId}/files/{attachmentId}/series:
-    get:
-      tags: [Séries]
-      summary: Lister les séries d'une pièce jointe
-      description: Retourne les métadonnées des séries détectées dans une pièce jointe.
-      operationId: listAttachmentSeries
-      parameters:
-        - in: path
-          name: dossierId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-        - in: path
-          name: attachmentId
-          required: true
-          schema: { type: string }
-        - in: query
-          name: withPoint
-          schema: { type: string, enum: ['0','1'], default: '0' }
-      responses:
-        '200':
-          description: Séries associées
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  series:
-                    type: array
-                    items: { $ref: '#/components/schemas/SeriesSummary' }
-        '404': { description: Introuvable }
-  /series:
-    get:
-      tags: [Séries]
-      summary: Rechercher des séries par préleveur, point et plage de dates intégrées
-      description: >-
-        Retourne uniquement les métadonnées des séries ayant au moins une date intégrée (computed.integratedDays)
-        dans l'intervalle fourni (startDate/endDate). Si startDate et endDate sont absents, toutes les séries du couple
-        préleveur/point sont retournées sans filtrage sur integratedDays.
-      operationId: searchSeries
-      parameters:
-        - in: query
-          name: preleveurId
-          required: false
-          schema: { $ref: '#/components/schemas/ObjectId' }
-          description: |
-            Identifiant du préleveur (ObjectId).
-            Au moins un des paramètres `preleveurId` ou `pointId` doit être fourni.
-        - in: query
-          name: pointId
-          required: false
-          schema: { $ref: '#/components/schemas/ObjectId' }
-          description: |
-            Identifiant du point de prélèvement (ObjectId).
-            Au moins un des paramètres `preleveurId` ou `pointId` doit être fourni.
-        - in: query
-          name: startDate
-          required: false
-          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
-          description: Date de début (incluse) pour filtrer les dates intégrées
-        - in: query
-          name: endDate
-          required: false
-          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
-          description: Date de fin (incluse) pour filtrer les dates intégrées
-      responses:
-        '200':
-          description: Liste des séries
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  series:
-                    type: array
-                    items: { $ref: '#/components/schemas/SeriesSummary' }
-        '400': { description: Paramètres invalides }
-        '403': { description: Accès non autorisé }
-  /series/{seriesId}/values:
-    get:
-      tags: [Séries]
-      summary: Valeurs d'une série (filtrage par date)
-      description: Retourne les valeurs quotidiennes ou infra-quotidiennes d'une série, éventuellement filtrées par intervalle de dates.
-      operationId: getSeriesValues
-      parameters:
-        - in: path
-          name: seriesId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-        - in: query
-          name: startDate
-          description: Date de début (incluse) YYYY-MM-DD
-          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
-        - in: query
-          name: endDate
-          description: Date de fin (incluse) YYYY-MM-DD
-          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
-        - in: query
-          name: withPoint
-          schema: { type: string, enum: ['0','1'], default: '0' }
-      responses:
-        '200':
-          description: Valeurs de la série
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  series: { $ref: '#/components/schemas/SeriesSummary' }
-                  values:
-                    type: array
-                    items:
-                      oneOf:
-                        - $ref: '#/components/schemas/SeriesValueDaily'
-                        - $ref: '#/components/schemas/SeriesValueSubDaily'
-        '400': { description: Paramètres invalides }
-        '404': { description: Introuvable }
-  /series/{seriesId}:
-    get:
-      tags: [Séries]
-      summary: Métadonnées d'une série
-      description: Retourne uniquement les métadonnées d'une série identifiée par son ID.
-      operationId: getSeries
-      parameters:
-        - in: path
-          name: seriesId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-        - in: query
-          name: withPoint
-          schema: { type: string, enum: ['0','1'], default: '0' }
-      responses:
-        '200':
-          description: Métadonnées
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  series: { $ref: '#/components/schemas/SeriesSummary' }
-        '404': { description: Introuvable }
-  /aggregated-series:
-    get:
-      tags: [Séries]
-      summary: Agréger les données de séries temporelles
-      description: |
-        Agrège les données d'un même paramètre sur une période de temps donnée,
-        sur une liste de points de prélèvement ou pour un préleveur donné.
-
-        **Trois modes d'utilisation :**
-
-        1. **Mode pointIds seul** : Agrégation sur une liste explicite de points
-        2. **Mode preleveurId seul** : Agrégation sur tous les points d'un préleveur
-        3. **Mode combiné** : Agrégation sur un sous-ensemble de points d'un préleveur (filtrage)
-
-        **Agrégations spatiales** : Les valeurs de tous les points sélectionnés sont combinées
-        avec l'opérateur choisi (sum, mean, min, max).
-
-        **Agrégations temporelles** : Les valeurs sont regroupées selon la fréquence demandée
-        (1 day, 1 month, 1 year, etc.) et agrégées avec le même opérateur.
-
-        **Support des identifiants** : Les identifiants de points et préleveurs peuvent être
-        fournis en format numérique (ex: `207,208`) ou MongoDB ObjectId (ex: `507f1f77bcf86cd799439011`),
-        ou même un mélange des deux.
-
-        **Restriction** : Cette route nécessite des privilèges administrateur.
-      operationId: getAggregatedSeries
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: pointIds
-          required: false
-          schema:
-            type: string
-            pattern: '^([\da-fA-F]{24}|\d+)(,([\da-fA-F]{24}|\d+))*$'
-          description: |
-            Liste d'identifiants de points séparés par des virgules.
-            Accepte des IDs numériques (ex: `207,208,209`) ou des ObjectIds MongoDB
-            (ex: `507f1f77bcf86cd799439011,507f191e810c19729de860ea`), ou un mélange des deux.
-
-            **Au moins un paramètre entre `pointIds` et `preleveurId` doit être fourni.**
-          example: "207,208,209"
-        - in: query
-          name: preleveurId
-          required: false
-          schema:
-            oneOf:
-              - type: integer
-                minimum: 1
-              - type: string
-                pattern: '^[\da-fA-F]{24}$'
-          description: |
-            Identifiant du préleveur (numérique ou ObjectId MongoDB).
-            Permet d'agréger les données de tous les points du préleveur.
-
-            **Au moins un paramètre entre `pointIds` et `preleveurId` doit être fourni.**
-
-            Si `pointIds` est également fourni, seuls les points appartenant au préleveur
-            ET présents dans la liste seront agrégés (mode filtrage).
-          example: 42
-        - in: query
-          name: parameter
-          required: true
-          schema:
-            type: string
-          description: |
-            Nom du paramètre à agréger (ex: `volume prélevé`, `débit`, `température`).
-            Doit correspondre à un paramètre configuré dans le système.
-          example: "volume prélevé"
-        - in: query
-          name: operator
-          required: false
-          schema:
-            type: string
-            enum: [sum, mean, min, max]
-          description: |
-            Opérateur d'agrégation à appliquer pour combiner les valeurs :
-            - `sum` : Somme des valeurs
-            - `mean` : Moyenne des valeurs
-            - `min` : Valeur minimale
-            - `max` : Valeur maximale
-          example: "sum"
-        - in: query
-          name: startDate
-          required: false
-          schema:
-            type: string
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$'
-          description: |
-            Date de début de la période d'agrégation (format YYYY-MM-DD, incluse).
-            Si non fournie, toutes les données disponibles depuis le début sont incluses.
-        - in: query
-          name: endDate
-          required: false
-          schema:
-            type: string
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$'
-          description: |
-            Date de fin de la période d'agrégation (format YYYY-MM-DD, incluse).
-            Si non fournie, toutes les données disponibles jusqu'à aujourd'hui sont incluses.
-        - in: query
-          name: aggregationFrequency
-          required: false
-          schema:
-            type: string
-            enum: ['15 minutes', '1 hour', '6 hours', '1 day', '1 month', '1 quarter', '1 year']
-          description: |
-            Fréquence d'agrégation temporelle :
-
-            **Fréquences infra-journalières** (valeurs brutes) :
-            - `15 minutes` : Agrégation par tranches de 15 minutes
-            - `1 hour` : Agrégation horaire
-            - `6 hours` : Agrégation par tranches de 6 heures
-
-            **Fréquences journalières et supérieures** :
-            - `1 day` : Valeurs quotidiennes (pas d'agrégation temporelle)
-            - `1 month` : Agrégation mensuelle
-            - `1 quarter` : Agrégation trimestrielle
-            - `1 year` : Agrégation annuelle
-          example: "1 month"
-      responses:
-        '200':
-          description: Données agrégées avec succès
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  metadata:
-                    type: object
-                    description: Métadonnées de l'agrégation
-                    properties:
-                      parameter:
-                        type: string
-                        description: Nom du paramètre agrégé
-                        example: "volume prélevé"
-                      unit:
-                        type: string
-                        nullable: true
-                        description: Unité du paramètre
-                        example: "m³"
-                      operator:
-                        type: string
-                        enum: [sum, mean, min, max]
-                        description: Opérateur d'agrégation utilisé
-                        example: "sum"
-                      frequency:
-                        type: string
-                        description: Fréquence d'agrégation appliquée
-                        example: "1 month"
-                      startDate:
-                        type: string
-                        format: date
-                        nullable: true
-                        description: Date de début de la période d'agrégation demandée
-                        example: "2024-01-01"
-                      endDate:
-                        type: string
-                        format: date
-                        nullable: true
-                        description: Date de fin de la période d'agrégation demandée
-                        example: "2024-12-31"
-                      points:
-                        type: array
-                        description: Liste des points inclus dans l'agrégation
-                        items:
-                          type: object
-                          properties:
-                            _id:
-                              $ref: '#/components/schemas/ObjectId'
-                              description: ObjectId MongoDB du point
-                            id_point:
-                              type: integer
-                              description: Identifiant numérique du point
-                              example: 207
-                            nom:
-                              type: string
-                              description: Nom du point de prélèvement
-                              example: "Captage Ruban"
-                      pointsNotFound:
-                        type: array
-                        description: Liste des identifiants de points non trouvés
-                        items:
-                          oneOf:
-                            - type: integer
-                            - type: string
-                        example: []
-                      preleveur:
-                        type: object
-                        nullable: true
-                        description: Informations du préleveur (si mode preleveurId)
-                        properties:
-                          _id:
-                            $ref: '#/components/schemas/ObjectId'
-                          nom:
-                            type: string
-                            nullable: true
-                          raison_sociale:
-                            type: string
-                            nullable: true
-                      usesDailyAggregates:
-                        type: boolean
-                        description: Indique si des agrégats quotidiens pré-calculés ont été utilisés
-                        example: false
-                      minDate:
-                        type: string
-                        nullable: true
-                        description: Date minimale des données (format dépend de la fréquence)
-                        example: "2024-01"
-                      maxDate:
-                        type: string
-                        nullable: true
-                        description: Date maximale des données (format dépend de la fréquence)
-                        example: "2024-12"
-                      seriesCount:
-                        type: integer
-                        description: Nombre de séries utilisées pour l'agrégation
-                        example: 5
-                      valuesCount:
-                        type: integer
-                        description: Nombre total de valeurs considérées
-                        example: 1250
-                  values:
-                    type: array
-                    description: Valeurs agrégées par période
-                    items:
-                      type: object
-                      properties:
-                        date:
-                          type: string
-                          description: |
-                            Identifiant de la période (format dépend de aggregationFrequency) :
-                            - `15 minutes`, `1 hour`, `6 hours` : YYYY-MM-DD HH:MM
-                            - `1 day` : YYYY-MM-DD
-                            - `1 month` : YYYY-MM
-                            - `1 year` : YYYY
-                          example: "2024-03"
-                        value:
-                          type: number
-                          nullable: true
-                          description: Valeur agrégée pour la période (null si aucune donnée)
-                          example: 1250.5
-                        remarks:
-                          type: array
-                          items:
-                            type: string
-                          description: |
-                            Remarques de qualité des données pour cette période (optionnel, max 10 uniques).
-                            Indique le contexte ou la qualité des données agrégées :
-                            - "Estimation" : valeur estimée
-                            - "Compteur défectueux" : mesure douteuse
-                            - "Données partielles" : période incomplète
-
-                            Ce champ n'apparaît que si des remarques sont présentes dans les données sources.
-                            Les remarques sont compilées depuis toutes les valeurs qui ont contribué à l'agrégation,
-                            avec déduplication automatique.
-                          example: ["Estimation", "Compteur défectueux"]
-        '400':
-          description: Paramètres invalides
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 400
-                  message:
-                    type: string
-                    example: "Le paramètre pointIds doit être une liste d'identifiants (numériques ou ObjectId) séparés par des virgules"
-        '403':
-          description: Accès non autorisé (privilèges administrateur requis)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 403
-                  message:
-                    type: string
-                    example: "Accès non autorisé"
-        '404':
-          description: Points ou préleveur non trouvés
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 404
-                  message:
-                    type: string
-                    example: "Aucun point trouvé avec les identifiants: 999"
-  /aggregated-series/options:
-    get:
-      tags: [Séries]
-      summary: Récupérer les options disponibles pour l'agrégation de séries
-      description: |
-        Retourne les paramètres disponibles et leurs plages de dates en fonction du ciblage
-        (préleveur et/ou points). Cette route permet de découvrir quelles données sont disponibles
-        avant d'appeler `/aggregated-series`.
-
-        **Trois modes d'utilisation :**
-
-        1. **Mode pointIds seul** : Options pour une liste explicite de points
-        2. **Mode preleveurId seul** : Options pour tous les points d'un préleveur
-        3. **Mode combiné** : Options pour un sous-ensemble de points d'un préleveur
-
-        **Données retournées :**
-        - Liste des paramètres disponibles avec leurs plages de dates (basées sur `computed.integratedDays`)
-        - Métadonnées de chaque paramètre (type, unité, nombre de séries)
-        - Liste des points résolus
-
-        **Support des identifiants** : Les identifiants de points et préleveurs peuvent être
-        fournis en format numérique (ex: `207,208`) ou MongoDB ObjectId (ex: `507f1f77bcf86cd799439011`),
-        ou même un mélange des deux.
-
-        **Restriction** : Cette route nécessite des privilèges administrateur.
-      operationId: getAggregatedSeriesOptions
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: query
-          name: pointIds
-          required: false
-          schema:
-            type: string
-            pattern: '^([\da-fA-F]{24}|\d+)(,([\da-fA-F]{24}|\d+))*$'
-          description: |
-            Liste d'identifiants de points séparés par des virgules.
-            Accepte des IDs numériques (ex: `207,208,209`) ou des ObjectIds MongoDB
-            (ex: `507f1f77bcf86cd799439011,507f191e810c19729de860ea`), ou un mélange des deux.
-
-            **Au moins un paramètre entre `pointIds` et `preleveurId` doit être fourni.**
-          example: "207,208,209"
-        - in: query
-          name: preleveurId
-          required: false
-          schema:
-            oneOf:
-              - type: integer
-                minimum: 1
-              - type: string
-                pattern: '^[\da-fA-F]{24}$'
-          description: |
-            Identifiant du préleveur (numérique ou ObjectId MongoDB).
-            Permet de récupérer les options pour tous les points du préleveur.
-
-            **Au moins un paramètre entre `pointIds` et `preleveurId` doit être fourni.**
-
-            Si `pointIds` est également fourni, seuls les points appartenant au préleveur
-            ET présents dans la liste seront considérés (mode filtrage).
-          example: 42
-      responses:
-        '200':
-          description: Options disponibles récupérées avec succès
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  parameters:
-                    type: array
-                    description: Liste des paramètres disponibles avec leurs métadonnées
-                    items:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                          description: Nom du paramètre
-                          example: "volume prélevé"
-                        unit:
-                          type: string
-                          description: Unité du paramètre
-                          example: "m³"
-                        valueType:
-                          type: string
-                          enum: [cumulative, instantaneous]
-                          description: Type de valeur (cumulative ou instantaneous)
-                          example: "cumulative"
-                        minDate:
-                          type: string
-                          format: date
-                          nullable: true
-                          description: Date minimale des données intégrées (YYYY-MM-DD)
-                          example: "2023-01-01"
-                        maxDate:
-                          type: string
-                          format: date
-                          nullable: true
-                          description: Date maximale des données intégrées (YYYY-MM-DD)
-                          example: "2024-12-31"
-                        seriesCount:
-                          type: integer
-                          description: Nombre de séries disponibles pour ce paramètre
-                          example: 5
-                        spatialOperators:
-                          type: array
-                          items:
-                            type: string
-                            enum: [sum, mean, min, max]
-                          description: Opérateurs d'agrégation spatiale disponibles pour ce paramètre
-                          example: ["sum"]
-                        temporalOperators:
-                          type: array
-                          items:
-                            type: string
-                            enum: [sum, mean, min, max]
-                          description: Opérateurs d'agrégation temporelle disponibles pour ce paramètre
-                          example: ["sum"]
-                        defaultSpatialOperator:
-                          type: string
-                          enum: [sum, mean, min, max]
-                          nullable: true
-                          description: Opérateur spatial par défaut
-                          example: "sum"
-                        defaultTemporalOperator:
-                          type: string
-                          enum: [sum, mean, min, max]
-                          nullable: true
-                          description: Opérateur temporel par défaut
-                          example: "sum"
-                        availableFrequencies:
-                          type: array
-                          items:
-                            type: string
-                            enum: ["15 minutes", "1 hour", "6 hours", "1 day", "1 month", "1 quarter", "1 year"]
-                          description: |
-                            Fréquences d'agrégation disponibles pour ce paramètre.
-                            - Paramètres cumulatifs : ['1 day', '1 month', '1 quarter', '1 year'] (expansés à 1 jour minimum)
-                            - Paramètres instantanés : toutes les fréquences disponibles
-                          example: ["1 day", "1 month", "1 quarter", "1 year"]
-                        hasTemporalOverlap:
-                          type: boolean
-                          description: Indique si plusieurs séries ont des données simultanées (overlap temporel)
-                          example: false
-                        warning:
-                          type: string
-                          nullable: true
-                          description: Avertissement éventuel sur les calculs pour ce paramètre
-                          example: null
-                  points:
-                    type: array
-                    description: Liste des points résolus inclus dans la réponse
-                    items:
-                      type: object
-                      properties:
-                        _id:
-                          $ref: '#/components/schemas/ObjectId'
-                          description: ObjectId MongoDB du point
-                        id_point:
-                          type: integer
-                          description: Identifiant numérique du point
-                          example: 207
-                        nom:
-                          type: string
-                          description: Nom du point de prélèvement
-                          example: "Captage Ruban"
-              examples:
-                exemple-simple:
-                  summary: Exemple avec deux paramètres disponibles
-                  value:
-                    parameters:
-                      - name: "débit prélevé"
-                        unit: "L/s"
-                        valueType: "instantaneous"
-                        spatialOperators: ["sum"]
-                        temporalOperators: ["mean", "min", "max"]
-                        defaultSpatialOperator: "sum"
-                        defaultTemporalOperator: "mean"
-                        availableFrequencies: ["15 minutes", "1 hour", "6 hours", "1 day", "1 month", "1 quarter", "1 year"]
-                        hasTemporalOverlap: false
-                        warning: null
-                        minDate: "2023-01-01"
-                        maxDate: "2024-12-31"
-                        seriesCount: 3
-                      - name: "volume prélevé"
-                        unit: "m³"
-                        valueType: "cumulative"
-                        spatialOperators: ["sum"]
-                        temporalOperators: ["sum"]
-                        defaultSpatialOperator: "sum"
-                        defaultTemporalOperator: "sum"
-                        availableFrequencies: ["1 day", "1 month", "1 quarter", "1 year"]
-                        hasTemporalOverlap: false
-                        warning: null
-                        minDate: "2023-01-01"
-                        maxDate: "2024-12-31"
-                        seriesCount: 5
-                    points:
-                      - _id: "507f1f77bcf86cd799439011"
-                        id_point: 207
-                        nom: "Captage Ruban"
-                      - _id: "507f1f77bcf86cd799439012"
-                        id_point: 208
-                        nom: "Station Nord"
-                exemple-aucune-donnee:
-                  summary: Exemple sans données disponibles
-                  value:
-                    parameters: []
-                    points:
-                      - _id: "507f1f77bcf86cd799439011"
-                        id_point: 207
-                        nom: "Captage Ruban"
-        '400':
-          description: Paramètres invalides
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 400
-                  message:
-                    type: string
-                    example: "Vous devez fournir au moins pointIds ou preleveurId"
-        '403':
-          description: Accès non autorisé (privilèges administrateur requis)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 403
-                  message:
-                    type: string
-                    example: "Accès non autorisé"
-        '404':
-          description: Points ou préleveur non trouvés
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 404
-                  message:
-                    type: string
-                    example: "Aucun point trouvé avec les identifiants: 999"
-  /points-prelevement:
-    get:
-      tags: [Points]
-      summary: Lister les points de prélèvement
-      description: Retourne la liste des points de prélèvement disponibles avec leurs usages, préleveurs et statut.
-      operationId: listPoints
-      responses:
-        '200':
-          description: Liste de points décorés
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/PointPrelevementDecorated' }
-    post:
-      tags: [Points]
-      summary: Créer un point de prélèvement
-      description: Crée un nouveau point de prélèvement avec les propriétés fournies.
-      operationId: createPoint
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200': { description: Créé }
-  /points-prelevement/{pointId}:
-    get:
-      tags: [Points]
-      summary: Obtenir un point
-      description: Retourne les métadonnées d'un point de prélèvement avec ses usages, préleveurs et statut.
-      operationId: getPoint
-      parameters:
-        - in: path
-          name: pointId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Point décoré
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/PointPrelevementDecorated' }
-        '404': { description: Introuvable }
-    put:
-      tags: [Points]
-      summary: Mettre à jour un point
-      description: Met à jour les propriétés d'un point de prélèvement existant.
-      operationId: updatePoint
-      parameters:
-        - in: path
-          name: pointId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200': { description: Mis à jour }
-    delete:
-      tags: [Points]
-      summary: Supprimer un point
-      description: Supprime un point de prélèvement et ses dépendances éventuelles.
-      operationId: deletePoint
-      parameters:
-        - in: path
-          name: pointId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200': { description: Supprimé }
-  /points-prelevement/{pointId}/exploitations:
-    get:
-      tags: [Points]
-      summary: Lister les exploitations d'un point
-      description: Liste les exploitations associées au point.
-      operationId: listPointExploitations
-      parameters:
-        - in: path
-          name: pointId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Liste d'exploitations
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Exploitation' }
-  /exploitations:
-    post:
-      tags: [Exploitations]
-      summary: Créer une exploitation
-      description: Crée une nouvelle exploitation liée à un point et un préleveur.
-      operationId: createExploitation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200': { description: Créé }
-  /exploitations/{exploitationId}:
-    get:
-      tags: [Exploitations]
-      summary: Obtenir une exploitation
-      description: Retourne les détails d'une exploitation.
-      operationId: getExploitation
-      parameters:
-        - in: path
-          name: exploitationId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Exploitation
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Exploitation' }
-    put:
-      tags: [Exploitations]
-      summary: Mettre à jour une exploitation
-      description: Met à jour les propriétés d'une exploitation existante.
-      operationId: updateExploitation
-      parameters:
-        - in: path
-          name: exploitationId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200': { description: Mis à jour }
-    delete:
-      tags: [Exploitations]
-      summary: Supprimer une exploitation
-      description: Supprime une exploitation.
-      operationId: deleteExploitation
-      parameters:
-        - in: path
-          name: exploitationId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200': { description: Supprimée }
-  /exploitations/{exploitationId}/documents:
-    get:
-      tags: [Exploitations, Documents]
-      summary: Lister les documents d'une exploitation
-      description: Liste les documents associés à une exploitation.
-      operationId: listExploitationDocuments
-      parameters:
-        - in: path
-          name: exploitationId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Liste de documents
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Document' }
-  /documents/{documentId}:
-    get:
-      tags: [Documents]
-      summary: Obtenir un document
-      description: Retourne les détails d'un document avec métadonnées décorées.
-      operationId: getDocument
-      parameters:
-        - in: path
-          name: documentId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Document
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Document' }
-    put:
-      tags: [Documents]
-      summary: Mettre à jour un document
-      description: Met à jour les métadonnées d'un document existant.
-      operationId: updateDocument
-      parameters:
-        - in: path
-          name: documentId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                nom_fichier: { type: string }
-                reference: { type: string, nullable: true }
-                nature: { type: string, enum: [autorisation, arrete_prefectoral, recepisse, autre] }
-                date_signature: { type: string, format: date }
-                date_fin_validite: { type: string, format: date, nullable: true }
-                date_ajout: { type: string, format: date }
-                remarque: { type: string, nullable: true }
-      responses:
-        '200':
-          description: Mis à jour
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Document' }
-    delete:
-      tags: [Documents]
-      summary: Supprimer un document
-      description: Supprime un document (soft delete).
-      operationId: deleteDocument
-      parameters:
-        - in: path
-          name: documentId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200': { description: Supprimé }
-  /regles/{regleId}:
-    get:
-      tags: [Règles]
-      summary: Obtenir une règle
-      description: Retourne les détails d'une règle avec document et exploitations décorés.
-      operationId: getRegle
-      parameters:
-        - in: path
-          name: regleId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Règle
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Regle' }
-    put:
-      tags: [Règles]
-      summary: Mettre à jour une règle
-      description: Met à jour les propriétés d'une règle existante.
-      operationId: updateRegle
-      parameters:
-        - in: path
-          name: regleId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                document: { $ref: '#/components/schemas/ObjectId', nullable: true }
-                exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' } }
-                parametre: { type: string, enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH] }
-                frequence: { type: string, nullable: true, enum: [1 day, 1 month, 1 year] }
-                unite: { type: string, enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm] }
-                valeur: { type: number }
-                contrainte: { type: string, enum: [min, max] }
-                debut_validite: { type: string, format: date }
-                fin_validite: { type: string, format: date, nullable: true }
-                debut_periode: { type: string, format: date, nullable: true }
-                fin_periode: { type: string, format: date, nullable: true }
-                remarque: { type: string }
-      responses:
-        '200':
-          description: Mis à jour
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Regle' }
-    delete:
-      tags: [Règles]
-      summary: Supprimer une règle
-      description: Supprime une règle (soft delete).
-      operationId: deleteRegle
-      parameters:
-        - in: path
-          name: regleId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200': { description: Supprimée }
-  /preleveurs:
-    get:
-      tags: [Préleveurs]
-      summary: Lister les préleveurs
-      description: Retourne la liste des préleveurs.
-      operationId: listPreleveurs
-      responses:
-        '200':
-          description: Liste de préleveurs
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/PreleveurLight' }
-    post:
-      tags: [Préleveurs]
-      summary: Créer un préleveur
-      description: Crée un nouveau préleveur.
-      operationId: createPreleveur
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200': { description: Créé }
-  /preleveurs/{preleveurId}:
-    get:
-      tags: [Préleveurs]
-      summary: Obtenir un préleveur
-      description: Retourne les métadonnées d'un préleveur.
-      operationId: getPreleveur
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Préleveur
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/PreleveurLight' }
-    put:
-      tags: [Préleveurs]
-      summary: Mettre à jour un préleveur
-      description: Met à jour les propriétés d'un préleveur existant.
-      operationId: updatePreleveur
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200': { description: Mis à jour }
-    delete:
-      tags: [Préleveurs]
-      summary: Supprimer un préleveur
-      description: Supprime un préleveur.
-      operationId: deletePreleveur
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200': { description: Supprimé }
-  /preleveurs/{preleveurId}/points-prelevement:
-    get:
-      tags: [Préleveurs]
-      summary: Lister les points d'un préleveur
-      description: Liste les points rattachés à un préleveur avec leurs usages, préleveurs et statut.
-      operationId: listPreleveurPoints
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Liste de points décorés
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/PointPrelevementDecorated' }
-  /preleveurs/{preleveurId}/exploitations:
-    get:
-      tags: [Préleveurs]
-      summary: Lister les exploitations d'un préleveur
-      description: Liste les exploitations associées à un préleveur.
-      operationId: listPreleveurExploitations
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Liste d'exploitations
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Exploitation' }
-  /preleveurs/{preleveurId}/regles:
-    get:
-      tags: [Préleveurs, Règles]
-      summary: Lister les règles d'un préleveur
-      description: Liste les règles de prélèvement associées à un préleveur (décorées).
-      operationId: listPreleveurRegles
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Liste de règles
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Regle' }
-    post:
-      tags: [Préleveurs, Règles]
-      summary: Créer une règle pour un préleveur
-      description: Crée une nouvelle règle de prélèvement liée à un préleveur.
-      operationId: createPreleveurRegle
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [parametre, unite, valeur, contrainte, debut_validite, exploitations]
-              properties:
-                document: { $ref: '#/components/schemas/ObjectId', nullable: true }
-                exploitations: { type: array, items: { $ref: '#/components/schemas/ObjectId' }, minItems: 1 }
-                parametre: { type: string, enum: [volume prélevé, relevé d'index, débit prélevé, débit réservé, chlorures, nitrates, sulfates, température, niveau piézométrique, conductivité, pH] }
-                frequence: { type: string, nullable: true, enum: [1 day, 1 month, 1 year], description: "Fréquence (uniquement pour volume prélevé)" }
-                unite: { type: string, enum: [m³, L/s, m³/h, mg/L, degrés Celsius, m NGR, µS/cm] }
-                valeur: { type: number }
-                contrainte: { type: string, enum: [min, max] }
-                debut_validite: { type: string, format: date }
-                fin_validite: { type: string, format: date, nullable: true }
-                debut_periode: { type: string, format: date, nullable: true }
-                fin_periode: { type: string, format: date, nullable: true }
-                remarque: { type: string }
-      responses:
-        '200':
-          description: Règle créée
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Regle' }
-  /preleveurs/{preleveurId}/documents:
-    get:
-      tags: [Préleveurs]
-      summary: Lister les documents d'un préleveur
-      description: Liste les documents liés à un préleveur.
-      operationId: listPreleveurDocuments
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
-      responses:
-        '200':
-          description: Liste de documents
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Document' }
-    post:
-      tags: [Préleveurs, Documents]
-      summary: Ajouter un document à un préleveur
-      description: Ajoute (upload) un document pour un préleveur donné.
-      operationId: addPreleveurDocument
-      parameters:
-        - in: path
-          name: preleveurId
-          required: true
-          schema: { $ref: '#/components/schemas/ObjectId' }
+      tags: [Declarations]
+      operationId: createDeclaration
+      summary: Créer une déclaration avec fichiers
+      description: Crée une déclaration déposée par un déclarant et stocke les fichiers associés.
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required: [document, nature, date_signature, date_ajout]
               properties:
-                document:
-                  type: string
-                  format: binary
-                  description: "Fichier à uploader"
-                nom_fichier: { type: string, description: "Nom du document (optionnel, déduit du fichier si non fourni)" }
-                reference: { type: string, description: "Référence administrative" }
-                nature: { type: string, enum: [autorisation, arrete_prefectoral, recepisse, autre], description: "Nature du document" }
-                date_signature: { type: string, format: date, description: "Date de signature" }
-                date_fin_validite: { type: string, format: date, description: "Date de fin de validité" }
-                date_ajout: { type: string, format: date, description: "Date d'ajout" }
-                remarque: { type: string, description: "Remarques éventuelles" }
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
       responses:
-        '200':
-          description: Document créé
+        '201':
+          description: Déclaration créée
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Document' }
-  /territoires/{codeTerritoire}/points-prelevement:
+              schema: {$ref: '#/components/schemas/Declaration'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/quick:
+    post:
+      tags: [Declarations]
+      operationId: createQuickDeclaration
+      summary: Créer une saisie rapide
+      description: Crée une déclaration rapide depuis des index ou volumes saisis dans le formulaire.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Déclaration créée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Declaration'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/quick/context:
     get:
-      tags: [Territoires]
-      summary: Points d'un territoire
-      description: Liste les points de prélèvement appartenant à un territoire avec leurs usages, préleveurs et statut.
-      operationId: listTerritoirePoints
-      parameters:
-        - in: path
-          name: codeTerritoire
-          required: true
-          schema: { type: string }
+      tags: [Declarations]
+      operationId: getQuickDeclarationContext
+      summary: Contexte de saisie rapide
+      description: Retourne les points, usages et périodes utiles à la saisie rapide.
       responses:
         '200':
-          description: Liste de points décorés
+          description: Contexte disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/me:
+    get:
+      tags: [Declarations]
+      operationId: listMyDeclarations
+      summary: Lister mes déclarations
+      description: Retourne les déclarations accessibles au déclarant connecté.
+      responses:
+        '200':
+          description: Liste des déclarations
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/PointPrelevementDecorated' }
-  /territoires/{codeTerritoire}/preleveurs:
+                items: {$ref: '#/components/schemas/Declaration'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/me/telemetry-sources:
     get:
-      tags: [Territoires]
-      summary: Préleveurs d'un territoire
-      description: Liste les préleveurs associés à un territoire.
-      operationId: listTerritoirePreleveurs
-      parameters:
-        - in: path
-          name: codeTerritoire
-          required: true
-          schema: { type: string }
+      tags: [Declarations]
+      operationId: listMyTelemetrySources
+      summary: Lister mes sources de télémétrie
+      description: Retourne les sources API accessibles au déclarant connecté.
       responses:
         '200':
-          description: Liste de préleveurs
+          description: Liste des sources
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/PreleveurLight' }
-  /referentiels/bss:
+                items: {$ref: '#/components/schemas/Source'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/allowed-types:
     get:
-      tags: [Référentiels]
-      summary: Liste BSS
-      description: Liste des entités BSS (sélection simple).
-      operationId: listReferentielBss
+      tags: [Declarations]
+      operationId: listMyAllowedDeclarationTypes
+      summary: Types de déclaration autorisés
+      description: Retourne les types de déclaration disponibles pour le déclarant connecté.
       responses:
-        '200': { description: OK }
-  /referentiels/bss/{idBss}:
+        '200':
+          description: Types autorisés
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {type: string}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/{declarationId}:
     get:
-      tags: [Référentiels]
-      summary: Détail BSS
-      description: Détails d'une entrée BSS identifiée.
-      operationId: getReferentielBss
+      tags: [Declarations]
+      operationId: getDeclaration
+      summary: Lire une déclaration
+      description: Retourne le détail d'une déclaration accessible.
       parameters:
-        - in: path
-          name: idBss
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/DeclarationId'
       responses:
-        '200': { description: OK }
-  /referentiels/bnpe:
+        '200':
+          description: Déclaration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Declaration'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/{declarationId}/available-points-prelevements:
     get:
-      tags: [Référentiels]
-      summary: Liste BNPE
-      description: Liste des ressources BNPE.
-      operationId: listReferentielBnpe
-      responses:
-        '200': { description: OK }
-  /referentiels/bnpe/{idBnpe}:
-    get:
-      tags: [Référentiels]
-      summary: Détail BNPE
-      description: Détails d'une ressource BNPE.
-      operationId: getReferentielBnpe
+      tags: [Declarations]
+      operationId: getAvailablePointsPrelevementsForDeclaration
+      summary: Points disponibles pour rapprochement
+      description: Retourne les points utilisables pour rapprocher les lignes d'une déclaration.
       parameters:
-        - in: path
-          name: idBnpe
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/DeclarationId'
       responses:
-        '200': { description: OK }
-  /referentiels/me-continentales-bv:
-    get:
-      tags: [Référentiels]
-      summary: Liste ME Continentales BV
-      description: Liste des masses d'eau continentales (BV).
-      operationId: listReferentielMeContinentalesBv
-      responses:
-        '200': { description: OK }
-  /referentiels/me-continentales-bv/{idMeContinentalesBv}:
-    get:
-      tags: [Référentiels]
-      summary: Détail ME Continentales BV
-      description: Détails d'une masse d'eau continentale (BV).
-      operationId: getReferentielMeContinentalesBv
+        '200':
+          description: Points disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PointPrelevement'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/{declarationId}/chunks/{chunkId}/reconcile:
+    post:
+      tags: [Declarations]
+      operationId: reconcileDeclarationChunk
+      summary: Rapprocher une ligne de déclaration
+      description: Associe une ligne de déclaration à un point existant.
       parameters:
-        - in: path
-          name: idMeContinentalesBv
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/DeclarationId'
+        - $ref: '#/components/parameters/ChunkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
       responses:
-        '200': { description: OK }
-  /referentiels/bv-bdcarthage:
-    get:
-      tags: [Référentiels]
-      summary: Liste BV BdCarthage
-      description: Liste des bassins versants BdCarthage.
-      operationId: listReferentielBvBdCarthage
-      responses:
-        '200': { description: OK }
-  /referentiels/bv-bdcarthage/{idBvBdcarthage}:
-    get:
-      tags: [Référentiels]
-      summary: Détail BV BdCarthage
-      description: Détails d'un bassin versant BdCarthage.
-      operationId: getReferentielBvBdCarthage
+        '200': {description: Rapprochement enregistré}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/declarations/{declarationId}:
+    delete:
+      tags: [Declarations]
+      operationId: deleteDeclaration
+      summary: Supprimer une déclaration
+      description: Supprime une déclaration et ses effets applicatifs.
       parameters:
-        - in: path
-          name: idBvBdcarthage
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/DeclarationId'
       responses:
-        '200': { description: OK }
-  /referentiels/meso:
-    get:
-      tags: [Référentiels]
-      summary: Liste MESO
-      description: Liste des entités MESO.
-      operationId: listReferentielMeso
-      responses:
-        '200': { description: OK }
-  /referentiels/meso/{idMeso}:
-    get:
-      tags: [Référentiels]
-      summary: Détail MESO
-      description: Détails d'une entité MESO.
-      operationId: getReferentielMeso
+        '204': {description: Déclaration supprimée}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/declarations/{declarationId}/replay:
+    post:
+      tags: [Declarations]
+      operationId: replayDeclaration
+      summary: Rejouer une déclaration
+      description: Remet une déclaration en file de traitement.
       parameters:
-        - in: path
-          name: idMeso
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/DeclarationId'
       responses:
-        '200': { description: OK }
+        '202': {description: Rejeu demandé}
+        default: {$ref: '#/components/responses/Error'}
+  /sources/me:
+    get:
+      tags: [Sources]
+      operationId: listMySources
+      summary: Lister les sources instructeur
+      description: Retourne les sources visibles par l'instructeur connecté.
+      responses:
+        '200':
+          description: Liste des sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Source'}
+        default: {$ref: '#/components/responses/Error'}
+  /sources/{sourceId}:
+    get:
+      tags: [Sources]
+      operationId: getSource
+      summary: Lire une source
+      description: Retourne le détail d'une source accessible.
+      parameters:
+        - $ref: '#/components/parameters/SourceId'
+      responses:
+        '200':
+          description: Source
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Source'}
+        default: {$ref: '#/components/responses/Error'}
+  /chunks/{chunkId}/instruction:
+    post:
+      tags: [Instruction]
+      operationId: updateChunkInstruction
+      summary: Mettre à jour l'instruction d'une ligne
+      description: Enregistre l'état d'instruction d'une ligne de déclaration.
+      parameters:
+        - $ref: '#/components/parameters/ChunkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200': {description: Instruction enregistrée}
+        default: {$ref: '#/components/responses/Error'}
+  /preleveurs/{declarantId}/points-prelevement:
+    get:
+      tags: [Instruction]
+      operationId: getPreleveurPointsPrelevement
+      summary: Points d'un déclarant
+      description: Retourne les points de prélèvement associés à un déclarant.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      responses:
+        '200':
+          description: Points
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PointPrelevement'}
+        default: {$ref: '#/components/responses/Error'}
+  /preleveurs/{declarantId}/exploitations:
+    get:
+      tags: [Instruction]
+      operationId: getPreleveurExploitations
+      summary: Exploitations d'un déclarant
+      description: Retourne les exploitations associées à un déclarant.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      responses:
+        '200':
+          description: Exploitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Exploitation'}
+        default: {$ref: '#/components/responses/Error'}
+  /points-prelevement/{pointId}/exploitations:
+    get:
+      tags: [Instruction]
+      operationId: getPointExploitations
+      summary: Exploitations d'un point
+      description: Retourne les exploitations associées à un point de prélèvement.
+      parameters:
+        - $ref: '#/components/parameters/PointId'
+      responses:
+        '200':
+          description: Exploitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Exploitation'}
+        default: {$ref: '#/components/responses/Error'}
   /referentiels/usages-eau:
     get:
-      tags: [Référentiels]
-      summary: Usages de l'eau SANDRE
-      description: Retourne le référentiel SANDRE des usages et sous-usages de l'eau, avec couleur et visibilité tableau de bord.
-      operationId: listReferentielUsagesEau
+      tags: [Referentiels]
+      operationId: getWaterUses
+      summary: Lister les usages de l'eau
+      description: Retourne le référentiel SANDRE des usages de l'eau.
       responses:
         '200':
-          description: Référentiel des usages de l'eau.
+          description: Usages
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WaterUsesResponse' }
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/WaterUse'}
+        default: {$ref: '#/components/responses/Error'}
   /stats:
     get:
       tags: [Stats]
-      summary: Statistiques globales
-      description: Retourne des agrégations globales (volumes, compteurs...).
-      operationId: getGlobalStats
+      operationId: getStats
+      summary: Statistiques publiques
+      description: Retourne les statistiques agrégées affichées par le front.
       responses:
-        '200': { description: OK }
-  /stats/{territoire}:
+        '200':
+          description: Statistiques
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        default: {$ref: '#/components/responses/Error'}
+  /series:
     get:
-      tags: [Stats]
-      summary: Statistiques par territoire
-      description: Retourne des agrégations limitées à un territoire.
-      operationId: getStatsByTerritoire
+      tags: [Series]
+      operationId: listSeries
+      summary: Rechercher des séries
+      description: Liste les métadonnées de séries accessibles à l'instructeur.
       parameters:
-        - in: path
-          name: territoire
-          required: true
-          schema: { type: string }
+        - in: query
+          name: pointIds
+          schema: {type: string}
+          description: Liste d'UUID de points séparés par des virgules.
+        - in: query
+          name: preleveurId
+          schema: {type: string, format: uuid}
+        - in: query
+          name: sourceId
+          schema: {type: string, format: uuid}
       responses:
-        '200': { description: OK }
+        '200':
+          description: Séries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/SeriesMetadata'}
+        default: {$ref: '#/components/responses/Error'}
+  /series/{seriesId}:
+    get:
+      tags: [Series]
+      operationId: getSeries
+      summary: Lire une série
+      description: Retourne les métadonnées d'une série.
+      parameters:
+        - $ref: '#/components/parameters/SeriesId'
+      responses:
+        '200':
+          description: Série
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SeriesMetadata'}
+        default: {$ref: '#/components/responses/Error'}
+  /series/{seriesId}/values:
+    get:
+      tags: [Series]
+      operationId: getSeriesValues
+      summary: Lire les valeurs d'une série
+      description: Retourne les valeurs temporelles d'une série.
+      parameters:
+        - $ref: '#/components/parameters/SeriesId'
+      responses:
+        '200':
+          description: Valeurs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/SeriesValue'}
+        default: {$ref: '#/components/responses/Error'}
+  /aggregated-series:
+    get:
+      tags: [Series]
+      operationId: getAggregatedSeries
+      summary: Agréger des séries
+      description: Agrège les valeurs de séries sur un périmètre UUID.
+      parameters:
+        - in: query
+          name: metricTypeCode
+          required: true
+          schema: {type: string}
+        - in: query
+          name: startDate
+          schema: {type: string, format: date}
+        - in: query
+          name: endDate
+          schema: {type: string, format: date}
+        - in: query
+          name: pointIds
+          schema: {type: string}
+        - in: query
+          name: preleveurId
+          schema: {type: string, format: uuid}
+        - in: query
+          name: sourceId
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Série agrégée
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        default: {$ref: '#/components/responses/Error'}
+  /aggregated-series/options:
+    get:
+      tags: [Series]
+      operationId: getAggregatedSeriesOptions
+      summary: Options d'agrégation
+      description: Retourne les métriques et opérateurs disponibles sur un périmètre.
+      parameters:
+        - in: query
+          name: pointIds
+          schema: {type: string}
+        - in: query
+          name: preleveurId
+          schema: {type: string, format: uuid}
+        - in: query
+          name: sourceId
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Options disponibles
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        default: {$ref: '#/components/responses/Error'}
+components:
+  parameters:
+    DeclarationId:
+      in: path
+      name: declarationId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    ChunkId:
+      in: path
+      name: chunkId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    SourceId:
+      in: path
+      name: sourceId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    DeclarantId:
+      in: path
+      name: declarantId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    PointId:
+      in: path
+      name: pointId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    SeriesId:
+      in: path
+      name: seriesId
+      required: true
+      schema:
+        type: string
+        description: Identifiant technique de série.
+  responses:
+    Error:
+      description: Erreur
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string}
+        code: {type: string}
+        details: {}
+    UserSession:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: string, format: email}
+        roles:
+          type: array
+          items: {type: string}
+    Declaration:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        code: {type: string}
+        type: {type: string}
+        status: {type: string}
+        createdAt: {type: string, format: date-time}
+    Source:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        type: {type: string}
+        name: {type: string}
+    PointPrelevement:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+    Exploitation:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        status: {type: string}
+        usage: {type: string}
+    WaterUse:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        code: {type: string}
+        label: {type: string}
+    SeriesMetadata:
+      type: object
+      additionalProperties: true
+      properties:
+        id: {type: string}
+        metricTypeCode: {type: string}
+        pointId: {$ref: '#/components/schemas/Uuid'}
+        unit: {type: string}
+    SeriesValue:
+      type: object
+      additionalProperties: true
+      properties:
+        date: {type: string, format: date}
+        value: {type: number}

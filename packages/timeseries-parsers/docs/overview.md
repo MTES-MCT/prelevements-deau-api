@@ -2,7 +2,7 @@
 
 ## Pourquoi ce validateur ?
 
-Le validateur a été développé pour rapprocher les fichiers transmis via Démarches Simplifiées du contenu saisi dans le formulaire. Les objectifs principaux sont :
+Le validateur a été développé pour contrôler les fichiers de déclaration avant ingestion. Les objectifs principaux sont :
 
 - garantir que le fichier fourni correspond bien à l’un des modèles partagés avec les préleveurs ;
 - bloquer les incohérences qui empêcheraient l’import (dates invalides, valeurs négatives, métadonnées absentes, etc.) ;
@@ -50,4 +50,4 @@ Lorsqu’un élément ne peut pas être reconnu malgré ces normalisations, l’
 4. Ajouter ou mettre à jour un test automatisé.
 5. Documenter la nouvelle règle dans le fichier spécifique (`docs/camion-citerne.md` ou `docs/multi-param.md`) ainsi que dans [`docs/validation.md`](validation.md) si elle introduit un message différent.
 
-Cette démarche garantit que le validateur reste aligné avec les évolutions des formulaires DS tout en préservant la traçabilité des règles métier.
+Cette démarche garantit que le validateur reste aligné avec les évolutions des modèles de fichiers tout en préservant la traçabilité des règles métier.

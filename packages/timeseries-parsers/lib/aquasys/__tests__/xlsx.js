@@ -20,7 +20,7 @@ test('extractAquasys - valid file', async t => {
   t.truthy(data.series)
   t.true(data.series.length > 0, 'Aucune série extraite')
 
-  const volumeSerie = data.series.find(serie => serie.parameter === 'Volume prélevé')
+  const volumeSerie = data.series.find(serie => serie.parameter === 'volume prélevé')
   t.truthy(volumeSerie)
   t.is(volumeSerie.pointPrelevement, 'P1')
   t.is(volumeSerie.unit, 'm³')
@@ -32,7 +32,7 @@ test('extractAquasys - valid file', async t => {
   t.is(valuesByDate.get('2024-03-01'), 20, 'Remise à zéro: 10 * coef 2')
   t.is(valuesByDate.get('2024-04-30'), 20, 'Volume direct')
 
-  const indexSerie = data.series.find(serie => serie.parameter === 'Index compteur C1')
+  const indexSerie = data.indexSeries.find(serie => serie.parameter === 'Index compteur C1')
   t.truthy(indexSerie)
   t.is(indexSerie.pointPrelevement, 'P1')
   t.is(indexSerie.unit, 'm³')
@@ -81,4 +81,3 @@ test('extractAquasys - empty file', async t => {
   t.truthy(data)
   t.deepEqual(data.series, [])
 })
-

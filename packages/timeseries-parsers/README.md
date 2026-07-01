@@ -1,11 +1,11 @@
 # @fabnum/prelevements-deau-timeseries-parsers
 
-Ce package fournit les outils nécessaires pour analyser les fichiers déposés dans Démarches Simplifiées dans le cadre du suivi des prélèvements d'eau, et pour en extraire des séries temporelles normalisées.
+Ce package fournit les outils nécessaires pour analyser les fichiers de déclaration de prélèvements d'eau et en extraire des séries temporelles normalisées.
 
 ## Objectifs
 
 - garantir que le fichier remis par un préleveur correspond bien à l'un des modèles fournis (y compris leurs déclinaisons historiques) ;
-- vérifier la cohérence des métadonnées et des valeurs avec les informations déclarées dans le formulaire DS ;
+- vérifier la cohérence des métadonnées et des valeurs avec les informations attendues par l'application ;
 - fournir un retour actionnable à l'usager et à l'instructeur (erreurs bloquantes, avertissements, explications) ;
 - consolider les données valides dans un format commun exploitable par la suite.
 
@@ -66,7 +66,7 @@ Les deux fonctions exposées prennent un `Buffer` (contenu binaire du fichier) e
 
 ### `extractMultiParamFile(buffer)`
 
-- **Entrée** : le contenu d'un fichier multiparamètres DS.
+- **Entrée** : le contenu d'un fichier multiparamètres.
 - **Sortie** :
   - `data.series` — séries normalisées par paramètre (volume prélevé, débit, pH, etc.), avec fréquence (`1 day`, `15 minutes`, `1 hour`, `1 month`, `1 quarter`, `1 year`), nature (`valueType`) et éventuels commentaires/metadata.
   - `rawData` — contenu extrait des onglets `A LIRE` et `Data | T=`.

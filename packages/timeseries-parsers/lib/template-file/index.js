@@ -197,7 +197,6 @@ export async function extractTemplateFile(buffer, options) {
   }
 
   const parseOptions = {
-    separator: ',',
     ...options
   }
 
@@ -759,10 +758,9 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors, options
       continue
     }
 
-    // Gérer les points de prélèvement séparés par une virgule
-    // Si plusieurs points partagent le volume, on divise le volume entre eux
+    // Si plusieurs points partagent le volume, on divise le volume entre eux.
     const pointIdStr = String(pointId).trim()
-    const pointIds = pointIdStr.split(options.separator || '|').map(p => p.trim()).filter(Boolean)
+    const pointIds = splitPointIds(pointIdStr, options.separator)
 
     if (pointIds.length === 0) {
       errors.push({
@@ -803,6 +801,14 @@ function parseDataRows(sheet, headerRow, range, columnMap, rows, errors, options
       }
     }
   }
+}
+
+function splitPointIds(pointIdStr, separator) {
+  if (separator) {
+    return pointIdStr.split(separator).map(pointId => pointId.trim()).filter(Boolean)
+  }
+
+  return pointIdStr.split(/[|,;]/).map(pointId => pointId.trim()).filter(Boolean)
 }
 
 // Consolidation des séries :

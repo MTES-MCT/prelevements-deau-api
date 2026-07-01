@@ -1,6 +1,6 @@
 # Validation des fichiers
 
-Ce dépôt fournit deux fonctions principales pour valider les fichiers provenant de Démarches Simplifiées :
+Ce dépôt fournit deux fonctions principales pour valider les fichiers de déclaration :
 
 - `extractCamionCiterne`
 - `extractMultiParamFile`

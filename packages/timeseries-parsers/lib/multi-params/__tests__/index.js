@@ -217,7 +217,7 @@ test('extractMultiParamFile - too many errors', async t => {
   const filePath = path.join(testFilesPath, 'too-many-errors.xlsx')
   const fileContent = await fs.readFile(filePath)
   const {errors} = await extractMultiParamFile(fileContent)
-  t.true(errors.some(e => e.message === 'Les dates de 20 lignes de l\'onglet \'Data | T=1 jour\' ne sont pas valides.'))
+  t.true(errors.some(e => e.message === 'Les dates de 16 lignes de l\'onglet \'Data | T=1 jour\' ne sont pas valides.'))
 })
 
 test('extractMultiParamFile - no daily data', async t => {
