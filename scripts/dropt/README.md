@@ -37,7 +37,7 @@ node scripts/dropt/import-exploitations.js
   - email applicatif synthétique `@import.local` pour éviter de fusionner deux déclarants qui partageraient un email de contact
   - emails réels ajoutés dans `UserEmailAlias` quand ils sont valides et disponibles
   - type `LEGAL_PERSON` si SIRET ou mot-clé juridique, sinon `NATURAL_PERSON`
-  - accès au type de déclaration `template-file` activé comme dans les imports BLV template
+  - accès au type de déclaration `template-file` activé pour les déclarants importés
 
 - `DeclarantPointPrelevement`
   - identifiant stable `sourceId = dropt-par-2026-2027-exploitation-*`

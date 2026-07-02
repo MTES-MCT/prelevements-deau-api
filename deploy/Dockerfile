@@ -12,7 +12,6 @@ FROM base AS builder
 ENV NODE_ENV=development
 
 COPY package.json package-lock.json ./
-COPY packages ./packages
 COPY prisma ./prisma
 
 RUN npm install --no-audit --no-fund

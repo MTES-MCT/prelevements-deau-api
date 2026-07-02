@@ -2,10 +2,6 @@
 
 Node.js 24, ESM, Express 5, Prisma/PostgreSQL/PostGIS, Redis, BullMQ v5, S3 compatible storage, AVA, XO, c8.
 
-Internal package:
-
-- `@fabnum/prelevements-deau-timeseries-parsers`: validation and timeseries extraction for declaration files.
-
 ## Code Style
 
 No semicolons. Two spaces. Explicit `.js` extensions. Prefer `async`/`await`. Keep API/database payloads aligned with Prisma field names.
@@ -65,14 +61,7 @@ Current queues:
 - `process-api-import`
 - `reconstruct-volumes-from-index-for-point`
 
-**File parsing**: use `@fabnum/prelevements-deau-timeseries-parsers`.
-
-```javascript
-const {data, errors} = await extractMultiParamFile(buffer)
-if (!data) {
-  throw createError(400, 'Fichier invalide', {errors})
-}
-```
+**File parsing**: user declaration parsing is handled by the orchestration service. Do not add parser logic back into the API for declaration uploads.
 
 ## Commands
 
@@ -90,3 +79,4 @@ npm run coverage
 - PRs and user-facing wording in French.
 - Conventional commits when committing.
 - Do not reintroduce legacy Mongo/DS import code.
+- Do not reintroduce the retired BLV one-shot import scripts unless a new migration need is explicitly scoped.

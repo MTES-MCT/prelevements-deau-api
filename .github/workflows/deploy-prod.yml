@@ -2,7 +2,7 @@ name: Deploy (prod) to Scaleway
 
 on:
   push:
-    branches: ["testing"] # TODO: change
+    branches: ["prod"]
 
 permissions:
   contents: read

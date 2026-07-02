@@ -1,9 +1,6 @@
 {
   "name": "prelevement-deau-data",
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "start": "node api.js",
     "start-dev": "nodemon --watch './**/*.js' --exec 'node api.js'",
@@ -26,7 +23,6 @@
     "@bull-board/express": "^6.14.2",
     "@bull-board/ui": "^6.14.2",
     "@etalab/decoupage-administratif": "^5.2.0",
-    "@fabnum/prelevements-deau-timeseries-parsers": "file:packages/prelevements-deau-timeseries-parsers",
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.8.0",
     "@sentry/node": "^10.38.0",
@@ -45,11 +41,11 @@
     "ioredis": "^5.8.1",
     "joi": "^18.0.1",
     "lodash-es": "^4.17.21",
-    "mjml": "^4.18.0",
+    "mjml": "^5.4.0",
     "moment": "^2.30.1",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "nodemailer": "^7.0.11",
+    "nodemailer": "^9.0.3",
     "papaparse": "^5.5.3",
     "pg": "^8.17.1",
     "proj4": "^2.20.0",
@@ -57,7 +53,7 @@
   },
   "devDependencies": {
     "@stoplight/spectral-cli": "^6.11.0",
-    "@types/node": "^25.0.9",
+    "@types/node": "^24.0.0",
     "@types/pg": "^8.16.0",
     "ava": "^6.4.1",
     "baseline-browser-mapping": "^2.9.19",
@@ -71,17 +67,20 @@
   "c8": {
     "all": true,
     "include": [
-      "lib/**/*.js",
-      "packages/**/*.js"
+      "lib/**/*.js"
     ],
     "exclude": [
       "**/migrations/**",
       "**/scripts/**",
       "**/data/**",
-      "packages/**/docs/**",
       "**/__tests__/**",
       "lib/util/test-helpers/**"
     ]
+  },
+  "overrides": {
+    "@eslint/plugin-kit": "0.7.2",
+    "@hono/node-server": "2.0.6",
+    "uuid": "11.1.1"
   },
   "engines": {
     "node": ">= 24 < 25"

@@ -4,7 +4,7 @@ API Node.js/Express de Partageons l'eau.
 
 Elle gère les déclarants, les déclarations, les fichiers déposés, les séries temporelles, les référentiels et les imports automatisés. Les données applicatives sont stockées dans PostgreSQL/PostGIS avec Prisma. Les fichiers sont stockés dans un bucket compatible S3. Les traitements asynchrones passent par Redis/BullMQ.
 
-Consultez la [documentation de validation](packages/timeseries-parsers/docs/validation.md) pour les erreurs et avertissements possibles sur les fichiers importés.
+Le parsing des déclarations déposées est réalisé par l'orchestration. Les imports historiques BLV ont été retirés de l'API car les données ont déjà été importées.
 
 ## Prérequis
 

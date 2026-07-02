@@ -20,9 +20,10 @@
 
 Les scripts spécialisés hors npm sont conservés dans `scripts/` et doivent être lancés explicitement avec Node.js quand ils sont nécessaires :
 
-- `scripts/blv/**/import-volumes.js`
 - `scripts/bvtech/*.js`
 - `scripts/dropt/**`
 - `scripts/demo/init-demo-declarations.js`
 
 Avant de lancer un import, vérifier les variables `.env`, l'accès PostgreSQL, l'accès S3 et la présence des fichiers source dans `data/`.
+
+Les imports BLV historiques ont été retirés : les données correspondantes ont déjà été importées et ces scripts ne doivent plus être relancés.
