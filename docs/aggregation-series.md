@@ -16,7 +16,7 @@ Au moins un périmètre doit être fourni selon l'endpoint :
 
 - `pointIds`
 - `preleveurId`
-- `declarantId`
+- `collecteurId`
 - `sourceId`
 
 Les listes utilisent une séparation par virgule.

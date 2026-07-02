@@ -466,6 +466,9 @@ paths:
           name: preleveurId
           schema: {type: string, format: uuid}
         - in: query
+          name: collecteurId
+          schema: {type: string, format: uuid}
+        - in: query
           name: sourceId
           schema: {type: string, format: uuid}
       responses:
@@ -489,6 +492,9 @@ paths:
           schema: {type: string}
         - in: query
           name: preleveurId
+          schema: {type: string, format: uuid}
+        - in: query
+          name: collecteurId
           schema: {type: string, format: uuid}
         - in: query
           name: sourceId
