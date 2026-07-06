@@ -6,7 +6,6 @@ enum DeclarantPointPrelevementStatus {
 }
 
 enum WaterBodyType {
-  SURFACE
   SUPERFICIELLE
   SOUTERRAIN
   TRANSITION

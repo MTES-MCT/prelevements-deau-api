@@ -594,7 +594,7 @@ export function getWaterBodyType(row) {
     || typePar.includes('retenues')
     || ['pe', 'cont', 'ce'].includes(typePrelevement)
   ) {
-    return 'SURFACE'
+    return 'SUPERFICIELLE'
   }
 
   return null

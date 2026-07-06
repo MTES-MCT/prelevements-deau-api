@@ -4,11 +4,11 @@ import {allowTemplateDeclarationTypeForDeclarant} from '../../lib/models/declara
 import {legacyUsageToRootUsageCode} from '../../lib/constants/sandre-water-uses.js'
 
 const DEMO_SERIES = [
-  {prefix: 'ougc', count: 50, waterBodyTypes: ['SOUTERRAIN', 'SURFACE'], labels: ['Forage', 'Pompage']},
-  {prefix: 'gidaf', count: 20, waterBodyTypes: ['SOUTERRAIN', 'SURFACE', 'TRANSITION'], labels: ['Forage', 'Pompage', 'Source']},
-  {prefix: 'aep-1', count: 10, waterBodyTypes: ['SOUTERRAIN', 'SURFACE'], labels: ['Forage', 'Source', 'Pompage']},
-  {prefix: 'aep-2', count: 10, waterBodyTypes: ['SOUTERRAIN', 'SURFACE'], labels: ['Forage', 'Source', 'Pompage']},
-  {prefix: 'aep-3', count: 10, waterBodyTypes: ['SOUTERRAIN', 'SURFACE'], labels: ['Forage', 'Source', 'Pompage']}
+  {prefix: 'ougc', count: 50, waterBodyTypes: ['SOUTERRAIN', 'SUPERFICIELLE'], labels: ['Forage', 'Pompage']},
+  {prefix: 'gidaf', count: 20, waterBodyTypes: ['SOUTERRAIN', 'SUPERFICIELLE', 'TRANSITION'], labels: ['Forage', 'Pompage', 'Source']},
+  {prefix: 'aep-1', count: 10, waterBodyTypes: ['SOUTERRAIN', 'SUPERFICIELLE'], labels: ['Forage', 'Source', 'Pompage']},
+  {prefix: 'aep-2', count: 10, waterBodyTypes: ['SOUTERRAIN', 'SUPERFICIELLE'], labels: ['Forage', 'Source', 'Pompage']},
+  {prefix: 'aep-3', count: 10, waterBodyTypes: ['SOUTERRAIN', 'SUPERFICIELLE'], labels: ['Forage', 'Source', 'Pompage']}
 ]
 
 const COMMON_NAMES = [
