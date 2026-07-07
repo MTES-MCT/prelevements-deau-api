@@ -1,0 +1,137 @@
+enum DeclarationPeriodType {
+  MONTH
+  WEEK
+}
+
+enum ZoneDeclarationOverrideReason {
+  DROUGHT
+  STRUCTURAL
+  OTHER
+}
+
+enum DeclarationNotificationType {
+  REMINDER
+  FOLLOWUP
+}
+
+enum DeclarationNotificationRunStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  PARTIAL_FAILURE
+  FAILED
+  BLOCKED
+}
+
+enum DeclarationNotificationRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model ZoneDeclarationSettings {
+  id String @id @default(uuid()) @db.Uuid
+
+  zoneId String @unique @db.Uuid
+  zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  defaultPeriodType DeclarationPeriodType @default(MONTH)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([defaultPeriodType])
+}
+
+model ZoneDeclarationPeriodOverride {
+  id String @id @default(uuid()) @db.Uuid
+
+  zoneId String @db.Uuid
+  zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  periodType DeclarationPeriodType
+  reason     ZoneDeclarationOverrideReason @default(DROUGHT)
+  label      String?                       @db.Text
+
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([periodType])
+  @@index([reason])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model DeclarationNotificationRun {
+  id String @id @default(uuid()) @db.Uuid
+
+  notificationType DeclarationNotificationType
+  periodType       DeclarationPeriodType
+  periodKey        String                      @db.Text
+
+  scheduledFor DateTime
+  status       DeclarationNotificationRunStatus @default(SCHEDULED)
+
+  brevoTemplateId Int?
+  metadata        Json    @default("{}") @db.Json
+  error           String? @db.Text
+
+  recipientCount Int @default(0)
+  sentCount      Int @default(0)
+  failedCount    Int @default(0)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  recipients DeclarationNotificationRecipient[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([notificationType, periodType, periodKey], map: "DeclarationNotificationRun_notificationType_periodType_periodKe")
+  @@index([notificationType])
+  @@index([periodType])
+  @@index([scheduledFor])
+  @@index([status])
+}
+
+model DeclarationNotificationRecipient {
+  id String @id @default(uuid()) @db.Uuid
+
+  runId String                     @db.Uuid
+  run   DeclarationNotificationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  email String @db.Citext
+
+  declarantUserId String? @db.Uuid
+  recipientRole   String? @db.Text
+
+  firstName    String? @db.Text
+  lastName     String? @db.Text
+  socialReason String? @db.Text
+  phoneNumber  String? @db.Text
+
+  zones           Json    @default("[]") @db.Json
+  points          Json    @default("[]") @db.Json
+  templateParams  Json    @default("{}") @db.Json
+  inclusionReason String? @db.Text
+
+  status         DeclarationNotificationRecipientStatus @default(PENDING)
+  brevoMessageId String?                                @db.Text
+  error          String?                                @db.Text
+  sentAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([runId, email])
+  @@index([runId])
+  @@index([email])
+  @@index([declarantUserId])
+  @@index([status])
+}

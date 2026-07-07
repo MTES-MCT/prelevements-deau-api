@@ -74,7 +74,8 @@ model Declarant {
   lastDeclarationAt      DateTime?
   lastReminderMailSentAt DateTime?
 
-  quickDeclarationEnabled Boolean @default(true)
+  quickDeclarationEnabled        Boolean @default(true)
+  declarationNotificationsEnabled Boolean @default(true)
 
   declarantType DeclarantType @default(NATURAL_PERSON)
   declarantRole DeclarantRole @default(PRELEVEUR)
@@ -98,6 +99,7 @@ model Declarant {
   @@unique([sourceId])
   @@index([declarantRole])
   @@index([quickDeclarationEnabled])
+  @@index([declarationNotificationsEnabled])
 }
 
 model Instructor {
