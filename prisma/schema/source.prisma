@@ -119,6 +119,7 @@ model ChunkValue {
 
   @@index([metricTypeCode])
   @@index([chunkId, valueKind, metricTypeCode])
+  @@index([chunkId, metricTypeCode, periodEnd])
 }
 
 model ChunkValueReplacement {
