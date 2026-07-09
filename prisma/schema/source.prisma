@@ -64,6 +64,19 @@ model Chunk {
   pointPrelevementId String?           @db.Uuid
   pointPrelevement   PointPrelevement? @relation(fields: [pointPrelevementId], references: [id], onDelete: SetNull)
 
+  // Acteurs métier historisés au moment de l'ingestion.
+  // preleveurUserId = préleveur concerné par les volumes.
+  // submittedByDeclarantUserId = compte déclarant qui a déposé la donnée.
+  // collecteurUserId = déposant collecteur lorsqu'il dépose pour un préleveur.
+  preleveurUserId String?    @db.Uuid
+  preleveur       Declarant? @relation("ChunkPreleveur", fields: [preleveurUserId], references: [userId], onDelete: SetNull)
+
+  submittedByDeclarantUserId String?    @db.Uuid
+  submittedByDeclarant       Declarant? @relation("ChunkSubmittedByDeclarant", fields: [submittedByDeclarantUserId], references: [userId], onDelete: SetNull)
+
+  collecteurUserId String?    @db.Uuid
+  collecteur       Declarant? @relation("ChunkCollecteur", fields: [collecteurUserId], references: [userId], onDelete: SetNull)
+
   usageId String         @db.Uuid
   usage   SandreWaterUse @relation(fields: [usageId], references: [id], onDelete: Restrict)
 
@@ -87,6 +100,9 @@ model Chunk {
 
   @@index([instructionStatus])
   @@index([usageId])
+  @@index([preleveurUserId])
+  @@index([submittedByDeclarantUserId])
+  @@index([collecteurUserId])
 }
 
 enum ChunkValueKind {

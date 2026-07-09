@@ -61,6 +61,9 @@ model Declarant {
 
   declarations             Declaration[]                     @relation("DeclarationDeclarant")
   declarationsCreated      Declaration[]                     @relation("DeclarationCreatedByDeclarant")
+  chunksAsPreleveur        Chunk[]                           @relation("ChunkPreleveur")
+  chunksSubmitted          Chunk[]                           @relation("ChunkSubmittedByDeclarant")
+  chunksCollected          Chunk[]                           @relation("ChunkCollecteur")
   declarationTypes         DeclarantDeclarationType[]
   pointPrelevements        DeclarantPointPrelevement[]
   collecteurExploitations  DeclarantCollecteurExploitation[] @relation("CollecteurDeclarant")
