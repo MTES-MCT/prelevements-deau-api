@@ -99,6 +99,7 @@ model Chunk {
   updatedAt DateTime @updatedAt
 
   @@index([instructionStatus])
+  @@index([sourceId, instructionStatus], map: "Chunk_sourceId_instructionStatus_idx")
   @@index([usageId])
   @@index([preleveurUserId])
   @@index([submittedByDeclarantUserId])
