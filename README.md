@@ -35,6 +35,7 @@ Créez les buckets MinIO nécessaires :
 docker compose exec minio mc alias set local http://localhost:9000 minio minio123
 docker compose exec minio mc mb local/prelevements-deau-documents
 docker compose exec minio mc mb local/prelevements-deau-declarations
+docker compose exec minio mc mb local/prelevements-deau-exports
 ```
 
 Appliquez les migrations Prisma :

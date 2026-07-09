@@ -24,6 +24,7 @@ model User {
   authTokens    AuthToken[]
   sessionTokens SessionToken[]
   emailAliases  UserEmailAlias[]
+  dataExports   DataExport[]
 }
 
 model UserEmailAlias {

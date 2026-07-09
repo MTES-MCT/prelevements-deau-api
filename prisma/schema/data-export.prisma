@@ -1,0 +1,35 @@
+enum DataExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model DataExport {
+  id String @id @default(uuid()) @db.Uuid
+
+  requestedByUserId String @db.Uuid
+  requestedBy       User   @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  requestedByRole UserRole
+
+  status DataExportStatus @default(PENDING)
+
+  filters Json @default("{}") @db.Json
+
+  fileName   String? @db.Text
+  storageKey String? @db.Text
+  rowCount   Int?
+
+  errorMessage String?   @db.Text
+  startedAt    DateTime?
+  completedAt  DateTime?
+  failedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requestedByUserId])
+  @@index([status])
+  @@index([createdAt])
+}
