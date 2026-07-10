@@ -16,6 +16,7 @@ model Zone {
   pointPrelevementZones PointPrelevementZone[]
   declarationSettings   ZoneDeclarationSettings?
   declarationOverrides  ZoneDeclarationPeriodOverride[]
+  monitoringStations    ZoneMonitoringStation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
