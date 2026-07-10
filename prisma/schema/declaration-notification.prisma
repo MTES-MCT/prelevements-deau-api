@@ -30,6 +30,20 @@ enum DeclarationNotificationRecipientStatus {
   SKIPPED
 }
 
+model DeclarationNotificationSetting {
+  id String @id @default(uuid()) @db.Uuid
+
+  notificationType DeclarationNotificationType
+  periodType       DeclarationPeriodType
+  enabled          Boolean                     @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([notificationType, periodType])
+  @@index([enabled])
+}
+
 model ZoneDeclarationSettings {
   id String @id @default(uuid()) @db.Uuid
 
