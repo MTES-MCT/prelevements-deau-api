@@ -8,12 +8,14 @@ servers:
     description: Local
 tags:
   - name: Auth
+  - name: Dashboard
   - name: Declarations
   - name: Sources
   - name: Instruction
   - name: Referentiels
   - name: Series
   - name: Stats
+  - name: Zones
 paths:
   /auth/request:
     post:
@@ -384,6 +386,120 @@ paths:
                 type: object
                 additionalProperties: true
         default: {$ref: '#/components/responses/Error'}
+  /dashboard/water-resources/piezometry:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardPiezometry
+      summary: Lire les niveaux piézométriques du tableau de bord
+      description: Retourne les observations mises en cache pour les piézomètres actifs des zones accessibles et sélectionnées.
+      parameters:
+        - $ref: '#/components/parameters/DashboardZones'
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [week, month, year, twenty-years]
+            default: week
+      responses:
+        '200':
+          description: Niveaux piézométriques par station
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardWaterResources'}
+        default: {$ref: '#/components/responses/Error'}
+  /dashboard/water-resources/flows:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardRiverFlows
+      summary: Lire les débits du tableau de bord
+      description: Retourne les observations mises en cache pour les stations hydrométriques actives des zones accessibles et sélectionnées.
+      parameters:
+        - $ref: '#/components/parameters/DashboardZones'
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [week, month, year]
+            default: week
+      responses:
+        '200':
+          description: Débits par station
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardWaterResources'}
+        default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/monitoring-stations:
+    get:
+      tags: [Zones]
+      operationId: listZoneMonitoringStations
+      summary: Lister les stations de mesure d'une zone
+      description: Retourne le paramétrage visible par l'agent pour la zone, y compris les ressources désactivées et leur état de synchronisation.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+      responses:
+        '200':
+          description: Stations configurées, actives ou inactives
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ZoneMonitoringStation'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Zones]
+      operationId: createZoneMonitoringStation
+      summary: Ajouter une station de mesure à une zone
+      description: Réservé aux administrateurs globaux et aux administrateurs de la zone. Le code est validé auprès de Hub'Eau avant enregistrement.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ZoneMonitoringStationInput'}
+      responses:
+        '201':
+          description: Station ajoutée et synchronisation programmée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneMonitoringStation'}
+        '409': {description: Station déjà configurée pour la zone}
+        '422': {description: Code station inconnu de Hub'Eau}
+        default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/monitoring-stations/{associationId}:
+    patch:
+      tags: [Zones]
+      operationId: updateZoneMonitoringStation
+      summary: Modifier une station de mesure d'une zone
+      description: Réservé aux administrateurs globaux et aux administrateurs de la zone.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+        - $ref: '#/components/parameters/MonitoringStationAssociationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ZoneMonitoringStationInput'}
+      responses:
+        '200':
+          description: Station modifiée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneMonitoringStation'}
+        '409': {description: Station déjà configurée pour la zone}
+        '422': {description: Code station inconnu de Hub'Eau}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Zones]
+      operationId: deleteZoneMonitoringStation
+      summary: Retirer une station de mesure d'une zone
+      description: Réservé aux administrateurs globaux et aux administrateurs de la zone.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+        - $ref: '#/components/parameters/MonitoringStationAssociationId'
+      responses:
+        '204': {description: Station retirée de la zone}
+        default: {$ref: '#/components/responses/Error'}
   /series:
     get:
       tags: [Series]
@@ -542,6 +658,21 @@ components:
       schema:
         type: string
         description: Identifiant technique de série.
+    ZoneId:
+      in: path
+      name: zoneId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    MonitoringStationAssociationId:
+      in: path
+      name: associationId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
+    DashboardZones:
+      in: query
+      name: zones
+      schema: {type: string}
+      description: Codes des zones accessibles séparés par des virgules. Toutes les zones accessibles sont utilisées si le paramètre est absent.
   responses:
     Error:
       description: Erreur
@@ -618,3 +749,126 @@ components:
       properties:
         date: {type: string, format: date}
         value: {type: number}
+    ZoneMonitoringStationInput:
+      type: object
+      additionalProperties: false
+      required: [type, stationCode, label]
+      properties:
+        type:
+          type: string
+          enum: [PIEZOMETER, FLOW_STATION]
+        stationCode:
+          type: string
+          description: Ancien code BSS ou nouvel identifiant BSS pour un piézomètre, ou code station hydrométrique.
+        label: {type: string}
+        enabled: {type: boolean, default: true}
+    GeoJsonPoint:
+      type: object
+      required: [type, coordinates]
+      properties:
+        type: {type: string, const: Point}
+        coordinates:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: {type: number}
+    MonitoringStationSync:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [PENDING, READY, ERROR]
+        lastAttemptAt: {type: [string, 'null'], format: date-time}
+        lastSuccessAt: {type: [string, 'null'], format: date-time}
+        lastRealtimeSyncAt: {type: [string, 'null'], format: date-time}
+        lastHistoricalSyncAt: {type: [string, 'null'], format: date-time}
+        error: {type: [string, 'null']}
+    ZoneMonitoringStation:
+      type: object
+      required: [id, zoneId, label, enabled, type, stationCode, sync]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        zoneId: {$ref: '#/components/schemas/Uuid'}
+        label: {type: string}
+        enabled: {type: boolean}
+        type:
+          type: string
+          enum: [PIEZOMETER, FLOW_STATION]
+        stationCode: {type: string}
+        bssId: {type: [string, 'null']}
+        siteCode: {type: [string, 'null']}
+        providerLabel: {type: [string, 'null']}
+        coordinates:
+          oneOf:
+            - {$ref: '#/components/schemas/GeoJsonPoint'}
+            - {type: 'null'}
+        sync: {$ref: '#/components/schemas/MonitoringStationSync'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    DashboardWaterResourceStation:
+      type: object
+      required: [id, type, label, stationCode, zones, sync, values]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        type:
+          type: string
+          enum: [PIEZOMETER, FLOW_STATION]
+        label: {type: string}
+        stationCode: {type: string}
+        bssId: {type: [string, 'null']}
+        siteCode: {type: [string, 'null']}
+        coordinates:
+          oneOf:
+            - {$ref: '#/components/schemas/GeoJsonPoint'}
+            - {type: 'null'}
+        zones:
+          type: array
+          items:
+            type: object
+            required: [id, code, name]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              code: {type: string}
+              name: {type: string}
+        sync: {$ref: '#/components/schemas/MonitoringStationSync'}
+        latestObservationAt: {type: [string, 'null'], format: date-time}
+        values:
+          type: array
+          description: Mesures de niveau/profondeur ou de débit selon le type de station.
+          items:
+            type: object
+            additionalProperties: true
+    DashboardWaterResources:
+      type: object
+      required: [period, source, aggregation, warnings, stations, selectedZoneCodes, unknownZoneCodes]
+      properties:
+        period:
+          type: object
+          required: [key, start, end]
+          properties:
+            key: {type: string}
+            start: {type: string, format: date-time}
+            end: {type: string, format: date-time}
+        source: {type: string}
+        aggregation:
+          type: [object, 'null']
+          description: Agrégation appliquée par l’API aux valeurs retournées, ou null pour les mesures brutes.
+          required: [frequency, operator]
+          properties:
+            frequency: {type: string, example: 1 week}
+            operator: {type: string, enum: [mean]}
+        warnings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        stations:
+          type: array
+          items: {$ref: '#/components/schemas/DashboardWaterResourceStation'}
+        selectedZoneCodes:
+          type: array
+          items: {type: string}
+        unknownZoneCodes:
+          type: array
+          items: {type: string}

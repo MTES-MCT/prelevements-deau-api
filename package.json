@@ -15,7 +15,8 @@
     "coverage": "c8 ava",
     "coverage:report": "c8 --reporter=html --reporter=text ava",
     "backfill:chunk-actors": "node scripts/backfill-chunk-actors.js",
-    "sync:declaration-files": "node scripts/sync-declaration-files.js"
+    "sync:declaration-files": "node scripts/sync-declaration-files.js",
+    "import-zone-monitoring-stations": "node scripts/import-zone-monitoring-stations.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.932.0",

@@ -1,0 +1,116 @@
+enum MonitoringStationType {
+  PIEZOMETER
+  FLOW_STATION
+}
+
+enum GroundwaterObservationKind {
+  CHRONICLE
+  REALTIME
+}
+
+enum RiverFlowObservationGranularity {
+  REALTIME
+  DAILY
+  MONTHLY
+}
+
+model MonitoringStation {
+  id String @id @default(uuid()) @db.Uuid
+
+  type        MonitoringStationType
+  stationCode String                @db.Text
+  bssId       String?               @unique @db.Text
+  siteCode    String?               @db.Text
+
+  providerLabel String? @db.Text
+  longitude     Float?
+  latitude      Float?
+  metadata      Json    @default("{}") @db.Json
+
+  lastMetadataSyncAt   DateTime?
+  lastRealtimeSyncAt   DateTime?
+  lastHistoricalSyncAt DateTime?
+  lastFullSyncAt       DateTime?
+  lastSyncAttemptAt    DateTime?
+  lastSyncSuccessAt    DateTime?
+  lastSyncError        String?   @db.Text
+
+  zones                   ZoneMonitoringStation[]
+  groundwaterObservations GroundwaterObservation[]
+  riverFlowObservations   RiverFlowObservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, stationCode])
+  @@index([type])
+  @@index([lastSyncSuccessAt])
+}
+
+model ZoneMonitoringStation {
+  id String @id @default(uuid()) @db.Uuid
+
+  zoneId String @db.Uuid
+  zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  monitoringStationId String            @db.Uuid
+  monitoringStation   MonitoringStation @relation(fields: [monitoringStationId], references: [id], onDelete: Cascade)
+
+  label   String  @db.Text
+  enabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([zoneId, monitoringStationId])
+  @@index([zoneId, enabled])
+  @@index([monitoringStationId])
+}
+
+model GroundwaterObservation {
+  id String @id @default(uuid()) @db.Uuid
+
+  monitoringStationId String            @db.Uuid
+  monitoringStation   MonitoringStation @relation(fields: [monitoringStationId], references: [id], onDelete: Cascade)
+
+  kind            GroundwaterObservationKind
+  measuredAt      DateTime
+  measurementDate DateTime                   @db.Date
+  levelNgf        Float?
+  depth           Float?
+  status          String?                    @db.Text
+  qualification   String?                    @db.Text
+  raw             Json                       @default("{}") @db.Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([monitoringStationId, kind, measuredAt])
+  @@index([monitoringStationId, measurementDate])
+  @@index([monitoringStationId, kind, measuredAt])
+}
+
+model RiverFlowObservation {
+  id String @id @default(uuid()) @db.Uuid
+
+  monitoringStationId String            @db.Uuid
+  monitoringStation   MonitoringStation @relation(fields: [monitoringStationId], references: [id], onDelete: Cascade)
+
+  granularity          RiverFlowObservationGranularity
+  measuredAt           DateTime
+  valueLitersPerSecond Float
+  producedAt           DateTime?
+  statusCode           Int?
+  status               String?                         @db.Text
+  methodCode           Int?
+  method               String?                         @db.Text
+  qualificationCode    Int?
+  qualification        String?                         @db.Text
+  raw                  Json                            @default("{}") @db.Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([monitoringStationId, granularity, measuredAt])
+  @@index([monitoringStationId, granularity, measuredAt])
+}
