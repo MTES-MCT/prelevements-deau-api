@@ -325,6 +325,7 @@ async function upsertPointPrelevement({name, sourceId, waterBodyType, ewkt}) {
       name,
       "sourceId",
       "waterBodyType",
+      "flowType",
       coordinates,
       "createdAt",
       "updatedAt"
@@ -334,6 +335,7 @@ async function upsertPointPrelevement({name, sourceId, waterBodyType, ewkt}) {
       ${name},
       ${sourceId},
       ${waterBodyType}::"WaterBodyType",
+      'PRELEVEMENT'::"PointFlowType",
       ST_GeomFromEWKT(${ewkt}),
       now(),
       now()
@@ -342,6 +344,7 @@ async function upsertPointPrelevement({name, sourceId, waterBodyType, ewkt}) {
     DO UPDATE SET
       name = EXCLUDED.name,
       "waterBodyType" = EXCLUDED."waterBodyType",
+      "flowType" = EXCLUDED."flowType",
       coordinates = EXCLUDED.coordinates,
       "updatedAt" = now()
     RETURNING id

@@ -595,7 +595,14 @@ paths:
         - in: query
           name: metricTypeCode
           required: true
+          description: Type de mesure (`volume`, `index`, `débit`, etc.), indépendamment du type de point.
           schema: {type: string}
+        - in: query
+          name: pointFlowType
+          description: Filtre optionnel sur le type de point pour distinguer prélèvements et rejets d'un même type de mesure.
+          schema:
+            type: string
+            enum: [PRELEVEMENT, REJET]
         - in: query
           name: startDate
           schema: {type: string, format: date}
@@ -749,6 +756,9 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         name: {type: string}
         usageName: {type: [string, 'null']}
+        flowType:
+          type: string
+          enum: [PRELEVEMENT, REJET]
     Exploitation:
       type: object
       additionalProperties: true
