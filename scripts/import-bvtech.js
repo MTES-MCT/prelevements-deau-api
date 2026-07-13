@@ -677,6 +677,7 @@ function buildPointPayload(row) {
     sourceId: `${POINT_SOURCE_PREFIX}:${slug(sourceStablePart)}`,
     name,
     waterBodyType: 'SUPERFICIELLE',
+    flowType: 'PRELEVEMENT',
     nature: 'COURS_EAU',
     withdrawalType: 'CONTINENTAL',
     coordinates,

@@ -718,6 +718,7 @@ function buildNormalizedPointPayload(row) {
     sourceId,
     name,
     waterBodyType: rowCell(row, NORMALIZED_POINT_COLUMNS.waterBodyType) ?? 'SUPERFICIELLE',
+    flowType: 'PRELEVEMENT',
     nature: rowCell(row, NORMALIZED_POINT_COLUMNS.nature) ?? 'COURS_EAU',
     withdrawalType: rowCell(row, NORMALIZED_POINT_COLUMNS.withdrawalType) ?? 'CONTINENTAL',
     coordinates: {
@@ -1339,6 +1340,7 @@ function buildPointPayload(row) {
     sourceId: `${POINT_SOURCE_PREFIX}:${slug(sourceStablePart)}`,
     name,
     waterBodyType: 'SUPERFICIELLE',
+    flowType: 'PRELEVEMENT',
     nature: 'COURS_EAU',
     withdrawalType: 'CONTINENTAL',
     coordinates,

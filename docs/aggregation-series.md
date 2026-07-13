@@ -26,6 +26,7 @@ Les listes utilisent une séparation par virgule.
 Les paramètres attendus par l'agrégation sont :
 
 - `metricTypeCode`
+- `pointFlowType` (optionnel : `PRELEVEMENT` ou `REJET`)
 - `startDate`
 - `endDate`
 - `frequency`

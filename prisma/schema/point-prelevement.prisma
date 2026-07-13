@@ -26,12 +26,18 @@ enum PrelevementType {
   STOCKAGE
 }
 
+enum PointFlowType {
+  PRELEVEMENT
+  REJET
+}
+
 model PointPrelevement {
   id String @id @default(uuid()) @db.Uuid
 
   name          String         @db.Text
   usageName     String?        @db.Text
   waterBodyType WaterBodyType?
+  flowType      PointFlowType
 
   nature         PointPrelevementNature?
   withdrawalType PrelevementType?
@@ -90,6 +96,7 @@ model PointPrelevement {
   @@unique([sourceId])
   @@unique([name])
   @@index([name])
+  @@index([flowType])
   @@index([coordinates], type: Gist)
 }
 

@@ -64,6 +64,10 @@ model Chunk {
   pointPrelevementId String?           @db.Uuid
   pointPrelevement   PointPrelevement? @relation(fields: [pointPrelevementId], references: [id], onDelete: SetNull)
 
+  // Fonction métier portée par le point. Elle reste nullable pour les chunks
+  // non rapprochés dont la source ne permet pas encore de la déterminer.
+  flowType PointFlowType?
+
   // Acteurs métier historisés au moment de l'ingestion.
   // preleveurUserId = préleveur concerné par les volumes.
   // submittedByDeclarantUserId = compte déclarant qui a déposé la donnée.
@@ -104,6 +108,7 @@ model Chunk {
   @@index([preleveurUserId])
   @@index([submittedByDeclarantUserId])
   @@index([collecteurUserId])
+  @@index([pointPrelevementId, flowType])
 }
 
 enum ChunkValueKind {

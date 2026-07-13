@@ -588,6 +588,7 @@ function buildPointPayload({row, dataset}) {
     sourceId,
     name,
     waterBodyType: 'SOUTERRAIN',
+    flowType: 'PRELEVEMENT',
     nature,
     withdrawalType: 'SOUTERRAIN',
     coordinates: {

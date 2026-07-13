@@ -15,6 +15,7 @@
     "coverage": "c8 ava",
     "coverage:report": "c8 --reporter=html --reporter=text ava",
     "backfill:chunk-actors": "node scripts/backfill-chunk-actors.js",
+    "backfill:point-flow-types": "node scripts/backfill-point-flow-types.js",
     "sync:declaration-files": "node scripts/sync-declaration-files.js",
     "import-zone-monitoring-stations": "node scripts/import-zone-monitoring-stations.js"
   },
