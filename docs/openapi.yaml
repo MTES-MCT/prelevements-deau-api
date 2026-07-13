@@ -339,6 +339,33 @@ paths:
                 type: array
                 items: {$ref: '#/components/schemas/Exploitation'}
         default: {$ref: '#/components/responses/Error'}
+  /points-prelevement/{pointId}/usage-name:
+    patch:
+      tags: [Instruction]
+      operationId: updatePointUsageName
+      summary: Modifier le nom d'usage d'un point
+      description: Permet à un déclarant rattaché activement au point de définir ou supprimer son nom d'usage partagé.
+      parameters:
+        - $ref: '#/components/parameters/PointId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [usageName]
+              properties:
+                usageName:
+                  type: [string, 'null']
+                  maxLength: 200
+      responses:
+        '200':
+          description: Point mis à jour
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PointPrelevement'}
+        default: {$ref: '#/components/responses/Error'}
   /points-prelevement/{pointId}/exploitations:
     get:
       tags: [Instruction]
@@ -721,6 +748,7 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         name: {type: string}
+        usageName: {type: [string, 'null']}
     Exploitation:
       type: object
       additionalProperties: true

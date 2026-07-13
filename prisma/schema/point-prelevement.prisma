@@ -30,6 +30,7 @@ model PointPrelevement {
   id String @id @default(uuid()) @db.Uuid
 
   name          String         @db.Text
+  usageName     String?        @db.Text
   waterBodyType WaterBodyType?
 
   nature         PointPrelevementNature?
