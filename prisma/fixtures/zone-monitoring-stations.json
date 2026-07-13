@@ -12,11 +12,16 @@
     ]
   },
   {
-    "zone": {"type": "SAGE", "code": "sage-SAGE06030"},
+    "zone": {"type": "SAGE", "code": "sage-SAGE06028"},
     "stations": [
       {"type": "PIEZOMETER", "label": "Ortaffa", "stationCode": "10971X0198/LAFAR", "bssId": "BSS002MUNP", "enabled": true},
       {"type": "PIEZOMETER", "label": "Argelès-sur-Mer - Pont du Tech", "stationCode": "10972X0137/PONT", "bssId": "BSS002MUWB", "enabled": true},
-      {"type": "PIEZOMETER", "label": "Sabirou", "stationCode": "10975X0032/SABIRO", "bssId": "BSS002MVDG", "enabled": true},
+      {"type": "PIEZOMETER", "label": "Sabirou", "stationCode": "10975X0032/SABIRO", "bssId": "BSS002MVDG", "enabled": true}
+    ]
+  },
+  {
+    "zone": {"type": "SAGE", "code": "sage-SAGE06030"},
+    "stations": [
       {"type": "FLOW_STATION", "label": "La Preste - Le Tech à Prats-de-Mollo-la-Preste", "stationCode": "Y020401001", "enabled": true},
       {"type": "FLOW_STATION", "label": "Arles-sur-Tech - Le Tech au pont RD 115", "stationCode": "Y024401001", "enabled": true},
       {"type": "FLOW_STATION", "label": "Pont d'Elne - commune d'Argelès-sur-Mer", "stationCode": "Y028406001", "enabled": true}
