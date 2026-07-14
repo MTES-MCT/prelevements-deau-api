@@ -13,6 +13,9 @@ model InstructorZone {
 
   zoneAttachmentMailSentAt DateTime?
 
+  permissions      InstructorZonePermission[]
+  permissionAudits InstructorZonePermissionAudit[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -20,4 +23,49 @@ model InstructorZone {
   @@index([instructorUserId])
   @@index([zoneId])
   @@index([isAdmin])
+}
+
+model InstructorZonePermission {
+  id String @id @default(uuid()) @db.Uuid
+
+  instructorZoneId String         @db.Uuid
+  instructorZone   InstructorZone @relation(fields: [instructorZoneId], references: [id], onDelete: Cascade)
+
+  permission String @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@unique([instructorZoneId, permission])
+  @@index([instructorZoneId])
+  @@index([permission])
+}
+
+enum InstructorZonePermissionAuditAction {
+  CREATED
+  UPDATED
+  REMOVED
+  MIGRATED
+}
+
+model InstructorZonePermissionAudit {
+  id String @id @default(uuid()) @db.Uuid
+
+  instructorZoneId String?         @db.Uuid
+  instructorZone   InstructorZone? @relation(fields: [instructorZoneId], references: [id], onDelete: SetNull)
+
+  zoneId           String  @db.Uuid
+  instructorUserId String  @db.Uuid
+  actorUserId      String? @db.Uuid
+
+  action InstructorZonePermissionAuditAction
+  before Json?
+  after  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([instructorZoneId])
+  @@index([zoneId])
+  @@index([instructorUserId])
+  @@index([actorUserId])
+  @@index([createdAt])
 }

@@ -16,6 +16,7 @@ import {
   updatePointPrelevementById
 } from '../../lib/models/point-prelevement.js'
 import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
+import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
 
 const SOURCE = 'BVTECH'
 const POINT_SOURCE_PREFIX = 'bvtech:eaux-souterraines:point-prelevement'
@@ -1214,11 +1215,23 @@ async function upsertExploitation({
       skipDuplicates: true
     })
 
+    await syncDeclarantZonesFromPoint({
+      declarantUserIds: [declarant.userId, collecteurUserId],
+      pointPrelevementId: point.id,
+      source: 'EXPLOITATION'
+    })
+
     return {
       exploitation,
       collecteurRightCreated: result.count > 0
     }
   }
+
+  await syncDeclarantZonesFromPoint({
+    declarantUserIds: [declarant.userId],
+    pointPrelevementId: point.id,
+    source: 'EXPLOITATION'
+  })
 
   return {
     exploitation,

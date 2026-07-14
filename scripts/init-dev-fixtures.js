@@ -2,7 +2,9 @@
 import '../lib/config/env.js'
 import {prisma} from '../db/prisma.js'
 import {randomUUID} from 'node:crypto'
+import {ZONE_PERMISSION_CODES} from '../lib/constants/zone-permissions.js'
 import {allowTemplateDeclarationTypeForDeclarant} from '../lib/models/declaration-type.js'
+import {syncDeclarantZonesFromPoint} from '../lib/services/zone-permissions.js'
 
 const usersToCreate = [
   {
@@ -80,11 +82,22 @@ async function main() {
       instructorUserId: instructorUser.instructor.userId,
       zoneId: zone1.id,
       startDate: new Date('2024-01-01'),
-      isAdmin: true
+      isAdmin: true,
+      permissions: {
+        createMany: {
+          data: ZONE_PERMISSION_CODES.map(permission => ({permission}))
+        }
+      }
     },
     update: {
       startDate: new Date('2024-01-01'),
-      isAdmin: true
+      isAdmin: true,
+      permissions: {
+        deleteMany: {},
+        createMany: {
+          data: ZONE_PERMISSION_CODES.map(permission => ({permission}))
+        }
+      }
     }
   })
 
@@ -104,6 +117,11 @@ async function main() {
       type: 'PRELEVEUR_DECLARANT'
     }
   })
+  await syncDeclarantZonesFromPoint({
+    declarantUserIds: [declarantUser.declarant.userId],
+    pointPrelevementId: point1.id,
+    source: 'EXPLOITATION'
+  })
 
   await prisma.declarantPointPrelevement.upsert({
     where: {
@@ -120,6 +138,11 @@ async function main() {
     update: {
       type: 'PRELEVEUR_DECLARANT'
     }
+  })
+  await syncDeclarantZonesFromPoint({
+    declarantUserIds: [declarantUser.declarant.userId],
+    pointPrelevementId: point2.id,
+    source: 'EXPLOITATION'
   })
 }
 
