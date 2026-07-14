@@ -15,6 +15,7 @@ import {
   updatePointPrelevementById
 } from '../../lib/models/point-prelevement.js'
 import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
+import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
 
 const DEFAULT_INPUT = 'data/bvtech/bvtech-eaux-superficielles.xlsx'
 const DEFAULT_INPUT_FILENAME = 'bvtech-eaux-superficielles.xlsx'
@@ -856,6 +857,23 @@ async function importNormalizedPoints(workbook) {
   return summary
 }
 
+async function saveExploitationAndSync(existing, data) {
+  const exploitation = existing
+    ? await prisma.declarantPointPrelevement.update({
+      where: {id: existing.id},
+      data
+    })
+    : await prisma.declarantPointPrelevement.create({data})
+
+  await syncDeclarantZonesFromPoint({
+    declarantUserIds: [data.declarantUserId],
+    pointPrelevementId: data.pointPrelevementId,
+    source: 'EXPLOITATION'
+  })
+
+  return exploitation
+}
+
 async function upsertNormalizedExploitation({point, declarant, sourceId, legacyUsages, startDate, endDate, comment}) {
   const existing = await prisma.declarantPointPrelevement.findFirst({
     where: {
@@ -881,16 +899,7 @@ async function upsertNormalizedExploitation({point, declarant, sourceId, legacyU
     comment
   }
 
-  if (existing) {
-    return prisma.declarantPointPrelevement.update({
-      where: {id: existing.id},
-      data
-    })
-  }
-
-  return prisma.declarantPointPrelevement.create({
-    data
-  })
+  return saveExploitationAndSync(existing, data)
 }
 
 async function importNormalizedExploitations(workbook, declarants, points) {
@@ -1429,16 +1438,7 @@ async function upsertPointDeclarantLink({point, pointPayload, declarant, rawUsag
     ])
   }
 
-  if (existing) {
-    return prisma.declarantPointPrelevement.update({
-      where: {id: existing.id},
-      data
-    })
-  }
-
-  return prisma.declarantPointPrelevement.create({
-    data
-  })
+  return saveExploitationAndSync(existing, data)
 }
 
 async function importPoints(workbook, declarants) {

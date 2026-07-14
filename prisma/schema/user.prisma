@@ -71,6 +71,7 @@ model Declarant {
   serviceAccountDeclarants ServiceAccountDeclarant[]
   serviceAccountTokens     ServiceAccountToken[]
   apiImports               ApiImport[]
+  zones                    DeclarantZone[]
 
   resourceDocuments ResourceDocument[]
   resourceRules     ResourceRule[]
@@ -78,7 +79,7 @@ model Declarant {
   lastDeclarationAt      DateTime?
   lastReminderMailSentAt DateTime?
 
-  quickDeclarationEnabled        Boolean @default(true)
+  quickDeclarationEnabled         Boolean @default(true)
   declarationNotificationsEnabled Boolean @default(true)
 
   declarantType DeclarantType @default(NATURAL_PERSON)
@@ -104,6 +105,36 @@ model Declarant {
   @@index([declarantRole])
   @@index([quickDeclarationEnabled])
   @@index([declarationNotificationsEnabled])
+}
+
+enum DeclarantZoneSource {
+  CREATION
+  MANUAL
+  EXPLOITATION
+  DECLARATION
+  RECONCILIATION
+  MIGRATION
+}
+
+model DeclarantZone {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarantUserId String    @db.Uuid
+  declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  zoneId String @db.Uuid
+  zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  source          DeclarantZoneSource @default(MANUAL)
+  createdByUserId String?             @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([declarantUserId, zoneId])
+  @@index([declarantUserId])
+  @@index([zoneId])
+  @@index([source])
 }
 
 model Instructor {

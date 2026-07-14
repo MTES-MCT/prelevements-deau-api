@@ -13,6 +13,7 @@ model Zone {
   coordinates Unsupported("geometry(MultiPolygon,4326)")
 
   instructorZones       InstructorZone[]
+  declarantZones        DeclarantZone[]
   pointPrelevementZones PointPrelevementZone[]
   declarationSettings   ZoneDeclarationSettings?
   declarationOverrides  ZoneDeclarationPeriodOverride[]

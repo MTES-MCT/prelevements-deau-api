@@ -14,6 +14,7 @@ import {
   updatePointPrelevementById
 } from '../lib/models/point-prelevement.js'
 import {getWaterUseByLegacyUsage} from '../lib/services/sandre-water-uses.js'
+import {syncDeclarantZonesFromPoint} from '../lib/services/zone-permissions.js'
 
 const DEFAULT_INPUT = 'data/bvtech'
 const SOURCE = 'BVTECH'
@@ -737,7 +738,7 @@ async function upsertPointDeclarantLink(point, declarant, rawUsage) {
   const waterUse = await getWaterUseByLegacyUsage(mapUsage(rawUsage), {rootOnly: true})
   const sourceId = `bvtech:exploitation:${declarant.userId}:${point.id}`
 
-  return prisma.declarantPointPrelevement.upsert({
+  const exploitation = await prisma.declarantPointPrelevement.upsert({
     where: {
       declarantUserId_pointPrelevementId: {
         declarantUserId: declarant.userId,
@@ -757,6 +758,14 @@ async function upsertPointDeclarantLink(point, declarant, rawUsage) {
       sourceId
     }
   })
+
+  await syncDeclarantZonesFromPoint({
+    declarantUserIds: [declarant.userId],
+    pointPrelevementId: point.id,
+    source: 'EXPLOITATION'
+  })
+
+  return exploitation
 }
 
 async function importPoints(workbook, declarants) {

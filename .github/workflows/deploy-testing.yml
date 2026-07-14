@@ -82,11 +82,15 @@ jobs:
           SCW_DEFAULT_REGION: fr-par
           SCW_JOB_DEFINITION_ID_TESTING_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_TESTING_DB }}
         run: |
-          scw jobs definition start "$SCW_JOB_DEFINITION_ID_TESTING_DB" region=fr-par >/dev/null
-          while scw jobs run list region=fr-par -o json \
-            | jq -e --arg def "$SCW_JOB_DEFINITION_ID_TESTING_DB" '.[] | select(.job_definition_id==$def and .state=="running")' >/dev/null; do
-            sleep 2
-          done
+          job_run="$(scw jobs definition start "$SCW_JOB_DEFINITION_ID_TESTING_DB" region=fr-par --wait -o json)"
+          job_run_id="$(jq -er '.id' <<< "$job_run")"
+          job_state="$(jq -er '.state' <<< "$job_run")"
+
+          if [[ "$job_state" != "succeeded" ]]; then
+            echo "Database migration job $job_run_id finished with state: $job_state"
+            echo "$job_run"
+            exit 1
+          fi
 
       - name: Deploy API to Scaleway Serverless Container (testing)
         env:

@@ -1,5 +1,7 @@
 import '../../lib/config/env.js'
 import {prisma} from '../../db/prisma.js'
+import {ZONE_PERMISSION_CODES} from '../../lib/constants/zone-permissions.js'
+import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
 import {allowTemplateDeclarationTypeForDeclarant} from '../../lib/models/declaration-type.js'
 import {legacyUsageToRootUsageCode} from '../../lib/constants/sandre-water-uses.js'
 
@@ -144,14 +146,25 @@ async function upsertInstructorAccount(zoneId) {
     update: {
       isAdmin: true,
       startDate: new Date('2020-01-01'),
-      endDate: null
+      endDate: null,
+      permissions: {
+        deleteMany: {},
+        createMany: {
+          data: ZONE_PERMISSION_CODES.map(permission => ({permission}))
+        }
+      }
     },
     create: {
       instructorUserId: user.id,
       zoneId,
       isAdmin: true,
       startDate: new Date('2020-01-01'),
-      endDate: null
+      endDate: null,
+      permissions: {
+        createMany: {
+          data: ZONE_PERMISSION_CODES.map(permission => ({permission}))
+        }
+      }
     }
   })
 
@@ -267,6 +280,11 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, typ
         usageId,
         sourceId: `demo-dpp-${sourceKey}-${point.id}`
       }
+    })
+    await syncDeclarantZonesFromPoint({
+      declarantUserIds: [declarantUserId],
+      pointPrelevementId: point.id,
+      source: 'EXPLOITATION'
     })
   }
 
