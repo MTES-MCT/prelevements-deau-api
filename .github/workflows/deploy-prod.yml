@@ -82,10 +82,9 @@ jobs:
           SCW_DEFAULT_REGION: fr-par
           SCW_JOB_DEFINITION_ID_PROD_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_PROD_DB }}
         run: |
-          job_run_id="$(scw jobs definition start "$SCW_JOB_DEFINITION_ID_PROD_DB" region=fr-par -o json | jq -er '.id')"
-          scw jobs run wait "$job_run_id" region=fr-par >/dev/null
-          job_run="$(scw jobs run get "$job_run_id" region=fr-par -o json)"
-          job_state="$(jq -r '.state' <<< "$job_run")"
+          job_run="$(scw jobs definition start "$SCW_JOB_DEFINITION_ID_PROD_DB" region=fr-par --wait -o json)"
+          job_run_id="$(jq -er '.id' <<< "$job_run")"
+          job_state="$(jq -er '.state' <<< "$job_run")"
 
           if [[ "$job_state" != "succeeded" ]]; then
             echo "Database migration job $job_run_id finished with state: $job_state"
