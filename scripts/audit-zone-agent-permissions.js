@@ -22,7 +22,7 @@ function isManager(codes) {
   return ZONE_AGENT_MANAGEMENT_PERMISSIONS.every(code => selected.has(code))
 }
 
-const [assignments, zones, declarantsCount, declarantZones, auditsCount] = await Promise.all([
+const [assignments, zones, declarantsCount, declarantZones, auditsCount, globalAdminsCount] = await Promise.all([
   prisma.instructorZone.findMany({
     include: {
       permissions: {select: {permission: true}},
@@ -42,7 +42,13 @@ const [assignments, zones, declarantsCount, declarantZones, auditsCount] = await
     where: {declarant: {user: {deletedAt: null}}},
     select: {declarantUserId: true, zoneId: true, source: true}
   }),
-  prisma.instructorZonePermissionAudit.count()
+  prisma.instructorZonePermissionAudit.count(),
+  prisma.user.count({
+    where: {
+      role: 'ADMIN',
+      deletedAt: null
+    }
+  })
 ])
 
 const activeAssignments = await prisma.instructorZone.findMany({
@@ -94,9 +100,10 @@ const activeManagerZoneIds = new Set(
     .map(assignment => assignment.zoneId)
 )
 const activeAssignmentZoneIds = new Set(activeAssignments.map(assignment => assignment.zoneId))
-const zonesWithoutActiveManager = zones
+const zonesWithoutLocalManager = zones
   .filter(zone => activeAssignmentZoneIds.has(zone.id) && !activeManagerZoneIds.has(zone.id))
   .map(zone => ({code: zone.code, name: zone.name}))
+const zonesWithoutActiveManager = globalAdminsCount > 0 ? [] : zonesWithoutLocalManager
 const linkedDeclarantIds = new Set(declarantZones.map(link => link.declarantUserId))
 const orphanDeclarantsCount = declarantsCount - linkedDeclarantIds.size
 const linksBySource = Object.fromEntries(
@@ -120,7 +127,9 @@ console.log(JSON.stringify({
     compatibilityDrifts: compatibilityDrifts.length
   },
   managers: {
-    activeManagerZones: activeManagerZoneIds.size,
+    globalAdmins: globalAdminsCount,
+    activeLocalManagerZones: activeManagerZoneIds.size,
+    zonesWithoutLocalManager,
     zonesWithoutActiveManager
   },
   declarants: {
