@@ -425,8 +425,14 @@ paths:
           name: period
           schema:
             type: string
-            enum: [week, month, year, twenty-years]
+            enum: [week, month, year, five-years, ten-years, twenty-years]
             default: week
+        - in: query
+          name: includeIps
+          description: Calcule l'indicateur piézométrique standardisé mensuel à partir de l'historique validé.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Niveaux piézométriques par station
@@ -846,7 +852,7 @@ components:
         updatedAt: {type: string, format: date-time}
     DashboardWaterResourceStation:
       type: object
-      required: [id, type, label, stationCode, zones, sync, values]
+      required: [id, type, label, stationCode, details, zones, sync, values]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         type:
@@ -856,10 +862,23 @@ components:
         stationCode: {type: string}
         bssId: {type: [string, 'null']}
         siteCode: {type: [string, 'null']}
+        providerLabel: {type: [string, 'null']}
         coordinates:
           oneOf:
             - {$ref: '#/components/schemas/GeoJsonPoint'}
             - {type: 'null'}
+        details:
+          type: object
+          required: [commune, department, altitudeMeters, investigationDepthMeters, watercourse, openedAt, closedAt, inService]
+          properties:
+            commune: {type: [string, 'null']}
+            department: {type: [string, 'null']}
+            altitudeMeters: {type: [number, 'null']}
+            investigationDepthMeters: {type: [number, 'null']}
+            watercourse: {type: [string, 'null']}
+            openedAt: {type: [string, 'null']}
+            closedAt: {type: [string, 'null']}
+            inService: {type: [boolean, 'null']}
         zones:
           type: array
           items:
