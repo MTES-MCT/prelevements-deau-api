@@ -104,13 +104,13 @@ La migration est additive et conserve temporairement `InstructorZone.isAdmin` po
 
 ## Contrôle de cohérence
 
-Le catalogue exécutable se trouve dans `lib/constants/zone-permissions.js`. La documentation, la migration de données, l'API de catalogue et les tests doivent contenir exactement les mêmes codes. Le script `npm run audit:zone-agent-permissions` contrôle les droits inconnus, les dépendances manquantes, les habilitations vides, les zones sans gestionnaire actif et les déclarants sans zone.
+Le catalogue exécutable se trouve dans `lib/constants/zone-permissions.js`. La documentation, la migration de données, l'API de catalogue et les tests doivent contenir exactement les mêmes codes. Le script `npm run audit:zone-agent-permissions` contrôle les droits inconnus, les dépendances manquantes, les habilitations vides, les zones sans gestionnaire actif et les déclarants sans zone. Il signale séparément les zones sans gestionnaire local ; elles restent administrables tant qu'au moins un administrateur global actif existe.
 
 ## Déploiement
 
 1. Appliquer les migrations Prisma avant de démarrer la nouvelle version de l'API.
 2. Déployer l'API, puis le front.
 3. Exécuter `npm run audit:zone-agent-permissions` et conserver son rapport.
-4. Vérifier en priorité les déclarants orphelins et les zones qui n'ont aucun gestionnaire actif.
+4. Vérifier en priorité les déclarants orphelins, les zones sans gestionnaire local et l'existence d'un administrateur global actif pour ces zones.
 
 Après la première modification de droits atomiques, un retour à une ancienne version de l'API n'est pas sûr : l'ancien code ne connaît que `isAdmin` et accorderait de nouveau le périmètre historique complet aux agents non administrateurs. Un rollback applicatif doit donc être accompagné d'un retour des données ou du maintien de la nouvelle couche d'autorisation.
