@@ -76,8 +76,7 @@ model Declarant {
   resourceDocuments ResourceDocument[]
   resourceRules     ResourceRule[]
 
-  lastDeclarationAt      DateTime?
-  lastReminderMailSentAt DateTime?
+  lastDeclarationAt DateTime?
 
   quickDeclarationEnabled         Boolean @default(true)
   declarationNotificationsEnabled Boolean @default(true)
