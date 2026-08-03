@@ -63,7 +63,6 @@ La colonne **Dépend de** est vide lorsque le droit peut être attribué seul.
 | Déclarants et collecteurs | Envoyer ou renvoyer l'email de création de compte | `declarant.invite` | Envoi | `declarant.detail.read` |
 | Déclarants et collecteurs | Modifier l'identité et les options d'un déclarant | `declarant.update` | Écriture | `declarant.detail.read` |
 | Déclarants et collecteurs | Supprimer un déclarant | `declarant.delete` | Suppression | `declarant.detail.read` |
-| Déclarants et collecteurs | Envoyer manuellement un rappel de déclaration | `declarant.reminder.send` | Envoi | `declarant.detail.read` |
 | Déclarants et collecteurs | Ajouter ou retirer les zones explicites d'un déclarant | `declarant.zone.update` | Écriture | `declarant.detail.read` |
 | Déclarants et collecteurs | Voir les types de déclaration autorisés | `declarant.declaration-type.read` | Lecture | `declarant.detail.read` |
 | Déclarants et collecteurs | Modifier les types de déclaration autorisés | `declarant.declaration-type.update` | Écriture | `declarant.declaration-type.read` |
