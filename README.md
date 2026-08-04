@@ -95,6 +95,12 @@ http://localhost:5000/admin/queues
 
 L'authentification est en Basic Auth. Le nom d'utilisateur est libre, le mot de passe est la valeur de `BULLBOARD_PASSWORD`.
 
+## Mesure des performances HTTP
+
+Chaque réponse expose `X-Request-Id` et `Server-Timing`. Les requêtes dépassant
+`API_SLOW_REQUEST_MS` (1 000 ms par défaut) sont journalisées avec le préfixe
+`[API_PERF]`. Définissez `API_PERF_LOG=1` pour journaliser toutes les requêtes.
+
 ## Documentation API
 
 La spec OpenAPI est dans [docs/openapi.yaml](docs/openapi.yaml).

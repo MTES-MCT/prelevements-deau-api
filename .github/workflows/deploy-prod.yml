@@ -103,7 +103,15 @@ jobs:
           SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
           scw container container update "$SCW_SERVERLESS_CONTAINER_ID_PROD_API" \
-            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest"
+            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-${{ github.sha }}" \
+            liveness-probe.http.path=/healthz \
+            liveness-probe.interval=10s \
+            liveness-probe.timeout=2s \
+            liveness-probe.failure-threshold=5 \
+            startup-probe.http.path=/healthz \
+            startup-probe.interval=2s \
+            startup-probe.timeout=2s \
+            startup-probe.failure-threshold=30
 
       - name: Deploy WORKER to Scaleway Serverless Container (prod)
         env:
@@ -116,6 +124,6 @@ jobs:
           SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
           scw container container update "$SCW_SERVERLESS_CONTAINER_ID_PROD_WORKER" \
-            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-latest" \
+            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:prod-${{ github.sha }}" \
             command.0=node \
             command.1=worker.js
