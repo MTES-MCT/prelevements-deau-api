@@ -596,7 +596,10 @@ paths:
       tags: [Series]
       operationId: getAggregatedSeries
       summary: Agréger des séries
-      description: Agrège les valeurs de séries sur un périmètre UUID.
+      description: >-
+        Agrège les valeurs de séries sur un périmètre UUID. Les cumuls sont répartis
+        uniformément sur leur période source semi-ouverte avant l'agrégation demandée ;
+        cette transformation sert uniquement à l'affichage.
       parameters:
         - in: query
           name: metricTypeCode
@@ -614,7 +617,25 @@ paths:
           schema: {type: string, format: date}
         - in: query
           name: endDate
+          description: Dernier jour inclus dans la fenêtre demandée.
           schema: {type: string, format: date}
+        - in: query
+          name: aggregationFrequency
+          description: Résolution temporelle de la série retournée.
+          schema:
+            type: string
+            default: 1 day
+            enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year]
+        - in: query
+          name: spatialOperator
+          schema:
+            type: string
+            enum: [sum, mean, min, max]
+        - in: query
+          name: temporalOperator
+          schema:
+            type: string
+            enum: [sum, mean, min, max]
         - in: query
           name: pointIds
           schema: {type: string}
@@ -633,8 +654,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: '#/components/schemas/AggregatedSeriesResponse'
         default: {$ref: '#/components/responses/Error'}
   /aggregated-series/options:
     get:
@@ -793,6 +813,49 @@ components:
       properties:
         date: {type: string, format: date}
         value: {type: number}
+    AggregationDistribution:
+      type: object
+      additionalProperties: false
+      required: [applied, method, purpose]
+      properties:
+        applied:
+          type: boolean
+          description: Vaut true pour une valeur cumulative répartie sur sa période source.
+        method:
+          type: string
+          const: uniform-over-period
+        purpose:
+          type: string
+          const: display
+    AggregatedSeriesMetadata:
+      type: object
+      additionalProperties: true
+      required: [metricTypeCode, frequency, distribution]
+      properties:
+        metricTypeCode: {type: string}
+        frequency:
+          type: string
+          enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year]
+        startDate: {type: [string, 'null'], format: date}
+        endDate: {type: [string, 'null'], format: date}
+        minDate: {type: [string, 'null']}
+        maxDate: {type: [string, 'null']}
+        distribution: {$ref: '#/components/schemas/AggregationDistribution'}
+    AggregatedSeriesResponse:
+      type: object
+      additionalProperties: false
+      required: [metadata, values]
+      properties:
+        metadata: {$ref: '#/components/schemas/AggregatedSeriesMetadata'}
+        values:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [date, value]
+            properties:
+              date: {type: string}
+              value: {type: number}
     ZoneMonitoringStationInput:
       type: object
       additionalProperties: false
