@@ -109,7 +109,7 @@ jobs:
             liveness-probe.timeout=2s \
             liveness-probe.failure-threshold=5 \
             startup-probe.http.path=/healthz \
-            startup-probe.interval=2s \
+            startup-probe.interval=5s \
             startup-probe.timeout=2s \
             startup-probe.failure-threshold=30
 
