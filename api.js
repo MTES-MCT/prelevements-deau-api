@@ -13,6 +13,7 @@ import errorHandler from './lib/util/error-handler.js'
 import routes from './lib/routes.js'
 import {createBullBoardRouter} from './lib/queues/board.js'
 import {validateEmailConfig} from './lib/util/email.js'
+import {requestPerformanceMiddleware} from './lib/util/request-performance.js'
 
 Sentry.setTag('service', 'api')
 
@@ -25,13 +26,19 @@ const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '50mb'
 
 const app = express()
 
+app.use(requestPerformanceMiddleware)
+
 // Trust proxy (for req.ip behind a proxy/load balancer)
 if (!DEV) {
   app.set('trust proxy', 1)
 }
 
 // Enable CORS
-app.use(cors({origin: true, maxAge: 600}))
+app.use(cors({
+  origin: true,
+  maxAge: 600,
+  exposedHeaders: ['Server-Timing', 'X-Request-Id']
+}))
 
 // Enable morgan logger (dev only)
 if (DEV) {

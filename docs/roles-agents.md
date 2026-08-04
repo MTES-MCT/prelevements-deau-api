@@ -87,7 +87,9 @@ La colonne **Dépend de** est vide lorsque le droit peut être attribué seul.
 
 ## Rattachement des déclarants aux zones
 
-`DeclarantZone` est la source de vérité du périmètre d'un déclarant ou collecteur. Un déclarant créé depuis l'administration doit être rattaché à au moins une zone. Les liens sont aussi ajoutés automatiquement lorsqu'une exploitation ou un collecteur est associé à un point zoné, ou lorsqu'une déclaration est rapprochée d'un point zoné.
+Le périmètre effectif d'un déclarant ou collecteur combine les rattachements explicites de `DeclarantZone` (`CREATION`, `MANUAL`, `MIGRATION`) et les relations métier encore présentes. Les rattachements dérivés d'une exploitation, d'une déclaration ou d'un rapprochement sont recalculés depuis les exploitations, les collecteurs et les chunks actuellement liés à un point zoné. Une ligne dérivée matérialisée mais qui n'est plus soutenue par l'une de ces relations ne doit donc accorder aucun droit.
+
+Un déclarant créé depuis l'administration doit être rattaché à au moins une zone. Les liens dérivés restent matérialisés pour la traçabilité et les traitements administratifs, mais les contrôles d'accès, la liste des déclarants et les droits exposés par l'API utilisent tous le périmètre effectif.
 
 Un déclarant historique qui reste sans zone après le rattrapage n'est accessible qu'aux administrateurs globaux. L'API ne déduit pas un accès à partir de l'absence de rattachement.
 
@@ -103,7 +105,7 @@ La migration est additive et conserve temporairement `InstructorZone.isAdmin` po
 
 ## Contrôle de cohérence
 
-Le catalogue exécutable se trouve dans `lib/constants/zone-permissions.js`. La documentation, la migration de données, l'API de catalogue et les tests doivent contenir exactement les mêmes codes. Le script `npm run audit:zone-agent-permissions` contrôle les droits inconnus, les dépendances manquantes, les habilitations vides, les zones sans gestionnaire actif et les déclarants sans zone. Il signale séparément les zones sans gestionnaire local ; elles restent administrables tant qu'au moins un administrateur global actif existe.
+Le catalogue exécutable se trouve dans `lib/constants/zone-permissions.js`. La documentation, la migration de données, l'API de catalogue et les tests doivent contenir exactement les mêmes codes. Le script `npm run audit:zone-agent-permissions` contrôle les droits inconnus, les dépendances manquantes, les habilitations vides, les zones sans gestionnaire actif, les déclarants sans zone et les rattachements dérivés qui ne sont plus soutenus par une relation métier. Il signale séparément les zones sans gestionnaire local ; elles restent administrables tant qu'au moins un administrateur global actif existe.
 
 ## Déploiement
 

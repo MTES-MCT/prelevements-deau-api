@@ -9,6 +9,7 @@ servers:
 tags:
   - name: Auth
   - name: Dashboard
+  - name: Declarants
   - name: Declarations
   - name: Sources
   - name: Instruction
@@ -17,6 +18,21 @@ tags:
   - name: Stats
   - name: Zones
 paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Vérifier que le processus HTTP répond
+      description: Sonde publique sans accès à la session, à l’API métier ni à la base de données.
+      responses:
+        '200':
+          description: Processus disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: {type: boolean, const: true}
   /auth/request:
     post:
       tags: [Auth]
@@ -304,6 +320,50 @@ paths:
               additionalProperties: true
       responses:
         '200': {description: Instruction enregistrée}
+        default: {$ref: '#/components/responses/Error'}
+  /declarants/search:
+    get:
+      tags: [Declarants]
+      operationId: searchDeclarants
+      summary: Rechercher et paginer les déclarants accessibles
+      description: Endpoint paginé non cassant ; GET /declarants conserve son ancien tableau complet.
+      parameters:
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: pageSize
+          schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+        - in: query
+          name: query
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: role
+          schema: {type: string, enum: [PRELEVEUR, COLLECTEUR]}
+        - in: query
+          name: emailStatus
+          schema: {type: string, enum: [WITH_EMAIL, WITHOUT_EMAIL]}
+      responses:
+        '200':
+          description: Page de déclarants
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarantSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarants/{declarantId}/overview:
+    get:
+      tags: [Declarants]
+      operationId: getDeclarantOverview
+      summary: Lire le résumé léger d’un déclarant
+      description: Retourne les données nécessaires à la fiche sans les connecteurs, documents et zones imbriqués des exploitations.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      responses:
+        '200':
+          description: Résumé du déclarant
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarantOverview'}
         default: {$ref: '#/components/responses/Error'}
   /preleveurs/{declarantId}/points-prelevement:
     get:
@@ -750,6 +810,71 @@ components:
         message: {type: string}
         code: {type: string}
         details: {}
+    DeclarantRight:
+      type: object
+      required: [canRead, canEdit, canEditUsageName, isAdmin, permissions]
+      properties:
+        canRead: {type: boolean}
+        canEdit: {type: boolean}
+        canEditUsageName: {type: boolean}
+        isAdmin: {type: boolean}
+        permissions:
+          type: array
+          items: {type: string}
+    DeclarantListItem:
+      type: object
+      additionalProperties: true
+      required: [id, role, declarant, right]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: [string, 'null'], format: email}
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        role: {type: string, const: DECLARANT}
+        declarant:
+          type: object
+          additionalProperties: true
+        right: {$ref: '#/components/schemas/DeclarantRight'}
+    DeclarantSearchResponse:
+      type: object
+      required: [items, total, page, pageSize, totalPages, counts]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantListItem'}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        pageSize: {type: integer, minimum: 1, maximum: 100}
+        totalPages: {type: integer, minimum: 1}
+        counts:
+          type: object
+          required: [total, preleveurs, collecteurs, withoutEmail]
+          properties:
+            total: {type: integer, minimum: 0}
+            preleveurs: {type: integer, minimum: 0}
+            collecteurs: {type: integer, minimum: 0}
+            withoutEmail: {type: integer, minimum: 0}
+    DeclarantOverview:
+      type: object
+      additionalProperties: true
+      required: [id, userId, pointPrelevements, collecteurExploitations, right]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        userId: {$ref: '#/components/schemas/Uuid'}
+        email: {type: [string, 'null'], format: email}
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        pointPrelevements:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        collecteurExploitations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        right: {$ref: '#/components/schemas/DeclarantRight'}
     UserSession:
       type: object
       additionalProperties: true
