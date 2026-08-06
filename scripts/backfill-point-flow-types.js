@@ -366,7 +366,7 @@ async function applyBackfill(audit, batchSize) {
     if (rejectionPointIds.length > 0) {
       await tx.pointPrelevement.updateMany({
         where: {id: {in: rejectionPointIds}},
-        data: {flowType: 'REJET', withdrawalType: null}
+        data: {flowType: 'REJET'}
       })
     }
 

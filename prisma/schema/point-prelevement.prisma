@@ -31,6 +31,11 @@ enum PointFlowType {
   REJET
 }
 
+enum PointKind {
+  PHYSIQUE
+  FICTIF
+}
+
 model PointPrelevement {
   id String @id @default(uuid()) @db.Uuid
 
@@ -38,9 +43,16 @@ model PointPrelevement {
   usageName     String?        @db.Text
   waterBodyType WaterBodyType?
   flowType      PointFlowType
+  pointKind     PointKind      @default(PHYSIQUE)
 
   nature         PointPrelevementNature?
   withdrawalType PrelevementType?
+
+  commissioningDate                 DateTime? @db.Date
+  waterAgencyInternalIdentifier     String?   @db.Text
+  isReferencePoint                  Boolean?
+  isWaterBodyConnectedToStream      Boolean?
+  isWaterBodyConnectedToGroundwater Boolean?
 
   coordinates Unsupported("geometry(Point,4326)")?
 
