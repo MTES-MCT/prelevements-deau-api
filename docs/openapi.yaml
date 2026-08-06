@@ -910,6 +910,29 @@ components:
         flowType:
           type: string
           enum: [PRELEVEMENT, REJET]
+        pointKind:
+          type: string
+          enum: [PHYSIQUE, FICTIF]
+          default: PHYSIQUE
+        waterBodyType:
+          oneOf:
+            - {type: string, enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION]}
+            - {type: 'null'}
+        nature:
+          description: Origine du prélèvement ou du rejet.
+          oneOf:
+            - {type: string, enum: [NAPPE, NAPPE_ACCOMPAGNEMENT, COURS_EAU, SOURCE, PLAN_EAU]}
+            - {type: 'null'}
+        withdrawalType:
+          description: Type de prélèvement ou de rejet.
+          oneOf:
+            - {type: string, enum: [LITTORAL, CONTINENTAL, SOUTERRAIN, STOCKAGE]}
+            - {type: 'null'}
+        commissioningDate: {type: [string, 'null'], format: date}
+        waterAgencyInternalIdentifier: {type: [string, 'null']}
+        isReferencePoint: {type: [boolean, 'null']}
+        isWaterBodyConnectedToStream: {type: [boolean, 'null']}
+        isWaterBodyConnectedToGroundwater: {type: [boolean, 'null']}
     Exploitation:
       type: object
       additionalProperties: true
