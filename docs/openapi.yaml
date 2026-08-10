@@ -545,6 +545,69 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/AdminDashboardResponse'}
         default: {$ref: '#/components/responses/Error'}
+  /admin/audit-events:
+    get:
+      tags: [Administration]
+      operationId: listAuditEvents
+      summary: Consulter le journal d'audit de sécurité
+      description: >-
+        Retourne les actions sensibles accessibles aux administrateurs globaux. La consultation est elle-même
+        auditée, mais l'événement courant n'est visible qu'à partir de la requête suivante.
+      parameters:
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: pageSize
+          schema: {type: integer, enum: [25, 50, 100], default: 25}
+        - in: query
+          name: actor
+          description: Recherche sur le nom, l'email ou l'identifiant de l'auteur réel.
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: subject
+          description: Recherche sur le compte effectif ou explicitement concerné.
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: from
+          description: Premier jour inclus, interprété dans le fuseau Europe/Paris.
+          schema: {type: string, format: date}
+        - in: query
+          name: to
+          description: Dernier jour inclus, interprété dans le fuseau Europe/Paris.
+          schema: {type: string, format: date}
+        - in: query
+          name: period
+          description: Période glissante remplaçant les bornes from et to.
+          schema: {type: string, enum: [24h, all]}
+        - in: query
+          name: actionTypes
+          description: Codes d'action séparés par des virgules.
+          schema: {type: string}
+        - in: query
+          name: outcomes
+          description: Résultats séparés par des virgules.
+          schema: {type: string}
+      responses:
+        '200':
+          description: Page d'événements d'audit
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditEventsResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/audit-events/options:
+    get:
+      tags: [Administration]
+      operationId: getAuditEventFilterOptions
+      summary: Lister les filtres du journal d'audit
+      description: Retourne le catalogue des actions et des résultats utilisables dans l'interface d'administration.
+      responses:
+        '200':
+          description: Types d'action regroupés et résultats disponibles
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditEventOptionsResponse'}
+        default: {$ref: '#/components/responses/Error'}
   /dashboard/water-resources/piezometry:
     get:
       tags: [Dashboard]
@@ -955,6 +1018,115 @@ components:
                   properties:
                     count: {type: integer, minimum: 0}
                     failedRecipients: {type: integer, minimum: 0}
+    AuditEvent:
+      type: object
+      required: [id, occurredAt, updatedAt, outcome, actionType, actionCategory, actionLabel, categoryLabel, actorType, requestId, httpMethod, route, metadata]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        occurredAt: {type: string, format: date-time}
+        completedAt: {type: [string, 'null'], format: date-time}
+        updatedAt: {type: string, format: date-time}
+        outcome:
+          type: string
+          enum: [STARTED, SUCCESS, DENIED, FAILURE, INCOMPLETE]
+        actionType: {type: string}
+        actionCategory: {type: string}
+        actionLabel: {type: string}
+        categoryLabel: {type: string}
+        actorType:
+          type: string
+          enum: [ANONYMOUS, USER, SERVICE_ACCOUNT]
+        actorUserId: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        actorServiceAccountId: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        actorLabel: {type: [string, 'null']}
+        actorEmail: {type: [string, 'null']}
+        actorRole: {type: [string, 'null']}
+        effectiveUserId: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        effectiveUserLabel: {type: [string, 'null']}
+        effectiveUserEmail: {type: [string, 'null']}
+        effectiveUserRole: {type: [string, 'null']}
+        subjectUserId: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        subjectUserLabel: {type: [string, 'null']}
+        subjectUserEmail: {type: [string, 'null']}
+        subjectUserRole: {type: [string, 'null']}
+        targetType: {type: [string, 'null']}
+        targetId: {type: [string, 'null']}
+        targetLabel: {type: [string, 'null']}
+        requestId: {type: string}
+        originRequestId: {type: [string, 'null']}
+        httpMethod: {type: string}
+        route: {type: string}
+        statusCode: {type: [integer, 'null']}
+        clientIp: {type: [string, 'null']}
+        userAgent: {type: [string, 'null']}
+        metadata:
+          type: object
+          additionalProperties: true
+    AuditEventsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, const: true}
+        data:
+          type: object
+          required: [items, pagination, period]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/AuditEvent'}
+            pagination:
+              type: object
+              required: [page, pageSize, total, totalPages]
+              properties:
+                page: {type: integer, minimum: 1}
+                pageSize: {type: integer, enum: [25, 50, 100]}
+                total: {type: integer, minimum: 0}
+                totalPages: {type: integer, minimum: 1}
+            period:
+              type: object
+              required: [from, to, preset]
+              properties:
+                from: {type: string, format: date}
+                to: {type: string, format: date}
+                preset:
+                  oneOf:
+                    - {type: string, enum: [24h, all]}
+                    - {type: 'null'}
+    AuditEventOptionsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, const: true}
+        data:
+          type: object
+          required: [actionGroups, outcomes]
+          properties:
+            actionGroups:
+              type: array
+              items:
+                type: object
+                required: [category, label, actions]
+                properties:
+                  category: {type: string}
+                  label: {type: string}
+                  actions:
+                    type: array
+                    items:
+                      type: object
+                      required: [value, label]
+                      properties:
+                        value: {type: string}
+                        label: {type: string}
+            outcomes:
+              type: array
+              items:
+                type: object
+                required: [value, label]
+                properties:
+                  value:
+                    type: string
+                    enum: [STARTED, SUCCESS, DENIED, FAILURE, INCOMPLETE]
+                  label: {type: string}
     DeclarantRight:
       type: object
       required: [canRead, canEdit, canEditUsageName, isAdmin, permissions]
