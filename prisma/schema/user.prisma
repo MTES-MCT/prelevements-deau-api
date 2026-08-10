@@ -25,6 +25,10 @@ model User {
   sessionTokens SessionToken[]
   emailAliases  UserEmailAlias[]
   dataExports   DataExport[]
+
+  auditEventsAsActor   AuditEvent[] @relation("AuditEventActorUser")
+  auditEventsEffective AuditEvent[] @relation("AuditEventEffectiveUser")
+  auditEventsAsSubject AuditEvent[] @relation("AuditEventSubjectUser")
 }
 
 model UserEmailAlias {

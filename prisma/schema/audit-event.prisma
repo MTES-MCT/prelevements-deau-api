@@ -1,0 +1,68 @@
+enum AuditOutcome {
+  STARTED
+  SUCCESS
+  DENIED
+  FAILURE
+  INCOMPLETE
+}
+
+enum AuditActorType {
+  ANONYMOUS
+  USER
+  SERVICE_ACCOUNT
+}
+
+model AuditEvent {
+  id          String       @id @default(uuid()) @db.Uuid
+  occurredAt  DateTime     @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime     @updatedAt
+  outcome     AuditOutcome @default(STARTED)
+
+  actionType     String @db.Text
+  actionCategory String @db.Text
+
+  actorType             AuditActorType  @default(ANONYMOUS)
+  actorUserId           String?         @db.Uuid
+  actorUser             User?           @relation("AuditEventActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorServiceAccountId String?         @db.Uuid
+  actorServiceAccount   ServiceAccount? @relation("AuditEventActorServiceAccount", fields: [actorServiceAccountId], references: [id], onDelete: SetNull)
+  actorLabel            String?         @db.Text
+  actorEmail            String?         @db.Text
+  actorRole             String?         @db.Text
+
+  effectiveUserId    String? @db.Uuid
+  effectiveUser      User?   @relation("AuditEventEffectiveUser", fields: [effectiveUserId], references: [id], onDelete: SetNull)
+  effectiveUserLabel String? @db.Text
+  effectiveUserEmail String? @db.Text
+  effectiveUserRole  String? @db.Text
+
+  subjectUserId    String? @db.Uuid
+  subjectUser      User?   @relation("AuditEventSubjectUser", fields: [subjectUserId], references: [id], onDelete: SetNull)
+  subjectUserLabel String? @db.Text
+  subjectUserEmail String? @db.Text
+  subjectUserRole  String? @db.Text
+
+  targetType  String? @db.Text
+  targetId    String? @db.Text
+  targetLabel String? @db.Text
+
+  requestId       String  @db.Text
+  originRequestId String? @db.Text
+  httpMethod      String  @db.Text
+  route           String  @db.Text
+  statusCode      Int?
+  clientIp        String? @db.Text
+  userAgent       String? @db.Text
+
+  metadata Json @default("{}")
+
+  @@index([occurredAt])
+  @@index([actionType, occurredAt])
+  @@index([actionCategory, occurredAt])
+  @@index([outcome, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([actorServiceAccountId, occurredAt])
+  @@index([effectiveUserId, occurredAt])
+  @@index([subjectUserId, occurredAt])
+}

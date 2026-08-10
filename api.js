@@ -14,11 +14,14 @@ import routes from './lib/routes.js'
 import {createBullBoardRouter} from './lib/queues/board.js'
 import {validateEmailConfig} from './lib/util/email.js'
 import {requestPerformanceMiddleware} from './lib/util/request-performance.js'
+import {validateAuditContextConfig} from './lib/audit/context.js'
+import {auditMiddleware} from './lib/audit/middleware.js'
 
 Sentry.setTag('service', 'api')
 
 // Validate configuration
 validateEmailConfig()
+validateAuditContextConfig()
 
 const PORT = process.env.PORT || 5000
 const DEV = process.env.NODE_ENV !== 'production'
@@ -26,12 +29,12 @@ const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '50mb'
 
 const app = express()
 
-app.use(requestPerformanceMiddleware)
-
 // Trust proxy (for req.ip behind a proxy/load balancer)
 if (!DEV) {
   app.set('trust proxy', 1)
 }
+
+app.use(requestPerformanceMiddleware)
 
 // Enable CORS
 app.use(cors({
@@ -44,6 +47,8 @@ app.use(cors({
 if (DEV) {
   app.use(morgan('dev'))
 }
+
+app.use(auditMiddleware)
 
 // Setup JSON parsing
 app.use(express.json({limit: JSON_BODY_LIMIT}))
