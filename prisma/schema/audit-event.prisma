@@ -12,6 +12,12 @@ enum AuditActorType {
   SERVICE_ACCOUNT
 }
 
+enum AuditMutationOperation {
+  CREATE
+  UPDATE
+  DELETE
+}
+
 model AuditEvent {
   id          String       @id @default(uuid()) @db.Uuid
   occurredAt  DateTime     @default(now())
@@ -57,6 +63,8 @@ model AuditEvent {
 
   metadata Json @default("{}")
 
+  mutations AuditMutation[]
+
   @@index([occurredAt])
   @@index([actionType, occurredAt])
   @@index([actionCategory, occurredAt])
@@ -65,4 +73,56 @@ model AuditEvent {
   @@index([actorServiceAccountId, occurredAt])
   @@index([effectiveUserId, occurredAt])
   @@index([subjectUserId, occurredAt])
+  @@index([targetType, targetId, occurredAt])
+  @@index([targetId, occurredAt])
+  @@index([actorLabel(ops: raw("gin_trgm_ops"))], map: "AuditEvent_actorLabel_trgm_idx", type: Gin)
+  @@index([actorEmail(ops: raw("gin_trgm_ops"))], map: "AuditEvent_actorEmail_trgm_idx", type: Gin)
+  @@index([effectiveUserLabel(ops: raw("gin_trgm_ops"))], map: "AuditEvent_effectiveUserLabel_trgm_idx", type: Gin)
+  @@index([effectiveUserEmail(ops: raw("gin_trgm_ops"))], map: "AuditEvent_effectiveUserEmail_trgm_idx", type: Gin)
+  @@index([subjectUserLabel(ops: raw("gin_trgm_ops"))], map: "AuditEvent_subjectUserLabel_trgm_idx", type: Gin)
+  @@index([subjectUserEmail(ops: raw("gin_trgm_ops"))], map: "AuditEvent_subjectUserEmail_trgm_idx", type: Gin)
+  @@index([targetLabel(ops: raw("gin_trgm_ops"))], map: "AuditEvent_targetLabel_trgm_idx", type: Gin)
+}
+
+model AuditMutation {
+  id           String                 @id @default(uuid()) @db.Uuid
+  auditEventId String                 @db.Uuid
+  auditEvent   AuditEvent             @relation(fields: [auditEventId], references: [id], onDelete: Cascade)
+  occurredAt   DateTime               @default(now())
+  operation    AuditMutationOperation
+
+  entityType  String  @db.Text
+  entityId    String  @db.Text
+  entityLabel String? @db.Text
+
+  before         Json?
+  after          Json?
+  changedFields  String[] @default([])
+  redactedFields String[] @default([])
+  metadata       Json     @default("{}")
+
+  scopes AuditMutationScope[]
+
+  @@index([auditEventId])
+  @@index([entityType, entityId, occurredAt(sort: Desc)])
+  @@index([entityId, occurredAt(sort: Desc)])
+  @@index([operation, occurredAt(sort: Desc)])
+  @@index([entityLabel(ops: raw("gin_trgm_ops"))], map: "AuditMutation_entityLabel_trgm_idx", type: Gin)
+}
+
+model AuditMutationScope {
+  id              String        @id @default(uuid()) @db.Uuid
+  auditMutationId String        @db.Uuid
+  auditMutation   AuditMutation @relation(fields: [auditMutationId], references: [id], onDelete: Cascade)
+  occurredAt      DateTime      @default(now())
+
+  resourceType  String  @db.Text
+  resourceId    String  @db.Text
+  resourceLabel String? @db.Text
+
+  @@unique([auditMutationId, resourceType, resourceId])
+  @@index([auditMutationId])
+  @@index([resourceType, resourceId, occurredAt(sort: Desc)])
+  @@index([resourceId, occurredAt(sort: Desc)])
+  @@index([resourceLabel(ops: raw("gin_trgm_ops"))], map: "AuditMutationScope_resourceLabel_trgm_idx", type: Gin)
 }
