@@ -7,6 +7,7 @@ servers:
   - url: http://localhost:5000/api
     description: Local
 tags:
+  - name: Administration
   - name: Auth
   - name: Dashboard
   - name: Declarants
@@ -515,6 +516,35 @@ paths:
                 type: object
                 additionalProperties: true
         default: {$ref: '#/components/responses/Error'}
+  /admin/dashboard:
+    get:
+      tags: [Administration]
+      operationId: getAdminDashboard
+      summary: Lire le cockpit opérationnel d'administration
+      description: >-
+        Retourne l'activité sur une période et l'état opérationnel actuel réservés aux administrateurs.
+        Les deux dates sont incluses, doivent être renseignées ensemble, ne peuvent pas être futures et couvrent
+        au maximum 366 jours.
+      parameters:
+        - in: query
+          name: startDate
+          description: Premier jour inclus. Le début du mois en cours est utilisé si les deux dates sont absentes.
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          description: Dernier jour inclus. La date courante est utilisée si les deux dates sont absentes.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Indicateurs du cockpit d'administration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminDashboardResponse'}
+        default: {$ref: '#/components/responses/Error'}
   /dashboard/water-resources/piezometry:
     get:
       tags: [Dashboard]
@@ -852,6 +882,79 @@ components:
         message: {type: string}
         code: {type: string}
         details: {}
+    AdminDashboardResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, const: true}
+        data:
+          type: object
+          required: [generatedAt, period, metrics, activity, currentStatus]
+          properties:
+            generatedAt: {type: string, format: date-time}
+            period:
+              type: object
+              required: [startDate, endDate, days]
+              properties:
+                startDate: {type: string, format: date}
+                endDate: {type: string, format: date}
+                days: {type: integer, minimum: 1, maximum: 366}
+            metrics:
+              type: object
+              required: [declarationsReceived, manualDeclarationsReceived, spreadsheetDeclarationsReceived, otherDeclarationsReceived, declarationsFailed, telemetryTransmissionsReceived, telemetryTransmissionsFailed, notificationRecipientsSent, notificationRecipientsFailed]
+              properties:
+                declarationsReceived:
+                  type: integer
+                  minimum: 0
+                  description: Déclarations hors télérelève reçues sur la période.
+                manualDeclarationsReceived: {type: integer, minimum: 0}
+                spreadsheetDeclarationsReceived: {type: integer, minimum: 0}
+                otherDeclarationsReceived:
+                  type: integer
+                  minimum: 0
+                  description: Déclarations historiques sans type de source explicite.
+                declarationsFailed:
+                  type: integer
+                  minimum: 0
+                  description: Déclarations hors télérelève dont le traitement a échoué.
+                telemetryTransmissionsReceived: {type: integer, minimum: 0}
+                telemetryTransmissionsFailed: {type: integer, minimum: 0}
+                notificationRecipientsSent: {type: integer, minimum: 0}
+                notificationRecipientsFailed: {type: integer, minimum: 0}
+            activity:
+              type: object
+              required: [daily]
+              properties:
+                daily:
+                  type: array
+                  items:
+                    type: object
+                    required: [date, declarations, manualDeclarations, spreadsheetDeclarations, otherDeclarations, failed]
+                    properties:
+                      date: {type: string, format: date}
+                      declarations:
+                        type: integer
+                        minimum: 0
+                        description: Déclarations hors télérelève reçues ce jour.
+                      manualDeclarations: {type: integer, minimum: 0}
+                      spreadsheetDeclarations: {type: integer, minimum: 0}
+                      otherDeclarations: {type: integer, minimum: 0}
+                      failed:
+                        type: integer
+                        minimum: 0
+                        description: Déclarations hors télérelève en échec ce jour.
+            currentStatus:
+              type: object
+              required: [declarationsInProgress, replayableDeclarations, notificationRuns]
+              properties:
+                declarationsInProgress: {type: integer, minimum: 0}
+                replayableDeclarations: {type: integer, minimum: 0}
+                notificationRuns:
+                  type: object
+                  required: [count, failedRecipients]
+                  properties:
+                    count: {type: integer, minimum: 0}
+                    failedRecipients: {type: integer, minimum: 0}
     DeclarantRight:
       type: object
       required: [canRead, canEdit, canEditUsageName, isAdmin, permissions]
