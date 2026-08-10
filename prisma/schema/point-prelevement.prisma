@@ -41,7 +41,7 @@ model PointPrelevement {
 
   name          String         @db.Text
   usageName     String?        @db.Text
-  waterBodyType WaterBodyType?
+  waterBodyType WaterBodyType
   flowType      PointFlowType
   pointKind     PointKind      @default(PHYSIQUE)
 

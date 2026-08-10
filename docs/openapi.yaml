@@ -903,6 +903,7 @@ components:
     PointPrelevement:
       type: object
       additionalProperties: true
+      required: [waterBodyType]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         name: {type: string}
@@ -915,9 +916,8 @@ components:
           enum: [PHYSIQUE, FICTIF]
           default: PHYSIQUE
         waterBodyType:
-          oneOf:
-            - {type: string, enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION]}
-            - {type: 'null'}
+          type: string
+          enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION]
         nature:
           description: Origine du prélèvement ou du rejet.
           oneOf:
