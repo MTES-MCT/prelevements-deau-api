@@ -569,6 +569,10 @@ paths:
           description: Recherche sur le compte effectif ou explicitement concerné.
           schema: {type: string, maxLength: 200}
         - in: query
+          name: target
+          description: Recherche sur le libellé ou l'identifiant de la ressource modifiée.
+          schema: {type: string, maxLength: 200}
+        - in: query
           name: from
           description: Premier jour inclus, interprété dans le fuseau Europe/Paris.
           schema: {type: string, format: date}
@@ -607,6 +611,56 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AuditEventOptionsResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/audit-events/{eventId}:
+    get:
+      tags: [Administration]
+      operationId: getAuditEventDetail
+      summary: Consulter le détail d'un événement d'audit
+      description: Retourne l'événement et les mutations métier associées. Réservé aux administrateurs globaux.
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Événement d'audit détaillé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditEventDetailResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /audit-history/{resourceType}/{resourceId}:
+    get:
+      tags: [Administration]
+      operationId: listResourceAuditHistory
+      summary: Consulter l'historique des modifications d'une ressource
+      description: >-
+        Retourne les mutations visibles par un administrateur global ou par un agent disposant du droit de
+        modification correspondant. Les déclarants et collecteurs n'ont pas accès à cet historique.
+      parameters:
+        - in: path
+          name: resourceType
+          required: true
+          schema:
+            type: string
+            enum: [POINT, DECLARANT, EXPLOITATION, ZONE]
+        - in: path
+          name: resourceId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: pageSize
+          schema: {type: integer, minimum: 1, maximum: 50, default: 10}
+      responses:
+        '200':
+          description: Page de mutations de la ressource
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceAuditHistoryResponse'}
         default: {$ref: '#/components/responses/Error'}
   /dashboard/water-resources/piezometry:
     get:
@@ -1018,9 +1072,48 @@ components:
                   properties:
                     count: {type: integer, minimum: 0}
                     failedRecipients: {type: integer, minimum: 0}
+    AuditMutationScope:
+      type: object
+      required: [id, occurredAt, resourceType, resourceId]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        occurredAt: {type: string, format: date-time}
+        resourceType: {type: string}
+        resourceId: {type: string}
+        resourceLabel: {type: [string, 'null']}
+    AuditMutation:
+      type: object
+      required: [id, occurredAt, operation, entityType, entityId, changedFields, redactedFields, metadata]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        occurredAt: {type: string, format: date-time}
+        operation:
+          type: string
+          enum: [CREATE, UPDATE, DELETE]
+        entityType: {type: string}
+        entityId: {type: string}
+        entityLabel: {type: [string, 'null']}
+        before:
+          type: [object, 'null']
+          additionalProperties: true
+        after:
+          type: [object, 'null']
+          additionalProperties: true
+        changedFields:
+          type: array
+          items: {type: string}
+        redactedFields:
+          type: array
+          items: {type: string}
+        metadata:
+          type: object
+          additionalProperties: true
+        scopes:
+          type: array
+          items: {$ref: '#/components/schemas/AuditMutationScope'}
     AuditEvent:
       type: object
-      required: [id, occurredAt, updatedAt, outcome, actionType, actionCategory, actionLabel, categoryLabel, actorType, requestId, httpMethod, route, metadata]
+      required: [id, occurredAt, updatedAt, outcome, actionType, actionCategory, actionLabel, categoryLabel, actorType, requestId, httpMethod, route, metadata, mutationCount]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         occurredAt: {type: string, format: date-time}
@@ -1062,6 +1155,10 @@ components:
         metadata:
           type: object
           additionalProperties: true
+        mutationCount: {type: integer, minimum: 0}
+        mutations:
+          type: array
+          items: {$ref: '#/components/schemas/AuditMutation'}
     AuditEventsResponse:
       type: object
       required: [success, data]
@@ -1092,6 +1189,50 @@ components:
                   oneOf:
                     - {type: string, enum: [24h, all]}
                     - {type: 'null'}
+    AuditEventDetailResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, const: true}
+        data: {$ref: '#/components/schemas/AuditEvent'}
+    ResourceAuditHistoryItem:
+      allOf:
+        - {$ref: '#/components/schemas/AuditMutation'}
+        - type: object
+          required: [actionType, actionLabel, categoryLabel, actorType]
+          properties:
+            actionType: {type: string}
+            actionLabel: {type: string}
+            categoryLabel: {type: string}
+            actorType:
+              type: string
+              enum: [ANONYMOUS, USER, SERVICE_ACCOUNT]
+            actorUserId: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+            actorServiceAccountId: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+            actorLabel: {type: [string, 'null']}
+            actorEmail: {type: [string, 'null']}
+            effectiveUserId: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+            effectiveUserLabel: {type: [string, 'null']}
+    ResourceAuditHistoryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, const: true}
+        data:
+          type: object
+          required: [items, pagination]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/ResourceAuditHistoryItem'}
+            pagination:
+              type: object
+              required: [page, pageSize, total, totalPages]
+              properties:
+                page: {type: integer, minimum: 1}
+                pageSize: {type: integer, minimum: 1, maximum: 50}
+                total: {type: integer, minimum: 0}
+                totalPages: {type: integer, minimum: 1}
     AuditEventOptionsResponse:
       type: object
       required: [success, data]

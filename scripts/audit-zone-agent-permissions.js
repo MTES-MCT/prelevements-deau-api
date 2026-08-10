@@ -58,7 +58,7 @@ const [
     select: {id: true, declarantUserId: true, zoneId: true, source: true}
   }),
   getEffectiveDeclarantZoneLinks(),
-  prisma.instructorZonePermissionAudit.count(),
+  prisma.auditMutation.count({where: {entityType: 'ZONE_AGENT_ASSIGNMENT'}}),
   prisma.user.count({
     where: {
       role: 'ADMIN',
