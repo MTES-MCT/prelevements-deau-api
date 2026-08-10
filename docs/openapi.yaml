@@ -237,7 +237,10 @@ paths:
       tags: [Declarations]
       operationId: reconcileDeclarationChunk
       summary: Rapprocher une ligne de déclaration
-      description: Associe une ligne de déclaration à un point existant.
+      description: >-
+        Associe une ligne non rapprochée à un point existant, ou modifie/retire
+        une association réalisée manuellement. Une association issue du
+        rapprochement automatique ne peut être ni remplacée ni retirée.
       parameters:
         - $ref: '#/components/parameters/DeclarationId'
         - $ref: '#/components/parameters/ChunkId'
@@ -247,9 +250,24 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              additionalProperties: false
+              required: [pointPrelevementId]
+              properties:
+                pointPrelevementId:
+                  description: Identifiant du point cible, ou `null` pour retirer une association manuelle.
+                  oneOf:
+                    - type: string
+                      format: uuid
+                    - type: 'null'
       responses:
         '200': {description: Rapprochement enregistré}
+        '409':
+          description: >-
+            Association automatique verrouillée, type de point incompatible ou
+            données déjà présentes sur une période chevauchante.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         default: {$ref: '#/components/responses/Error'}
   /admin/declarations/{declarationId}:
     delete:
@@ -308,7 +326,11 @@ paths:
       tags: [Instruction]
       operationId: updateChunkInstruction
       summary: Mettre à jour l'instruction d'une ligne
-      description: Enregistre l'état d'instruction d'une ligne de déclaration.
+      description: >-
+        Enregistre l'état d'instruction d'une ligne de déclaration. Le point peut
+        être choisi, remplacé ou retiré uniquement si l'association est absente
+        ou a été réalisée manuellement. Une association automatique reste
+        verrouillée, y compris pour un administrateur.
       parameters:
         - $ref: '#/components/parameters/ChunkId'
       requestBody:
@@ -317,9 +339,29 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: true
+              additionalProperties: false
+              required: [instructionStatus]
+              properties:
+                instructionStatus:
+                  type: string
+                  enum: [PENDING, REJECTED, VALIDATED]
+                instructionComment:
+                  type: [string, 'null']
+                pointPrelevementId:
+                  description: Identifiant du point cible, ou `null` pour retirer une association manuelle.
+                  oneOf:
+                    - type: string
+                      format: uuid
+                    - type: 'null'
       responses:
         '200': {description: Instruction enregistrée}
+        '409':
+          description: >-
+            Association automatique verrouillée, type de point incompatible ou
+            données déjà présentes sur une période chevauchante.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         default: {$ref: '#/components/responses/Error'}
   /declarants/search:
     get:
