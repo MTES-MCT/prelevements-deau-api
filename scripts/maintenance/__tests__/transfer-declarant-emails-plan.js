@@ -17,6 +17,10 @@ const NO_CREDENTIALS = Object.freeze({
   sessions: 0,
   serviceAccountTokens: 0
 })
+const NO_EMAIL_ACCESS = Object.freeze({
+  authTokens: 0,
+  sessions: 0
+})
 const SOURCE_CREDENTIALS = Object.freeze({
   authTokens: 1,
   sessions: 2,
@@ -50,7 +54,7 @@ function user(id, {email, deletedAt, aliases = []}) {
   }
 }
 
-function snapshotOnSource(credentials = SOURCE_CREDENTIALS) {
+function snapshotOnSource(sourceCredentials = SOURCE_CREDENTIALS, targetEmailAccess = NO_EMAIL_ACCESS) {
   const source = user(SOURCE_ID, {
     email: PRIMARY_EMAIL,
     deletedAt: new Date('2026-08-10T12:00:00Z'),
@@ -66,11 +70,14 @@ function snapshotOnSource(credentials = SOURCE_CREDENTIALS) {
       userId: SOURCE_ID,
       email
     })),
-    credentials
+    credentials: {
+      source: sourceCredentials,
+      targetEmailAccess
+    }
   }
 }
 
-function snapshotOnTarget(credentials = NO_CREDENTIALS) {
+function snapshotOnTarget(sourceCredentials = NO_CREDENTIALS, targetEmailAccess = NO_EMAIL_ACCESS) {
   const source = user(SOURCE_ID, {
     email: null,
     deletedAt: new Date('2026-08-10T12:00:00Z')
@@ -89,7 +96,28 @@ function snapshotOnTarget(credentials = NO_CREDENTIALS) {
       userId: TARGET_ID,
       email
     })),
-    credentials
+    credentials: {
+      source: sourceCredentials,
+      targetEmailAccess
+    }
+  }
+}
+
+function snapshotReleased(sourceCredentials = NO_CREDENTIALS, targetEmailAccess = NO_EMAIL_ACCESS) {
+  return {
+    users: [
+      user(SOURCE_ID, {
+        email: null,
+        deletedAt: new Date('2026-08-10T12:00:00Z')
+      }),
+      user(TARGET_ID, {email: null, deletedAt: null})
+    ],
+    addressUsers: [],
+    addressAliases: [],
+    credentials: {
+      source: sourceCredentials,
+      targetEmailAccess
+    }
   }
 }
 
@@ -174,6 +202,36 @@ test('un transfert déjà appliqué reste idempotent et finit les révocations m
   t.true(completed.noOp)
 })
 
+test('recrée les adresses sur la cible si la migration les a déjà libérées', t => {
+  const plan = buildTransferDeclarantEmailsPlan(
+    snapshotReleased(SOURCE_CREDENTIALS),
+    options({apply: true})
+  )
+
+  t.like(plan, {
+    detectedState: 'RELEASED',
+    emailAction: 'ASSIGN',
+    credentialsAction: 'REVOKE',
+    credentialsOwner: 'SOURCE',
+    noOp: false
+  })
+  t.deepEqual(plan.aliasIds, [])
+})
+
+test('un rollback déjà libéré reste idempotent', t => {
+  const plan = buildTransferDeclarantEmailsPlan(
+    snapshotReleased(),
+    options({rollback: true})
+  )
+
+  t.like(plan, {
+    detectedState: 'RELEASED',
+    emailAction: 'NONE',
+    credentialsAction: 'NONE',
+    noOp: true
+  })
+})
+
 test('refuse tout état partiellement transféré', t => {
   const snapshot = snapshotOnSource()
   snapshot.addressAliases[0].userId = TARGET_ID
@@ -200,9 +258,9 @@ test('refuse de mélanger le transfert avec des alias déjà présents sur la ci
   })
 })
 
-test('le rollback est symétrique pour les adresses et ne planifie pas de restauration des credentials', t => {
+test('le rollback libère les adresses et révoque les accès email de la cible', t => {
   const rollbackPlan = buildTransferDeclarantEmailsPlan(
-    snapshotOnTarget(),
+    snapshotOnTarget(NO_CREDENTIALS, {authTokens: 1, sessions: 2}),
     options({rollback: true, apply: true})
   )
   const alreadyRolledBack = buildTransferDeclarantEmailsPlan(
@@ -212,8 +270,9 @@ test('le rollback est symétrique pour les adresses et ne planifie pas de restau
 
   t.like(rollbackPlan, {
     detectedState: 'TARGET',
-    emailAction: 'ROLLBACK',
-    credentialsAction: 'NONE',
+    emailAction: 'RELEASE',
+    credentialsAction: 'REVOKE',
+    credentialsOwner: 'TARGET',
     noOp: false
   })
   t.true(alreadyRolledBack.noOp)

@@ -1,5 +1,6 @@
 import '../../lib/config/env.js'
 
+import {randomUUID} from 'node:crypto'
 import process from 'node:process'
 import {prisma} from '../../db/prisma.js'
 import {
@@ -68,10 +69,10 @@ async function getSnapshot(transaction, options) {
     select: {id: true, userId: true, email: true},
     orderBy: {id: 'asc'}
   })
-  const authTokens = await transaction.authToken.count({
+  const sourceAuthTokens = await transaction.authToken.count({
     where: {userId: options.sourceId}
   })
-  const sessions = await transaction.sessionToken.count({
+  const sourceSessions = await transaction.sessionToken.count({
     where: {
       OR: [
         {userId: options.sourceId},
@@ -79,10 +80,21 @@ async function getSnapshot(transaction, options) {
       ]
     }
   })
-  const serviceAccountTokens = await transaction.serviceAccountToken.count({
+  const sourceServiceAccountTokens = await transaction.serviceAccountToken.count({
     where: {
       declarantUserId: options.sourceId,
       revokedAt: null
+    }
+  })
+  const targetAuthTokens = await transaction.authToken.count({
+    where: {userId: options.targetId}
+  })
+  const targetSessions = await transaction.sessionToken.count({
+    where: {
+      OR: [
+        {userId: options.targetId},
+        {impersonatedByUserId: options.targetId}
+      ]
     }
   })
 
@@ -91,9 +103,15 @@ async function getSnapshot(transaction, options) {
     addressUsers,
     addressAliases,
     credentials: {
-      authTokens,
-      sessions,
-      serviceAccountTokens
+      source: {
+        authTokens: sourceAuthTokens,
+        sessions: sourceSessions,
+        serviceAccountTokens: sourceServiceAccountTokens
+      },
+      targetEmailAccess: {
+        authTokens: targetAuthTokens,
+        sessions: targetSessions
+      }
     }
   }
 }
@@ -129,32 +147,47 @@ async function transferEmails(transaction, plan, options) {
     return aliases.count
   }
 
+  if (plan.emailAction === 'ASSIGN') {
+    const aliases = await transaction.userEmailAlias.createMany({
+      data: options.aliases.map(email => ({
+        id: randomUUID(),
+        userId: options.targetId,
+        email
+      }))
+    })
+
+    if (aliases.count !== options.aliases.length) {
+      throw new Error(`Nombre d’alias recréés inattendu : ${aliases.count}/${options.aliases.length}`)
+    }
+
+    await transaction.user.update({
+      where: {id: options.targetId},
+      data: {email: options.primaryEmail}
+    })
+
+    return aliases.count
+  }
+
   await transaction.user.update({
     where: {id: options.targetId},
     data: {email: null}
   })
 
-  const aliases = await transaction.userEmailAlias.updateMany({
+  const aliases = await transaction.userEmailAlias.deleteMany({
     where: {
       id: {in: plan.aliasIds},
       userId: options.targetId
-    },
-    data: {userId: options.sourceId}
+    }
   })
 
   if (aliases.count !== options.aliases.length) {
-    throw new Error(`Nombre d’alias restaurés inattendu : ${aliases.count}/${options.aliases.length}`)
+    throw new Error(`Nombre d’alias libérés inattendu : ${aliases.count}/${options.aliases.length}`)
   }
-
-  await transaction.user.update({
-    where: {id: options.sourceId},
-    data: {email: options.primaryEmail}
-  })
 
   return aliases.count
 }
 
-async function revokeSourceCredentials(transaction, plan, options) {
+async function revokeCredentials(transaction, plan, options) {
   if (plan.credentialsAction === 'NONE') {
     return {
       authTokens: 0,
@@ -163,25 +196,30 @@ async function revokeSourceCredentials(transaction, plan, options) {
     }
   }
 
+  const credentialUserId = plan.credentialsOwner === 'TARGET'
+    ? options.targetId
+    : options.sourceId
   const revokedAt = new Date()
   const authTokens = await transaction.authToken.deleteMany({
-    where: {userId: options.sourceId}
+    where: {userId: credentialUserId}
   })
   const sessions = await transaction.sessionToken.deleteMany({
     where: {
       OR: [
-        {userId: options.sourceId},
-        {impersonatedByUserId: options.sourceId}
+        {userId: credentialUserId},
+        {impersonatedByUserId: credentialUserId}
       ]
     }
   })
-  const serviceAccountTokens = await transaction.serviceAccountToken.updateMany({
-    where: {
-      declarantUserId: options.sourceId,
-      revokedAt: null
-    },
-    data: {revokedAt}
-  })
+  const serviceAccountTokens = plan.credentialsOwner === 'SOURCE'
+    ? await transaction.serviceAccountToken.updateMany({
+      where: {
+        declarantUserId: options.sourceId,
+        revokedAt: null
+      },
+      data: {revokedAt}
+    })
+    : {count: 0}
 
   return {
     authTokens: authTokens.count,
@@ -202,7 +240,7 @@ async function execute(options) {
     }
 
     const changedAliases = await transferEmails(transaction, plan, options)
-    const revokedCredentials = await revokeSourceCredentials(transaction, plan, options)
+    const revokedCredentials = await revokeCredentials(transaction, plan, options)
     const after = await getSnapshot(transaction, options)
     const postcondition = buildTransferDeclarantEmailsPlan(after, options)
 
@@ -235,11 +273,22 @@ function printSummary(result, options) {
   console.log(`Cible active      : ${getUserLabel(target)} (${target.id})`)
   console.log(`Email principal   : ${options.primaryEmail}`)
   console.log(`Alias (${options.aliases.length})       : ${options.aliases.join(', ')}`)
-  console.log(`État détecté      : ${result.plan.detectedState === 'SOURCE' ? 'adresses sur la source' : 'adresses sur la cible'}`)
+  const detectedStateLabels = {
+    SOURCE: 'adresses sur la source',
+    TARGET: 'adresses sur la cible',
+    RELEASED: 'adresses libérées par le nettoyage'
+  }
+  console.log(`État détecté      : ${detectedStateLabels[result.plan.detectedState]}`)
   console.log('Credentials source: '
-    + `${result.before.credentials.authTokens} magic link(s), `
-    + `${result.before.credentials.sessions} session(s), `
-    + `${result.before.credentials.serviceAccountTokens} token(s) de compte de service actif(s)`)
+    + `${result.before.credentials.source.authTokens} magic link(s), `
+    + `${result.before.credentials.source.sessions} session(s), `
+    + `${result.before.credentials.source.serviceAccountTokens} token(s) de compte de service actif(s)`)
+
+  if (options.rollback) {
+    console.log('Accès email cible : '
+      + `${result.before.credentials.targetEmailAccess.authTokens} magic link(s), `
+      + `${result.before.credentials.targetEmailAccess.sessions} session(s)`)
+  }
 
   if (result.plan.noOp) {
     console.log('\nAucune action nécessaire : l’état demandé est déjà atteint.')
@@ -248,17 +297,17 @@ function printSummary(result, options) {
 
   if (!options.apply) {
     const action = options.rollback
-      ? 'Les adresses seraient restaurées sur la source supprimée.'
+      ? 'Les adresses seraient libérées et les accès email de la cible invalidés.'
       : 'Les adresses seraient transférées et les credentials source révoqués.'
     console.log(`\n${action}`)
     console.log('Simulation uniquement : aucune donnée modifiée. Ajouter --apply pour exécuter.')
     return
   }
 
-  console.log(`\nAlias ${options.rollback ? 'restaurés' : 'transférés'} : ${result.changedAliases}`)
+  console.log(`\nAlias ${options.rollback ? 'libérés' : 'transférés'} : ${result.changedAliases}`)
 
   if (options.rollback) {
-    console.log('Rollback appliqué. Les credentials précédemment révoqués n’ont pas été restaurés.')
+    console.log('Rollback appliqué. Les adresses ont été libérées et les accès email de la cible invalidés ; aucun accès n’a été restauré sur la source supprimée.')
     return
   }
 
