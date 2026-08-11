@@ -195,10 +195,15 @@ function addressesAreOwnedBy(snapshot, options, ownerId) {
     && hasNoPrimaryOwner(snapshot, alias))
 }
 
+function addressesAreUnowned(snapshot, options) {
+  return [options.primaryEmail, ...options.aliases].every(email =>
+    hasNoPrimaryOwner(snapshot, email)
+    && hasNoAliasOwner(snapshot, email))
+}
+
 function credentialCount(credentials) {
-  return credentials.authTokens
-    + credentials.sessions
-    + credentials.serviceAccountTokens
+  return Object.values(credentials)
+    .reduce((total, value) => total + value, 0)
 }
 
 function assertCredentialCounts(credentials) {
@@ -257,55 +262,109 @@ function getStateDetails(snapshot, source, target, options) {
   ].join(' ; ')
 }
 
+function isSourceAddressState(context) {
+  return context.sourceEmail === context.options.primaryEmail
+    && context.targetEmail === null
+    && sameValues(context.sourceAliases, context.options.aliases)
+    && context.targetAliases.length === 0
+    && addressesAreOwnedBy(context.snapshot, context.options, context.source.id)
+}
+
+function isTargetAddressState(context) {
+  return context.sourceEmail === null
+    && context.targetEmail === context.options.primaryEmail
+    && context.sourceAliases.length === 0
+    && sameValues(context.targetAliases, context.options.aliases)
+    && addressesAreOwnedBy(context.snapshot, context.options, context.target.id)
+}
+
+function isReleasedAddressState(context) {
+  return context.sourceEmail === null
+    && context.targetEmail === null
+    && context.sourceAliases.length === 0
+    && context.targetAliases.length === 0
+    && addressesAreUnowned(context.snapshot, context.options)
+}
+
+function detectAddressState(context) {
+  if (isSourceAddressState(context)) {
+    return 'SOURCE'
+  }
+
+  if (isTargetAddressState(context)) {
+    return 'TARGET'
+  }
+
+  if (isReleasedAddressState(context)) {
+    return 'RELEASED'
+  }
+
+  throw new Error(
+    'État des adresses incohérent ou partiellement transféré. '
+    + getStateDetails(
+      context.snapshot,
+      context.source,
+      context.target,
+      context.options
+    )
+  )
+}
+
+function getEmailAction(detectedState, rollback) {
+  if (rollback) {
+    return detectedState === 'TARGET' ? 'RELEASE' : 'NONE'
+  }
+
+  return {
+    SOURCE: 'TRANSFER',
+    TARGET: 'NONE',
+    RELEASED: 'ASSIGN'
+  }[detectedState]
+}
+
 export function buildTransferDeclarantEmailsPlan(snapshot, options) {
-  assertCredentialCounts(snapshot.credentials)
+  assertCredentialCounts(snapshot.credentials.source)
+  assertCredentialCounts(snapshot.credentials.targetEmailAccess)
 
   const {source, target} = getDeclarantUsers(snapshot, options)
   const sourceAliases = normalizedAliasEmails(source)
   const targetAliases = normalizedAliasEmails(target)
   const sourceEmail = normalizedOptionalEmail(source.email)
   const targetEmail = normalizedOptionalEmail(target.email)
-  const addressesOwnedBySource = addressesAreOwnedBy(snapshot, options, source.id)
-  const addressesOwnedByTarget = addressesAreOwnedBy(snapshot, options, target.id)
-  const beforeTransfer = sourceEmail === options.primaryEmail
-    && targetEmail === null
-    && sameValues(sourceAliases, options.aliases)
-    && targetAliases.length === 0
-    && addressesOwnedBySource
-  const afterTransfer = sourceEmail === null
-    && targetEmail === options.primaryEmail
-    && sourceAliases.length === 0
-    && sameValues(targetAliases, options.aliases)
-    && addressesOwnedByTarget
+  const detectedState = detectAddressState({
+    snapshot,
+    options,
+    source,
+    target,
+    sourceAliases,
+    targetAliases,
+    sourceEmail,
+    targetEmail
+  })
 
-  if (!beforeTransfer && !afterTransfer) {
-    throw new Error(
-      'État des adresses incohérent ou partiellement transféré. '
-      + getStateDetails(snapshot, source, target, options)
-    )
-  }
-
-  const credentialsPending = credentialCount(snapshot.credentials) > 0
-  let emailAction = 'NONE'
-  let credentialsAction = 'NONE'
-
-  if (options.rollback) {
-    emailAction = afterTransfer ? 'ROLLBACK' : 'NONE'
-  } else {
-    emailAction = beforeTransfer ? 'TRANSFER' : 'NONE'
-    credentialsAction = credentialsPending ? 'REVOKE' : 'NONE'
-  }
-
-  const aliasOwnerId = beforeTransfer ? source.id : target.id
+  const credentials = options.rollback
+    ? snapshot.credentials.targetEmailAccess
+    : snapshot.credentials.source
+  const credentialsPending = credentialCount(credentials) > 0
+    && (!options.rollback || detectedState === 'TARGET')
+  const emailAction = getEmailAction(detectedState, options.rollback)
+  const credentialsAction = credentialsPending ? 'REVOKE' : 'NONE'
+  const aliasOwnerId = {
+    SOURCE: source.id,
+    TARGET: target.id
+  }[detectedState] ?? null
   const aliasIds = snapshot.addressAliases
-    .filter(alias => alias.userId === aliasOwnerId && options.aliases.includes(normalizeEmail(alias.email)))
+    .filter(alias => aliasOwnerId
+      && alias.userId === aliasOwnerId
+      && options.aliases.includes(normalizeEmail(alias.email)))
     .map(({id}) => id)
     .sort()
 
   return {
-    detectedState: beforeTransfer ? 'SOURCE' : 'TARGET',
+    detectedState,
     emailAction,
     credentialsAction,
+    credentialsOwner: options.rollback ? 'TARGET' : 'SOURCE',
     aliasIds,
     noOp: emailAction === 'NONE' && credentialsAction === 'NONE'
   }
@@ -321,7 +380,8 @@ export const TRANSFER_DECLARANT_EMAILS_USAGE = `Usage :
 Modes :
   aucun drapeau       simulation du transfert, sans écriture
   --apply             applique le transfert et révoque les credentials source
-  --rollback          simulation du rollback des adresses
-  --rollback --apply  applique le rollback des adresses
+  --rollback          simule la libération des adresses de la cible
+  --rollback --apply  libère les adresses et invalide les accès email cible
 
-Le rollback ne restaure jamais les magic links, sessions ou tokens révoqués.`
+Le rollback ne rattache aucune adresse au compte source supprimé et ne restaure
+jamais les magic links, sessions ou tokens révoqués.`
