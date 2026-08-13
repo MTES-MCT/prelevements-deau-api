@@ -129,6 +129,7 @@ async function upsertDeclarant(item) {
       },
       create: {
         userId: declarantUserId,
+        preleveurType: 'IRRIGANT',
         sourceId: data.sourceId,
         declarantType: data.declarantType,
         socialReason: data.socialReason,

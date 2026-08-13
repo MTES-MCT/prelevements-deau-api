@@ -55,6 +55,13 @@ enum DeclarantRole {
   COLLECTEUR
 }
 
+enum PreleveurType {
+  ICPE
+  IRRIGANT
+  GESTIONNAIRE_AEP
+  AUTRE
+}
+
 enum Civility {
   MR
   MRS
@@ -87,6 +94,7 @@ model Declarant {
 
   declarantType DeclarantType @default(NATURAL_PERSON)
   declarantRole DeclarantRole @default(PRELEVEUR)
+  preleveurType PreleveurType?
 
   jobTitle     String? @db.Text
   socialReason String? @db.Text
