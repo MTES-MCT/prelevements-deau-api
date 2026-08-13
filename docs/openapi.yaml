@@ -1279,6 +1279,9 @@ components:
         permissions:
           type: array
           items: {type: string}
+    PreleveurType:
+      type: string
+      enum: [ICPE, IRRIGANT, GESTIONNAIRE_AEP, AUTRE]
     DeclarantListItem:
       type: object
       additionalProperties: true
@@ -1292,6 +1295,12 @@ components:
         declarant:
           type: object
           additionalProperties: true
+          properties:
+            declarantRole: {type: string, enum: [PRELEVEUR, COLLECTEUR]}
+            preleveurType:
+              oneOf:
+                - {$ref: '#/components/schemas/PreleveurType'}
+                - type: 'null'
         right: {$ref: '#/components/schemas/DeclarantRight'}
     DeclarantSearchResponse:
       type: object
@@ -1322,6 +1331,10 @@ components:
         email: {type: [string, 'null'], format: email}
         firstName: {type: [string, 'null']}
         lastName: {type: [string, 'null']}
+        preleveurType:
+          oneOf:
+            - {$ref: '#/components/schemas/PreleveurType'}
+            - type: 'null'
         pointPrelevements:
           type: array
           items:

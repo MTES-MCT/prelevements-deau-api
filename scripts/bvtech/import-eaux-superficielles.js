@@ -15,6 +15,7 @@ import {
   updatePointPrelevementById
 } from '../../lib/models/point-prelevement.js'
 import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
+import {getPreleveurTypeFromUsages} from '../../lib/services/preleveur-types.js'
 import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
 
 const DEFAULT_INPUT = 'data/bvtech/bvtech-eaux-superficielles.xlsx'
@@ -772,6 +773,18 @@ function buildNormalizedPointPayload(row) {
 
 async function importNormalizedDeclarants(workbook) {
   const rows = normalizedRows(workbook, NORMALIZED_SHEETS.declarants)
+  const usagesByDeclarantSourceId = new Map()
+
+  for (const exploitationRow of normalizedRows(workbook, NORMALIZED_SHEETS.exploitations)) {
+    const declarantSourceId = rowCell(exploitationRow, NORMALIZED_EXPLOITATION_COLUMNS.declarantSourceId)
+
+    if (declarantSourceId) {
+      const usages = usagesByDeclarantSourceId.get(declarantSourceId) ?? []
+      usages.push(...normalizedUsages(rowCell(exploitationRow, NORMALIZED_EXPLOITATION_COLUMNS.usages)))
+      usagesByDeclarantSourceId.set(declarantSourceId, usages)
+    }
+  }
+
   const indexes = {
     results: [],
     byId: new Map(),
@@ -805,6 +818,9 @@ async function importNormalizedDeclarants(workbook) {
       declarantData: {
         declarantType: 'LEGAL_PERSON',
         declarantRole: 'PRELEVEUR',
+        preleveurType: getPreleveurTypeFromUsages(
+          usagesByDeclarantSourceId.get(sourceId) ?? []
+        ),
         socialReason,
         jobTitle: rowCell(row, NORMALIZED_DECLARANT_COLUMNS.jobTitle),
         addressLine1: rowCell(row, NORMALIZED_DECLARANT_COLUMNS.addressLine1),
@@ -1068,6 +1084,8 @@ async function syncAliases(userId, emails) {
 }
 
 async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userData, declarantData}) {
+  const updateDeclarantData = {...declarantData}
+  delete updateDeclarantData.preleveurType
   const existingDeclarant = await prisma.declarant.findUnique({
     where: {sourceId},
     include: {user: true}
@@ -1089,7 +1107,7 @@ async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userDat
 
       await tx.declarant.update({
         where: {userId: existingDeclarant.userId},
-        data: declarantData
+        data: updateDeclarantData
       })
     })
 
@@ -1139,13 +1157,14 @@ function addDeclarantToIndexes(indexes, declarant) {
 
 async function importDeclarants(workbook) {
   const worksheet = getPreleveurWorksheet(workbook)
-  const indexes = {
+  const candidateIndexes = {
     results: [],
     byId: new Map(),
     byName: new Map(),
     byOwnerKey: new Map(),
     bySourceId: new Map()
   }
+  const records = []
 
   for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber)
@@ -1180,20 +1199,58 @@ async function importDeclarants(workbook) {
       sourceId
     }
 
-    const userId = await upsertDeclarant({
+    const record = {
       sourceId,
       primaryEmail,
       secondaryEmails,
       userData,
-      declarantData
-    })
+      declarantData,
+      preleveurId,
+      socialReason,
+      usages: []
+    }
+    records.push(record)
 
-    addDeclarantToIndexes(indexes, {
-      userId,
+    addDeclarantToIndexes(candidateIndexes, {
+      userId: sourceId,
       sourceId,
       id: preleveurId,
       socialReason,
       normalizedName: normalizeName(socialReason),
+      origin: 'preleveurs',
+      record
+    })
+  }
+
+  const pointWorksheet = getPointWorksheet(workbook)
+
+  for (let rowNumber = 4; rowNumber <= pointWorksheet.rowCount; rowNumber++) {
+    const row = pointWorksheet.getRow(rowNumber)
+    const candidate = findDeclarantForPoint(row, candidateIndexes)
+
+    if (candidate) {
+      candidate.record.usages.push(...mapUsages(cell(row, PP_COLUMNS.usage)))
+    }
+  }
+
+  const indexes = {
+    results: [],
+    byId: new Map(),
+    byName: new Map(),
+    byOwnerKey: new Map(),
+    bySourceId: new Map()
+  }
+
+  for (const record of records) {
+    record.declarantData.preleveurType = getPreleveurTypeFromUsages(record.usages)
+    const userId = await upsertDeclarant(record)
+
+    addDeclarantToIndexes(indexes, {
+      userId,
+      sourceId: record.sourceId,
+      id: record.preleveurId,
+      socialReason: record.socialReason,
+      normalizedName: normalizeName(record.socialReason),
       origin: 'preleveurs'
     })
   }
@@ -1266,10 +1323,12 @@ async function importOwnerDeclarantsFromPoints(workbook, declarants) {
       emails: [],
       addressLine1: null,
       postalCode: null,
-      city: null
+      city: null,
+      usages: []
     }
 
     existing.emails.push(...extractEmails(row.getCell(PP_COLUMNS.contactEmail).value))
+    existing.usages.push(...mapUsages(cell(row, PP_COLUMNS.usage)))
     existing.addressLine1 ||= cell(row, PP_COLUMNS.address)
     existing.postalCode ||= postalCodeFromText(cell(row, PP_COLUMNS.address))
     existing.city ||= cell(row, PP_COLUMNS.communeName)
@@ -1294,6 +1353,7 @@ async function importOwnerDeclarantsFromPoints(workbook, declarants) {
       declarantData: {
         declarantType: 'LEGAL_PERSON',
         declarantRole: 'PRELEVEUR',
+        preleveurType: getPreleveurTypeFromUsages(ownerData.usages),
         socialReason: ownerData.socialReason,
         addressLine1: ownerData.addressLine1,
         postalCode: ownerData.postalCode,

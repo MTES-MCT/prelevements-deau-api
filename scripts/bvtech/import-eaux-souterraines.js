@@ -16,6 +16,7 @@ import {
   updatePointPrelevementById
 } from '../../lib/models/point-prelevement.js'
 import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
+import {getPreleveurTypeFromUsages} from '../../lib/services/preleveur-types.js'
 import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
 
 const SOURCE = 'BVTECH'
@@ -789,6 +790,30 @@ async function readDataset(dataset) {
     exploitations.push({row, rowNumber, ...record})
   }
 
+  const declarantCandidates = createDeclarantIndexes()
+
+  for (const declarant of declarants) {
+    addDeclarantToIndexes(declarantCandidates, {
+      ...declarant,
+      userId: declarant.sourceId,
+      record: declarant
+    })
+    declarant.usages = []
+  }
+
+  for (const exploitation of exploitations) {
+    const declarant = findDeclarantForSelector(
+      exploitation.declarantSelector,
+      declarantCandidates
+    )
+    declarant?.record.usages.push(...exploitation.legacyUsages)
+  }
+
+  for (const declarant of declarants) {
+    declarant.declarantData.preleveurType = getPreleveurTypeFromUsages(declarant.usages)
+    delete declarant.usages
+  }
+
   return {
     dataset,
     points,
@@ -979,6 +1004,13 @@ async function upsertDeclarant({
   strictPrimaryEmail = false,
   legacySourceIds = []
 }) {
+  const updateDeclarantData = {...declarantData}
+  delete updateDeclarantData.preleveurType
+
+  if (updateDeclarantData.declarantRole === 'COLLECTEUR') {
+    updateDeclarantData.preleveurType = null
+  }
+
   const existingDeclarant = await findExistingDeclarant(sourceId, legacySourceIds)
 
   if (existingDeclarant) {
@@ -1002,7 +1034,7 @@ async function upsertDeclarant({
       await tx.declarant.update({
         where: {userId: existingDeclarant.userId},
         data: cleanObject({
-          ...declarantData,
+          ...updateDeclarantData,
           sourceId
         })
       })
@@ -1073,6 +1105,7 @@ async function upsertCollecteurFromCsv(sourceId) {
     declarantData: {
       declarantType: rowCell(row, 'declarantType') ?? 'LEGAL_PERSON',
       declarantRole: 'COLLECTEUR',
+      preleveurType: null,
       socialReason: rowCell(row, 'socialReason'),
       civility: normalizeCivility(rowCell(row, 'civility')),
       jobTitle: rowCell(row, 'jobTitle'),

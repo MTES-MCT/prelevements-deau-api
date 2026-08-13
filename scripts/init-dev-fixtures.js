@@ -27,12 +27,12 @@ async function main() {
     create: {
       id: randomUUID(),
       ...usersToCreate[0],
-      declarant: {create: {}}
+      declarant: {create: {preleveurType: 'AUTRE'}}
     },
     update: {
       ...usersToCreate[0],
       declarant: {
-        upsert: {create: {}, update: {}}
+        upsert: {create: {preleveurType: 'AUTRE'}, update: {}}
       }
     },
     include: {declarant: true}

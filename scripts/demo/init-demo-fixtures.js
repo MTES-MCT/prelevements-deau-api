@@ -4,6 +4,7 @@ import {ZONE_PERMISSION_CODES} from '../../lib/constants/zone-permissions.js'
 import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
 import {allowTemplateDeclarationTypeForDeclarant} from '../../lib/models/declaration-type.js'
 import {legacyUsageToRootUsageCode} from '../../lib/constants/sandre-water-uses.js'
+import {getPreleveurTypeFromUsages} from '../../lib/services/preleveur-types.js'
 
 const DEMO_SERIES = [
   {prefix: 'ougc', count: 50, waterBodyTypes: ['SOUTERRAIN', 'SUPERFICIELLE'], labels: ['Forage', 'Pompage']},
@@ -172,6 +173,10 @@ async function upsertInstructorAccount(zoneId) {
 }
 
 async function upsertDeclarantAccount(config) {
+  const declarantRole = config.type === 'COLLECTEUR' ? 'COLLECTEUR' : 'PRELEVEUR'
+  const preleveurType = declarantRole === 'PRELEVEUR'
+    ? getPreleveurTypeFromUsages([config.usage])
+    : null
   const user = await prisma.user.upsert({
     where: {
       email: config.email
@@ -196,12 +201,16 @@ async function upsertDeclarantAccount(config) {
     },
     update: {
       declarantType: 'LEGAL_PERSON',
+      declarantRole,
+      ...(declarantRole === 'COLLECTEUR' ? {preleveurType: null} : {}),
       socialReason: config.socialReason,
       sourceId: config.sourceId
     },
     create: {
       userId: user.id,
       declarantType: 'LEGAL_PERSON',
+      declarantRole,
+      preleveurType,
       socialReason: config.socialReason,
       sourceId: config.sourceId
     }

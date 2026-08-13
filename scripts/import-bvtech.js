@@ -14,6 +14,7 @@ import {
   updatePointPrelevementById
 } from '../lib/models/point-prelevement.js'
 import {getWaterUseByLegacyUsage} from '../lib/services/sandre-water-uses.js'
+import {getPreleveurTypeFromUsages} from '../lib/services/preleveur-types.js'
 import {syncDeclarantZonesFromPoint} from '../lib/services/zone-permissions.js'
 
 const DEFAULT_INPUT = 'data/bvtech'
@@ -316,6 +317,10 @@ function mapUsage(rawUsage) {
     return 'AEP'
   }
 
+  if (usage.includes('industri')) {
+    return 'INDUSTRIE'
+  }
+
   if (usage.includes('canal')) {
     return 'CANAUX'
   }
@@ -459,6 +464,8 @@ async function syncAliases(userId, emails) {
 }
 
 async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userData, declarantData}) {
+  const updateDeclarantData = {...declarantData}
+  delete updateDeclarantData.preleveurType
   const existingDeclarant = await prisma.declarant.findUnique({
     where: {sourceId},
     include: {user: true}
@@ -487,7 +494,7 @@ async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userDat
 
       await tx.declarant.update({
         where: {userId: existingDeclarant.userId},
-        data: declarantData
+        data: updateDeclarantData
       })
     })
 
@@ -510,7 +517,7 @@ async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userDat
       if (existingUser.declarant) {
         await tx.declarant.update({
           where: {userId: existingUser.id},
-          data: declarantData
+          data: updateDeclarantData
         })
       } else {
         await tx.declarant.create({
@@ -545,6 +552,25 @@ async function upsertDeclarant({sourceId, primaryEmail, secondaryEmails, userDat
   return userId
 }
 
+function getLegacyDeclarantUsages(workbook, preleveurId, socialReason) {
+  const worksheet = getWorksheetOrThrow(workbook, 'PP')
+  const normalizedSocialReason = normalizeName(socialReason)
+  const usages = []
+
+  for (let rowNumber = 4; rowNumber <= worksheet.rowCount; rowNumber++) {
+    const row = worksheet.getRow(rowNumber)
+    const identifierAsa = cell(row, PP_COLUMNS.identifierAsa)
+    const owner = normalizeName(cell(row, PP_COLUMNS.owner))
+
+    if ((preleveurId && identifierAsa === preleveurId)
+      || (normalizedSocialReason && owner === normalizedSocialReason)) {
+      usages.push(mapUsage(cell(row, PP_COLUMNS.usage)))
+    }
+  }
+
+  return usages
+}
+
 async function importDeclarants(workbook) {
   const worksheet = getWorksheetOrThrow(workbook, 'préleveurs')
   const results = []
@@ -574,6 +600,9 @@ async function importDeclarants(workbook) {
     const declarantData = {
       declarantType: 'LEGAL_PERSON',
       declarantRole: 'PRELEVEUR',
+      preleveurType: getPreleveurTypeFromUsages(
+        getLegacyDeclarantUsages(workbook, preleveurId, socialReason)
+      ),
       socialReason,
       addressLine1: cell(row, PRELEVEUR_COLUMNS.secretaryAddress) ?? cell(row, PRELEVEUR_COLUMNS.presidentAddress),
       postalCode: normalizePostalCode(cell(row, PRELEVEUR_COLUMNS.postalCode)),

@@ -19,7 +19,7 @@ function parseArgValue(args, argName) {
 
 function getProfileRelation(role) {
   if (role === 'DECLARANT') {
-    return {declarant: {create: {}}}
+    return {declarant: {create: {preleveurType: 'AUTRE'}}}
   }
 
   if (role === 'INSTRUCTOR' || role === 'ADMIN') {
