@@ -1,0 +1,53 @@
+enum SandreAlertZoneType {
+  SUP
+  SOU
+}
+
+enum SandreAlertZoneStatus {
+  VALIDATED
+  FROZEN
+}
+
+model SandreAlertZone {
+  id String @id @default(uuid()) @db.Uuid
+
+  codeSandre             String                                      @unique @db.Text
+  gid                    Int
+  name                   String                                      @db.Text
+  type                   SandreAlertZoneType
+  status                 SandreAlertZoneStatus
+  departmentCode         String                                      @db.Text
+  basinCode              Int
+  version                Int?
+  influencedResource     Boolean
+  alternateCodes         Json                                        @default("[]") @db.JsonB
+  preferredAlternateCode String?                                     @db.Text
+  sourceUpdatedAt        DateTime                                    @db.Date
+  payloadHash            String                                      @db.Text
+  active                 Boolean                                     @default(true)
+  coordinates            Unsupported("geometry(MultiPolygon,4326)")?
+  lastSeenAt             DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentCode])
+  @@index([type, active])
+  @@index([status])
+  @@index([gid])
+  @@index([coordinates], type: Gist)
+}
+
+model SandreAlertZoneSyncState {
+  departmentCode String @id @db.Text
+
+  lastAttemptAt   DateTime?
+  lastSuccessAt   DateTime?
+  lastError       String?   @db.Text
+  featureCount    Int?
+  snapshotHash    String?   @db.Text
+  sourceUpdatedAt DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
