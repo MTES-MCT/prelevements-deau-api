@@ -15,6 +15,7 @@ Les files déclarées dans `config.js` sont :
 | `process-declaration` | API | orchestration |
 | `process-api-import` | API/scripts | worker API |
 | `reconstruct-volumes-from-index-for-point` | API/services | worker API |
+| `sync-sandre-alert-zones` | Scheduler quotidien à 04:30 | worker API |
 
 `WORKER_JOBS` limite les jobs consommés par `worker.js` aux traitements internes à l'API.
 

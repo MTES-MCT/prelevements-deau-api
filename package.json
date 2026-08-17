@@ -19,7 +19,8 @@
     "backfill:point-flow-types": "node scripts/backfill-point-flow-types.js",
     "fix:tech-piezometer-zone": "node scripts/fix-tech-piezometer-zone.js",
     "sync:declaration-files": "node scripts/sync-declaration-files.js",
-    "import-zone-monitoring-stations": "node scripts/import-zone-monitoring-stations.js"
+    "import-zone-monitoring-stations": "node scripts/import-zone-monitoring-stations.js",
+    "sync:sandre-alert-zones": "node scripts/sync-sandre-alert-zones.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.932.0",
