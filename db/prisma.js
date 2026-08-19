@@ -1,16 +1,16 @@
 import process from 'node:process'
 import prismaPkg from '@prisma/client'
-import pgPkg from 'pg'
 import {PrismaPg} from '@prisma/adapter-pg'
 
+import {InstrumentedPool, readDatabasePoolMax} from './instrumented-pool.js'
+
 const {PrismaClient} = prismaPkg
-const {Pool} = pgPkg
 
 const g = globalThis
 
-g.pgPool ||= new Pool({
+g.pgPool ||= new InstrumentedPool({
   connectionString: process.env.DATABASE_URL,
-  max: 5
+  max: readDatabasePoolMax()
 })
 
 g.prismaAdapter ||= new PrismaPg(g.pgPool)

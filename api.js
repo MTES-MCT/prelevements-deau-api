@@ -14,6 +14,7 @@ import routes from './lib/routes.js'
 import {createBullBoardRouter} from './lib/queues/board.js'
 import {validateEmailConfig} from './lib/util/email.js'
 import {requestPerformanceMiddleware} from './lib/util/request-performance.js'
+import {createResponseCompressionMiddleware} from './lib/util/response-compression.js'
 import {validateAuditContextConfig} from './lib/audit/context.js'
 import {auditMiddleware} from './lib/audit/middleware.js'
 
@@ -35,6 +36,7 @@ if (!DEV) {
 }
 
 app.use(requestPerformanceMiddleware)
+app.use(createResponseCompressionMiddleware())
 
 // Enable CORS
 app.use(cors({

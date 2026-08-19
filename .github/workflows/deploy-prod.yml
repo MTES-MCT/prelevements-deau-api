@@ -53,7 +53,7 @@ jobs:
           username: nologin
           password: ${{ secrets.SCW_SECRET_KEY }}
 
-      - name: Build & push image (prod-latest + sha)
+      - name: Build and push immutable image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -65,8 +65,19 @@ jobs:
           secrets: |
             GITHUB_TOKEN=${{ github.token }}
           tags: |
-            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:prod-latest
             ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:prod-${{ github.sha }}
+
+      - name: Check image size and publish prod-latest
+        env:
+          IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:prod-${{ github.sha }}
+          LATEST_IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:prod-latest
+          DOCKER_IMAGE_MAX_BYTES: 1000000000
+        run: |
+          docker pull "$IMAGE_REF"
+          trap 'docker image rm "$LATEST_IMAGE_REF" "$IMAGE_REF" >/dev/null 2>&1 || true' EXIT
+          npm run check:image-size -- "$IMAGE_REF"
+          docker tag "$IMAGE_REF" "$LATEST_IMAGE_REF"
+          docker push "$LATEST_IMAGE_REF"
 
       - name: Install Scaleway CLI
         run: |

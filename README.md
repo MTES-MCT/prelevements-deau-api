@@ -100,6 +100,32 @@ L'authentification est en Basic Auth. Le nom d'utilisateur est libre, le mot de 
 Chaque réponse expose `X-Request-Id` et `Server-Timing`. Les requêtes dépassant
 `API_SLOW_REQUEST_MS` (1 000 ms par défaut) sont journalisées avec le préfixe
 `[API_PERF]`. Définissez `API_PERF_LOG=1` pour journaliser toutes les requêtes.
+Le journal contient la taille logique de la réponse (`responseBytes`), la taille
+effectivement transférée (`transferredBytes`), les phases instrumentées et les
+statistiques d'acquisition du pool PostgreSQL. Les chemins sont normalisés et
+les paramètres de requête ne sont jamais journalisés.
+
+Le pool ouvre au maximum `DATABASE_POOL_MAX` connexions (5 par défaut). Une
+acquisition dépassant `DATABASE_POOL_SLOW_WAIT_MS` (100 ms par défaut) produit
+également un journal `[DB_POOL_PERF]`, sans URL de connexion ni donnée métier.
+Les nouvelles phases peuvent être mesurées avec `withRequestPerformancePhase`.
+
+Les réponses JSON d'au moins `API_RESPONSE_COMPRESSION_MIN_BYTES` octets
+(1 024 par défaut) sont compressées selon `Accept-Encoding`. Les flux, pièces
+jointes et réponses déjà encodées ne sont pas recompressés.
+
+## Image Docker
+
+Le contexte Docker exclut les dépendances et artefacts locaux. L'image finale
+ne contient que les dépendances de production et les fichiers nécessaires à
+l'API, au worker, aux migrations et aux scripts d'exploitation. Après un build,
+le budget décompressé de 1 Go se contrôle ainsi :
+
+```bash
+npm run check:image-size -- nom-de-l-image
+```
+
+Le plafond peut être resserré avec `DOCKER_IMAGE_MAX_BYTES`.
 
 ## Documentation API
 
