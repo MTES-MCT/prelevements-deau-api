@@ -1,30 +1,36 @@
-FROM node:24-bookworm-slim AS base
+FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    git \
-    openssh-client \
-    jq \
-  && rm -rf /var/lib/apt/lists/*
-
-FROM base AS builder
 ENV NODE_ENV=development
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 RUN npx prisma generate --schema=./prisma/schema
 
 ENV NODE_ENV=production
 RUN npm prune --omit=dev
 
-FROM base AS runner
+FROM node:24-bookworm-slim AS runner
+WORKDIR /app
+
 ENV NODE_ENV=production
 
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/node_modules ./node_modules
-COPY . .
+COPY package.json package-lock.json prisma.config.ts ./
+COPY api.js instrument.js worker.js ./
+COPY db ./db
+COPY lib ./lib
+COPY prisma ./prisma
+COPY scripts ./scripts
+COPY data ./data
 
 ARG ENV_NAME=testing
 
