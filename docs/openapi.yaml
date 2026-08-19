@@ -375,6 +375,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/SearchPage'
         - $ref: '#/components/parameters/SearchPageSize'
+        - $ref: '#/components/parameters/SearchFormat'
         - $ref: '#/components/parameters/SearchQuery'
         - $ref: '#/components/parameters/SearchRole'
         - $ref: '#/components/parameters/SearchDeclarantType'
@@ -407,6 +408,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/SearchPage'
         - $ref: '#/components/parameters/SearchPageSize'
+        - $ref: '#/components/parameters/SearchFormat'
         - $ref: '#/components/parameters/SearchQuery'
         - $ref: '#/components/parameters/SearchDeclarantType'
         - $ref: '#/components/parameters/SearchPreleveurType'
@@ -1270,6 +1272,13 @@ components:
       name: pageSize
       description: Taille de page des recherches globales.
       schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+    SearchFormat:
+      in: query
+      name: format
+      description: >-
+        `compact` retourne uniquement les champs nécessaires aux listes. En son
+        absence, le format historique complet reste inchangé.
+      schema: {type: string, enum: [compact]}
     SearchPerPage:
       in: query
       name: perPage
@@ -1918,6 +1927,53 @@ components:
                   code: {type: string}
                   label: {type: string}
         right: {$ref: '#/components/schemas/DeclarantRight'}
+    CompactDeclarantListItem:
+      type: object
+      additionalProperties: false
+      required: [id, email, civility, firstName, lastName, declarantRole, declarantType, preleveurType, socialReason, city, lastDeclarationAt, pointCount, usages, canReadDetail, canDisplayPoints, canDisplayActivity]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: [string, 'null'], format: email}
+        civility:
+          oneOf:
+            - type: string
+              enum: [MR, MRS]
+            - type: 'null'
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        declarantRole: {type: string, enum: [PRELEVEUR, COLLECTEUR]}
+        declarantType:
+          oneOf:
+            - type: string
+              enum: [NATURAL_PERSON, LEGAL_PERSON]
+            - type: 'null'
+        preleveurType:
+          oneOf:
+            - {$ref: '#/components/schemas/PreleveurType'}
+            - type: 'null'
+        socialReason: {type: [string, 'null']}
+        city: {type: [string, 'null']}
+        lastDeclarationAt:
+          description: Masqué lorsque l’utilisateur ne peut pas consulter l’activité.
+          type: [string, 'null']
+          format: date-time
+        pointCount:
+          description: Masqué lorsque l’utilisateur ne peut pas consulter les points.
+          type: [integer, 'null']
+          minimum: 0
+        usages:
+          description: Masqués lorsque l’utilisateur ne peut pas consulter les points.
+          type: [array, 'null']
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, label]
+            properties:
+              code: {type: string}
+              label: {type: string}
+        canReadDetail: {type: boolean}
+        canDisplayPoints: {type: boolean}
+        canDisplayActivity: {type: boolean}
     SearchFacetItem:
       type: object
       required: [value, label, count]
@@ -1953,7 +2009,10 @@ components:
       properties:
         items:
           type: array
-          items: {$ref: '#/components/schemas/DeclarantListItem'}
+          items:
+            oneOf:
+              - {$ref: '#/components/schemas/DeclarantListItem'}
+              - {$ref: '#/components/schemas/CompactDeclarantListItem'}
         total: {type: integer, minimum: 0}
         page: {type: integer, minimum: 1}
         pageSize: {type: integer, minimum: 1, maximum: 100}
