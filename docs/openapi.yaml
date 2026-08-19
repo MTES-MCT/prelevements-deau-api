@@ -369,29 +369,177 @@ paths:
       tags: [Declarants]
       operationId: searchDeclarants
       summary: Rechercher et paginer les déclarants accessibles
-      description: Endpoint paginé non cassant ; GET /declarants conserve son ancien tableau complet.
+      description: >-
+        Recherche accent-insensible, partielle et approximative dans le seul
+        périmètre autorisé. GET /declarants conserve son ancien tableau complet.
       parameters:
-        - in: query
-          name: page
-          schema: {type: integer, minimum: 1, default: 1}
-        - in: query
-          name: pageSize
-          schema: {type: integer, minimum: 1, maximum: 100, default: 25}
-        - in: query
-          name: query
-          schema: {type: string, maxLength: 200}
-        - in: query
-          name: role
-          schema: {type: string, enum: [PRELEVEUR, COLLECTEUR]}
-        - in: query
-          name: emailStatus
-          schema: {type: string, enum: [WITH_EMAIL, WITHOUT_EMAIL]}
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchPageSize'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchRole'
+        - $ref: '#/components/parameters/SearchDeclarantType'
+        - $ref: '#/components/parameters/SearchPreleveurType'
+        - $ref: '#/components/parameters/SearchEmailStatus'
+        - $ref: '#/components/parameters/SearchCollecteurStatus'
+        - $ref: '#/components/parameters/SearchConnectorStatus'
+        - $ref: '#/components/parameters/SearchActivityRange'
+        - $ref: '#/components/parameters/SearchZoneIds'
+        - $ref: '#/components/parameters/SearchUsageCodes'
+        - $ref: '#/components/parameters/SearchWaterBodyTypes'
+        - $ref: '#/components/parameters/SearchExploitationStatuses'
+        - $ref: '#/components/parameters/SearchSort'
+        - $ref: '#/components/parameters/SearchOrder'
       responses:
         '200':
           description: Page de déclarants
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DeclarantSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/preleveurs/search:
+    get:
+      tags: [Declarants]
+      operationId: searchMyCollecteurPreleveurs
+      summary: Rechercher les préleveurs du collecteur connecté
+      description: >-
+        Recherche les identités et les points, alias, usages et codes des seules
+        exploitations explicitement liées au collecteur connecté.
+      parameters:
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchPageSize'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchDeclarantType'
+        - $ref: '#/components/parameters/SearchPreleveurType'
+        - $ref: '#/components/parameters/SearchEmailStatus'
+        - $ref: '#/components/parameters/SearchCollecteurStatus'
+        - $ref: '#/components/parameters/SearchConnectorStatus'
+        - $ref: '#/components/parameters/SearchActivityRange'
+        - $ref: '#/components/parameters/SearchZoneIds'
+        - $ref: '#/components/parameters/SearchUsageCodes'
+        - $ref: '#/components/parameters/SearchWaterBodyTypes'
+        - $ref: '#/components/parameters/SearchExploitationStatuses'
+        - $ref: '#/components/parameters/SearchSort'
+        - $ref: '#/components/parameters/SearchOrder'
+      responses:
+        '200':
+          description: Page de préleveurs liés
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarantSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/points-prelevement:
+    get:
+      tags: [Zones]
+      operationId: searchZonePointsPrelevement
+      summary: Rechercher les points d’une zone
+      description: Les filtres et facettes croisés sont omis sans les droits de zone correspondants.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchPerPage'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchPreleveurTypes'
+        - $ref: '#/components/parameters/SearchFlowTypes'
+        - $ref: '#/components/parameters/SearchWaterBodyTypes'
+        - $ref: '#/components/parameters/SearchUsageCodes'
+        - $ref: '#/components/parameters/SearchExploitationStatuses'
+        - $ref: '#/components/parameters/SearchCollecteurStatus'
+        - $ref: '#/components/parameters/SearchConnectorStatus'
+        - $ref: '#/components/parameters/ZoneSearchSort'
+        - $ref: '#/components/parameters/SearchOrder'
+      responses:
+        '200':
+          description: Page de points
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/exploitations:
+    get:
+      tags: [Zones]
+      operationId: searchZoneExploitations
+      summary: Rechercher les exploitations d’une zone
+      description: Applique recherche intelligente, filtres métier, facettes et tri stable.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchPerPage'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchDeclarantType'
+        - $ref: '#/components/parameters/SearchPreleveurTypes'
+        - $ref: '#/components/parameters/SearchEmailStatus'
+        - $ref: '#/components/parameters/SearchActivityRange'
+        - $ref: '#/components/parameters/SearchFlowTypes'
+        - $ref: '#/components/parameters/SearchWaterBodyTypes'
+        - $ref: '#/components/parameters/SearchUsageCodes'
+        - $ref: '#/components/parameters/SearchExploitationStatuses'
+        - $ref: '#/components/parameters/SearchCollecteurStatus'
+        - $ref: '#/components/parameters/SearchConnectorStatus'
+        - $ref: '#/components/parameters/ZoneSearchSort'
+        - $ref: '#/components/parameters/SearchOrder'
+      responses:
+        '200':
+          description: Page d’exploitations
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/declarants:
+    get:
+      tags: [Zones]
+      operationId: searchZoneDeclarants
+      summary: Rechercher les déclarants d’une zone
+      description: Les relations et facettes d’exploitation sont omises sans exploitation.list.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchPerPage'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchRole'
+        - $ref: '#/components/parameters/SearchDeclarantType'
+        - $ref: '#/components/parameters/SearchPreleveurTypes'
+        - $ref: '#/components/parameters/SearchEmailStatus'
+        - $ref: '#/components/parameters/SearchActivityRange'
+        - $ref: '#/components/parameters/SearchWaterBodyTypes'
+        - $ref: '#/components/parameters/SearchUsageCodes'
+        - $ref: '#/components/parameters/SearchExploitationStatuses'
+        - $ref: '#/components/parameters/SearchCollecteurStatus'
+        - $ref: '#/components/parameters/SearchConnectorStatus'
+        - $ref: '#/components/parameters/ZoneSearchSort'
+        - $ref: '#/components/parameters/SearchOrder'
+      responses:
+        '200':
+          description: Page de déclarants
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/collecteurs:
+    get:
+      tags: [Zones]
+      operationId: searchZoneCollecteurs
+      summary: Rechercher les collecteurs d’une zone
+      description: Variante de la liste des déclarants dont le rôle est fixé à COLLECTEUR.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchPerPage'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchDeclarantType'
+        - $ref: '#/components/parameters/SearchEmailStatus'
+        - $ref: '#/components/parameters/SearchActivityRange'
+        - $ref: '#/components/parameters/SearchWaterBodyTypes'
+        - $ref: '#/components/parameters/SearchUsageCodes'
+        - $ref: '#/components/parameters/SearchExploitationStatuses'
+        - $ref: '#/components/parameters/SearchConnectorStatus'
+        - $ref: '#/components/parameters/ZoneSearchSort'
+        - $ref: '#/components/parameters/SearchOrder'
+      responses:
+        '200':
+          description: Page de collecteurs
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneSearchResponse'}
         default: {$ref: '#/components/responses/Error'}
   /declarants/{declarantId}/overview:
     get:
@@ -972,6 +1120,132 @@ components:
       name: zoneId
       required: true
       schema: {$ref: '#/components/schemas/Uuid'}
+    SearchPage:
+      in: query
+      name: page
+      description: Numéro de page, à partir de 1.
+      schema: {type: integer, minimum: 1, default: 1}
+    SearchPageSize:
+      in: query
+      name: pageSize
+      description: Taille de page des recherches globales.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+    SearchPerPage:
+      in: query
+      name: perPage
+      description: Taille de page des listes de zone.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    SearchQuery:
+      in: query
+      name: query
+      description: Termes partiels, sans distinction de casse ou d’accent.
+      schema: {type: string, maxLength: 200}
+    SearchRole:
+      in: query
+      name: role
+      schema: {type: string, enum: [PRELEVEUR, COLLECTEUR]}
+    SearchDeclarantType:
+      in: query
+      name: declarantType
+      schema: {type: string, enum: [NATURAL_PERSON, LEGAL_PERSON]}
+    SearchPreleveurType:
+      in: query
+      name: preleveurType
+      schema: {$ref: '#/components/schemas/PreleveurType'}
+    SearchPreleveurTypes:
+      in: query
+      name: preleveurTypes
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: {$ref: '#/components/schemas/PreleveurType'}
+    SearchEmailStatus:
+      in: query
+      name: emailStatus
+      schema: {type: string, enum: [WITH_EMAIL, WITHOUT_EMAIL]}
+    SearchCollecteurStatus:
+      in: query
+      name: collecteurStatus
+      schema: {type: string, enum: [WITH_COLLECTEUR, WITHOUT_COLLECTEUR]}
+    SearchConnectorStatus:
+      in: query
+      name: connectorStatus
+      schema: {type: string, enum: [WITH_CONNECTOR, WITHOUT_CONNECTOR]}
+    SearchActivityRange:
+      in: query
+      name: activityRange
+      schema:
+        type: string
+        enum: [NEVER, LT_30_DAYS, DAYS_30_90, DAYS_91_365, GT_365_DAYS]
+    SearchZoneIds:
+      in: query
+      name: zoneIds
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: {$ref: '#/components/schemas/Uuid'}
+    SearchUsageCodes:
+      in: query
+      name: usageCodes
+      style: form
+      explode: true
+      schema:
+        type: array
+        items: {type: string}
+    SearchWaterBodyTypes:
+      in: query
+      name: waterBodyTypes
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION]
+    SearchFlowTypes:
+      in: query
+      name: flowTypes
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          enum: [PRELEVEMENT, REJET]
+    SearchExploitationStatuses:
+      in: query
+      name: exploitationStatuses
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          enum: [EN_ACTIVITE, NON_RENSEIGNE, ABANDONNEE, TERMINEE]
+    SearchSort:
+      in: query
+      name: sort
+      schema:
+        type: string
+        enum: [RELEVANCE, NAME, LAST_DECLARATION]
+        default: RELEVANCE
+    ZoneSearchSort:
+      in: query
+      name: sort
+      schema:
+        type: string
+        enum: [RELEVANCE, NAME, LAST_DECLARATION, CREATED_AT]
+        default: RELEVANCE
+    SearchOrder:
+      in: query
+      name: order
+      description: Ordre du tri LAST_DECLARATION; les valeurs nulles restent à la fin.
+      schema:
+        type: string
+        enum: [ASC, DESC]
+        default: DESC
     MonitoringStationAssociationId:
       in: path
       name: associationId
@@ -1302,9 +1576,38 @@ components:
                 - {$ref: '#/components/schemas/PreleveurType'}
                 - type: 'null'
         right: {$ref: '#/components/schemas/DeclarantRight'}
+    SearchFacetItem:
+      type: object
+      required: [value, label, count]
+      properties:
+        value: {type: string}
+        label: {type: string}
+        count: {type: integer, minimum: 1}
+        code: {type: [string, 'null']}
+        type: {type: [string, 'null']}
+    SearchFacets:
+      type: object
+      description: Les catégories non autorisées ou sans valeur peuvent être omises.
+      additionalProperties: false
+      properties:
+        roles: {$ref: '#/components/schemas/SearchFacetValues'}
+        declarantTypes: {$ref: '#/components/schemas/SearchFacetValues'}
+        preleveurTypes: {$ref: '#/components/schemas/SearchFacetValues'}
+        emailStatuses: {$ref: '#/components/schemas/SearchFacetValues'}
+        collecteurStatuses: {$ref: '#/components/schemas/SearchFacetValues'}
+        connectorStatuses: {$ref: '#/components/schemas/SearchFacetValues'}
+        activityRanges: {$ref: '#/components/schemas/SearchFacetValues'}
+        zoneIds: {$ref: '#/components/schemas/SearchFacetValues'}
+        flowTypes: {$ref: '#/components/schemas/SearchFacetValues'}
+        waterBodyTypes: {$ref: '#/components/schemas/SearchFacetValues'}
+        usageCodes: {$ref: '#/components/schemas/SearchFacetValues'}
+        exploitationStatuses: {$ref: '#/components/schemas/SearchFacetValues'}
+    SearchFacetValues:
+      type: array
+      items: {$ref: '#/components/schemas/SearchFacetItem'}
     DeclarantSearchResponse:
       type: object
-      required: [items, total, page, pageSize, totalPages, counts]
+      required: [items, total, page, pageSize, totalPages, counts, facets]
       properties:
         items:
           type: array
@@ -1321,6 +1624,33 @@ components:
             preleveurs: {type: integer, minimum: 0}
             collecteurs: {type: integer, minimum: 0}
             withoutEmail: {type: integer, minimum: 0}
+        facets: {$ref: '#/components/schemas/SearchFacets'}
+    ZoneSearchResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        meta:
+          type: object
+          required: [page, perPage, total, totalAll, count, pages, filters, sort, order]
+          properties:
+            page: {type: integer, minimum: 1}
+            perPage: {type: integer, minimum: 1, maximum: 100}
+            total: {type: integer, minimum: 0}
+            totalAll: {type: integer, minimum: 0}
+            count: {type: integer, minimum: 0}
+            pages: {type: integer, minimum: 1}
+            search: {type: [string, 'null']}
+            filters:
+              type: object
+              additionalProperties: true
+            sort: {type: string, enum: [RELEVANCE, NAME, LAST_DECLARATION, CREATED_AT]}
+            order: {type: string, enum: [ASC, DESC]}
+            facets: {$ref: '#/components/schemas/SearchFacets'}
     DeclarantOverview:
       type: object
       additionalProperties: true
