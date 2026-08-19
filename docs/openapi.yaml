@@ -2091,7 +2091,9 @@ components:
         expectedCollecteurUserIds:
           description: >-
             Liste exacte observée avant édition. Obligatoire sur le PUT existant
-            dès que collecteurUserIds ou collecteurs est envoyé; un écart renvoie 409.
+            pour modifier effectivement les associations; son omission reste
+            acceptée si la liste soumise est identique à l'état courant. Un écart
+            entre cette précondition explicite et l'état courant renvoie 409.
           type: array
           uniqueItems: true
           maxItems: 2000
