@@ -13,6 +13,7 @@
     "lint": "xo",
     "lint:openapi": "spectral lint docs/openapi.yaml",
     "check:image-size": "sh deploy/check-image-size.sh",
+    "benchmark:search": "node scripts/benchmark-search-performance.js",
     "test": "ava",
     "coverage": "c8 ava",
     "coverage:report": "c8 --reporter=html --reporter=text ava",
