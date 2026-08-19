@@ -1575,6 +1575,21 @@ components:
               oneOf:
                 - {$ref: '#/components/schemas/PreleveurType'}
                 - type: 'null'
+        searchSummary:
+          type: object
+          description: Résumé optionnel, limité aux points visibles dans le périmètre autorisé.
+          additionalProperties: false
+          required: [usages]
+          properties:
+            usages:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [code, label]
+                properties:
+                  code: {type: string}
+                  label: {type: string}
         right: {$ref: '#/components/schemas/DeclarantRight'}
     SearchFacetItem:
       type: object
