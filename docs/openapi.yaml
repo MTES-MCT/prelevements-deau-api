@@ -427,6 +427,146 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DeclarantSearchResponse'}
         default: {$ref: '#/components/responses/Error'}
+  /collecteurs/{collecteurId}/exploitations/candidates:
+    get:
+      tags: [Declarants]
+      operationId: listCollecteurExploitationCandidates
+      summary: Lister les exploitations associées ou disponibles pour un collecteur
+      description: >-
+        Réservé aux instructeurs et administrateurs. Les associations existantes
+        sont limitées au droit exploitation.list. Les exploitations disponibles
+        exigent les droits exploitation.list et exploitation.update sur le point,
+        ainsi qu'au moins une zone du point partagée avec le collecteur. Les trois
+        conditions peuvent être satisfaites par des zones différentes du point.
+      parameters:
+        - in: path
+          name: collecteurId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - in: query
+          name: view
+          required: true
+          schema: {type: string, enum: [ASSOCIATED, AVAILABLE]}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: perPage
+          schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+        - in: query
+          name: query
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: zoneIds
+          description: UUID répétés ou séparés par des virgules.
+          schema:
+            type: array
+            maxItems: 100
+            items: {$ref: '#/components/schemas/Uuid'}
+          style: form
+          explode: true
+        - in: query
+          name: usageCodes
+          description: Codes répétés ou séparés par des virgules.
+          schema:
+            type: array
+            maxItems: 100
+            items: {type: string, maxLength: 16}
+          style: form
+          explode: true
+        - in: query
+          name: statuses
+          description: Statuts répétés ou séparés par des virgules.
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [EN_ACTIVITE, NON_RENSEIGNE, ABANDONNEE, TERMINEE]
+          style: form
+          explode: true
+        - in: query
+          name: preleveurId
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [RELEVANCE, POINT_ASC, POINT_DESC, PRELEVEUR_ASC, PRELEVEUR_DESC]
+            default: RELEVANCE
+        - in: query
+          name: idsOnly
+          description: >-
+            Retourne au plus 2000 identifiants actionnables sur tout le résultat
+            filtré, sans appliquer page ni perPage. Les associations en lecture
+            seule sont exclues.
+          schema: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Candidats visibles dans le périmètre autorisé
+          headers:
+            ETag:
+              description: Version des associations visibles et modifiables pour l'acteur, entre guillemets.
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/CollecteurExploitationCandidatePage'}
+                  - {$ref: '#/components/schemas/CollecteurExploitationCandidateIds'}
+        '422':
+          description: Plus de 2000 identifiants actionnables correspondent aux filtres.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/{collecteurId}/exploitations:
+    patch:
+      tags: [Declarants]
+      operationId: updateCollecteurExploitations
+      summary: Ajouter et retirer en masse des exploitations d'un collecteur
+      description: >-
+        Réservé aux instructeurs et administrateurs. Les identifiants sont
+        explicites et leur nombre cumulé est limité à 2000. L'opération est
+        atomique et idempotente. If-Match est obligatoire dès qu'un retrait est
+        demandé. Chaque identifiant exige exploitation.list et
+        exploitation.update sur le point. Un retrait reste possible pour une
+        association historique.
+      parameters:
+        - in: path
+          name: collecteurId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - in: header
+          name: If-Match
+          required: false
+          description: Version renvoyée par ETag ou meta.associationVersion, brute ou entre guillemets.
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollecteurExploitationBulkRequest'}
+      responses:
+        '200':
+          description: Différence appliquée dans une transaction unique
+          headers:
+            ETag:
+              description: Nouvelle version des associations visibles et modifiables pour l'acteur.
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollecteurExploitationBulkResponse'}
+        '412':
+          description: Version obsolète; aucune association n'a été modifiée.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssociationPreconditionError'}
+        '428':
+          description: If-Match est absent alors qu'au moins un retrait est demandé.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
   /zones/{zoneId}/points-prelevement:
     get:
       tags: [Zones]
@@ -1273,6 +1413,193 @@ components:
         message: {type: string}
         code: {type: string}
         details: {}
+    AssociationVersion:
+      type: string
+      pattern: '^[a-f0-9]{64}$'
+    AssociationPreconditionError:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: {type: integer, const: 412}
+        message: {type: string}
+        data:
+          type: object
+          additionalProperties: false
+          required: [latestAssociationVersion]
+          properties:
+            latestAssociationVersion: {$ref: '#/components/schemas/AssociationVersion'}
+    CollecteurExploitationCandidate:
+      type: object
+      additionalProperties: false
+      required: [id, status, startDate, endDate, isAssociated, canAdd, canRemove, readOnlyReason, point, preleveur, usage, zones]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        status:
+          type: string
+          enum: [EN_ACTIVITE, NON_RENSEIGNE, ABANDONNEE, TERMINEE]
+        startDate: {type: [string, 'null'], format: date-time}
+        endDate: {type: [string, 'null'], format: date-time}
+        isAssociated: {type: boolean}
+        canAdd: {type: boolean}
+        canRemove: {type: boolean}
+        readOnlyReason: {type: [string, 'null']}
+        point:
+          type: object
+          additionalProperties: false
+          required: [id, name, codeBSS, communeName]
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            name: {type: string}
+            codeBSS: {type: [string, 'null']}
+            communeName: {type: [string, 'null']}
+        preleveur:
+          type: object
+          additionalProperties: false
+          required: [id, label]
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            label: {type: string}
+        usage:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [code, label]
+              properties:
+                code: {type: string}
+                label: {type: string}
+            - type: 'null'
+        zones:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, code, name]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              code: {type: string}
+              name: {type: string}
+    CollecteurExploitationFacetValues:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [value, label, count]
+        properties:
+          value: {type: string}
+          label: {type: string}
+          count: {type: integer, minimum: 1}
+    CollecteurExploitationMeta:
+      type: object
+      additionalProperties: false
+      required: [view, total, selectableTotal, skippedReadOnlyCount, associationVersion, counts, facets]
+      properties:
+        view: {type: string, enum: [ASSOCIATED, AVAILABLE]}
+        total: {type: integer, minimum: 0}
+        selectableTotal: {type: integer, minimum: 0}
+        skippedReadOnlyCount: {type: integer, minimum: 0}
+        associationVersion: {$ref: '#/components/schemas/AssociationVersion'}
+        counts:
+          type: object
+          additionalProperties: false
+          required: [associated, available, readOnlyAssociated]
+          properties:
+            associated: {type: integer, minimum: 0}
+            available: {type: integer, minimum: 0}
+            readOnlyAssociated: {type: integer, minimum: 0}
+        facets:
+          type: object
+          additionalProperties: false
+          required: [zones, usages, statuses, preleveurs]
+          properties:
+            zones: {$ref: '#/components/schemas/CollecteurExploitationFacetValues'}
+            usages: {$ref: '#/components/schemas/CollecteurExploitationFacetValues'}
+            statuses: {$ref: '#/components/schemas/CollecteurExploitationFacetValues'}
+            preleveurs: {$ref: '#/components/schemas/CollecteurExploitationFacetValues'}
+    CollecteurExploitationCandidatePage:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/CollecteurExploitationCandidate'}
+        meta:
+          allOf:
+            - {$ref: '#/components/schemas/CollecteurExploitationMeta'}
+            - type: object
+              required: [page, perPage, totalPages]
+              properties:
+                page: {type: integer, minimum: 1}
+                perPage: {type: integer, minimum: 1, maximum: 100}
+                totalPages: {type: integer, minimum: 1}
+    CollecteurExploitationCandidateIds:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [ids]
+          properties:
+            ids:
+              type: array
+              maxItems: 2000
+              items: {$ref: '#/components/schemas/Uuid'}
+        meta: {$ref: '#/components/schemas/CollecteurExploitationMeta'}
+    CollecteurExploitationBulkRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        addExploitationIds:
+          type: array
+          uniqueItems: true
+          maxItems: 2000
+          default: []
+          items: {$ref: '#/components/schemas/Uuid'}
+        removeExploitationIds:
+          type: array
+          uniqueItems: true
+          maxItems: 2000
+          default: []
+          items: {$ref: '#/components/schemas/Uuid'}
+      anyOf:
+        - required: [addExploitationIds]
+          properties:
+            addExploitationIds: {minItems: 1}
+        - required: [removeExploitationIds]
+          properties:
+            removeExploitationIds: {minItems: 1}
+      description: >-
+        Les tableaux sont disjoints et contiennent au total au plus 2000 UUID.
+    CollecteurExploitationBulkResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [addedIds, removedIds, unchangedAddIds, unchangedRemoveIds]
+          properties:
+            addedIds:
+              type: array
+              items: {$ref: '#/components/schemas/Uuid'}
+            removedIds:
+              type: array
+              items: {$ref: '#/components/schemas/Uuid'}
+            unchangedAddIds:
+              type: array
+              items: {$ref: '#/components/schemas/Uuid'}
+            unchangedRemoveIds:
+              type: array
+              items: {$ref: '#/components/schemas/Uuid'}
+        meta:
+          type: object
+          additionalProperties: false
+          required: [associationVersion]
+          properties:
+            associationVersion: {$ref: '#/components/schemas/AssociationVersion'}
     AdminDashboardResponse:
       type: object
       required: [success, data]
@@ -1756,6 +2083,19 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         status: {type: string}
         usage: {type: string}
+        collecteurUserIds:
+          type: array
+          uniqueItems: true
+          maxItems: 2000
+          items: {$ref: '#/components/schemas/Uuid'}
+        expectedCollecteurUserIds:
+          description: >-
+            Liste exacte observée avant édition. Obligatoire sur le PUT existant
+            dès que collecteurUserIds ou collecteurs est envoyé; un écart renvoie 409.
+          type: array
+          uniqueItems: true
+          maxItems: 2000
+          items: {$ref: '#/components/schemas/Uuid'}
     WaterUse:
       type: object
       additionalProperties: true
