@@ -25,9 +25,9 @@ npm run benchmark:search
 ```
 
 Rejouer ensuite avec une concurrence de 5, puis 10. Le résultat JSON expose les
-p50/p95 globaux, le temps interne `Server-Timing`, la taille logique et
-l'encodage HTTP. Comparer le même commit et les mêmes scénarios entre testing et
-production.
+p50/p95 globaux, le détail des phases `Server-Timing`, la taille logique, la
+taille transférée lorsqu'elle est annoncée par le serveur et l'encodage HTTP.
+Comparer le même commit et les mêmes scénarios entre testing et production.
 
 ## Indicateurs serveur
 

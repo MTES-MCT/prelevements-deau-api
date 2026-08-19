@@ -64,12 +64,16 @@ async function runRequest(baseUrl, token, scenario) {
   }
 
   const durationMs = performance.now() - startedAt
+  const declaredTransferredBytes = Number(response.headers.get('content-length'))
 
   return {
     apiTimings: parseServerTiming(response.headers.get('server-timing')),
     contentEncoding: response.headers.get('content-encoding') || 'identity',
     durationMs,
-    logicalBytes: body.byteLength
+    logicalBytes: body.byteLength,
+    transferredBytes: Number.isFinite(declaredTransferredBytes)
+      ? declaredTransferredBytes
+      : null
   }
 }
 
@@ -96,6 +100,11 @@ function summarize(scenario, samples) {
     .map(sample => sample.apiTimings.api)
     .filter(Number.isFinite)
   const logicalBytes = samples.map(sample => sample.logicalBytes)
+  const transferredBytes = samples
+    .map(sample => sample.transferredBytes)
+    .filter(Number.isFinite)
+  const phaseNames = new Set(samples.flatMap(sample => Object.keys(sample.apiTimings)))
+  phaseNames.delete('api')
 
   return {
     scenario: scenario.name,
@@ -110,7 +119,19 @@ function summarize(scenario, samples) {
       p95: percentile(apiDurations, 0.95),
       max: percentile(apiDurations, 1)
     },
+    phasesMs: Object.fromEntries([...phaseNames].map(name => {
+      const durations = samples
+        .map(sample => sample.apiTimings[name])
+        .filter(Number.isFinite)
+
+      return [name, {
+        p50: percentile(durations, 0.5),
+        p95: percentile(durations, 0.95),
+        max: percentile(durations, 1)
+      }]
+    })),
     logicalBytes: percentile(logicalBytes, 0.5),
+    transferredBytes: percentile(transferredBytes, 0.5),
     contentEncodings: [...new Set(samples.map(sample => sample.contentEncoding))]
   }
 }
