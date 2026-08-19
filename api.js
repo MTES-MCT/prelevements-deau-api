@@ -17,12 +17,15 @@ import {requestPerformanceMiddleware} from './lib/util/request-performance.js'
 import {createResponseCompressionMiddleware} from './lib/util/response-compression.js'
 import {validateAuditContextConfig} from './lib/audit/context.js'
 import {auditMiddleware} from './lib/audit/middleware.js'
+import {searchCacheInvalidationMiddleware} from './lib/services/search-corpus-cache.js'
+import {warnInvalidSearchCacheConfiguration} from './lib/services/search-cache-config.js'
 
 Sentry.setTag('service', 'api')
 
 // Validate configuration
 validateEmailConfig()
 validateAuditContextConfig()
+warnInvalidSearchCacheConfiguration()
 
 const PORT = process.env.PORT || 5000
 const DEV = process.env.NODE_ENV !== 'production'
@@ -51,6 +54,7 @@ if (DEV) {
 }
 
 app.use(auditMiddleware)
+app.use(searchCacheInvalidationMiddleware)
 
 // Setup JSON parsing
 app.use(express.json({limit: JSON_BODY_LIMIT}))
