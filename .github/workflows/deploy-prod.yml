@@ -76,6 +76,8 @@ jobs:
           docker pull "$IMAGE_REF"
           trap 'docker image rm "$LATEST_IMAGE_REF" "$IMAGE_REF" >/dev/null 2>&1 || true' EXIT
           npm run check:image-size -- "$IMAGE_REF"
+          docker run --rm --entrypoint /bin/sh "$IMAGE_REF" -c \
+            'test -r /app/deploy/certs/prod/redis-ca.pem && test -r /app/deploy/certs/prod/postgres-ca.pem'
           docker tag "$IMAGE_REF" "$LATEST_IMAGE_REF"
           docker push "$LATEST_IMAGE_REF"
 
