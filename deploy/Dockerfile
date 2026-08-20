@@ -34,6 +34,7 @@ COPY data ./data
 
 ARG ENV_NAME=testing
 
+COPY deploy/certs/${ENV_NAME} ./deploy/certs/${ENV_NAME}
 COPY deploy/certs/${ENV_NAME}/redis-ca.pem /usr/local/share/ca-certificates/scw-redis-ca.crt
 COPY deploy/certs/${ENV_NAME}/postgres-ca.pem /usr/local/share/ca-certificates/scw-postgres-ca.crt
 
