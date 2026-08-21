@@ -1,11 +1,17 @@
 .git
+**/.git
 .github
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
 node_modules
 coverage
 .nyc_output
+**/__tests__
+**/*.test.js
+npm-debug.log*
 *.log
 
 AGENTS.md

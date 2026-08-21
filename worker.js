@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import './lib/config/env.js'
 import http from 'node:http'
+import process from 'node:process'
 import './instrument.js'
 import * as Sentry from '@sentry/node'
 
@@ -8,7 +9,7 @@ import {startWorkers} from './lib/queues/workers.js'
 import {startScheduler} from './lib/queues/scheduler.js'
 import {waitForRedis} from './lib/queues/redis.js'
 
-Sentry.setTag('service', 'worker')
+Sentry.setTag('service', process.env.SENTRY_SERVICE?.trim() || 'worker')
 
 for (;;) {
   try {

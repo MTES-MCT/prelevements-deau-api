@@ -5,6 +5,8 @@
     "start": "node api.js",
     "start-dev": "nodemon --watch './**/*.js' --exec 'node api.js'",
     "start:worker": "node worker.js",
+    "migrate:demo": "node scripts/demo/migrate-demo.js",
+    "bootstrap:demo": "node scripts/demo/bootstrap-demo.js",
     "import-bvtech": "node scripts/import-bvtech.js",
     "audit:declaration-overlaps": "node scripts/audit-declaration-value-overlaps.js",
     "audit:zone-agent-permissions": "node scripts/audit-zone-agent-permissions.js",
@@ -61,6 +63,7 @@
     "papaparse": "^5.5.3",
     "path-to-regexp": "^8.4.2",
     "pg": "^8.17.1",
+    "prisma": "7.8.0",
     "proj4": "^2.20.0",
     "slugify": "^1.6.6"
   },
@@ -73,7 +76,6 @@
     "c8": "^10.1.3",
     "dotenv": "^17.2.3",
     "nodemon": "^3.1.11",
-    "prisma": "^7.8.0",
     "supertest": "^7.1.4",
     "xo": "^1.2.3"
   },
