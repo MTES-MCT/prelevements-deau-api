@@ -392,8 +392,8 @@ jobs:
             image="$image_ref" \
             port=8080 \
             mvcpu-limit=2000 \
-            memory-limit-bytes=2048000000 \
-            local-storage-limit-bytes=1000000000 \
+            memory-limit-bytes=2.048GB \
+            local-storage-limit-bytes=1GB \
             min-scale=1 \
             max-scale=20 \
             timeout=300s \
@@ -459,8 +459,8 @@ jobs:
             image="$image_ref" \
             port=8080 \
             mvcpu-limit=2000 \
-            memory-limit-bytes=2048000000 \
-            local-storage-limit-bytes=1000000000 \
+            memory-limit-bytes=2.048GB \
+            local-storage-limit-bytes=1GB \
             min-scale=1 \
             max-scale=5 \
             timeout=300s \
