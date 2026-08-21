@@ -26,6 +26,10 @@ model User {
   emailAliases  UserEmailAlias[]
   dataExports   DataExport[]
 
+  passwordCredential        PasswordCredential?  @relation("PasswordCredentialOwner")
+  passwordActivation        PasswordActivation?  @relation("PasswordActivationOwner")
+  passwordActivationsIssued PasswordActivation[] @relation("PasswordActivationIssuer")
+
   auditEventsAsActor   AuditEvent[] @relation("AuditEventActorUser")
   auditEventsEffective AuditEvent[] @relation("AuditEventEffectiveUser")
   auditEventsAsSubject AuditEvent[] @relation("AuditEventSubjectUser")
@@ -195,4 +199,32 @@ model SessionToken {
   @@index([userId])
   @@index([impersonatedByUserId])
   @@index([expiresAt])
+}
+
+model PasswordCredential {
+  userId String @id @db.Uuid
+  user   User   @relation("PasswordCredentialOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  passwordHash  String @db.Text
+  pepperVersion Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PasswordActivation {
+  id        String @id @default(uuid()) @db.Uuid
+  tokenHash String @unique @db.Char(64)
+
+  userId String @unique @db.Uuid
+  user   User   @relation("PasswordActivationOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdByUserId String? @db.Uuid
+  createdByUser   User?   @relation("PasswordActivationIssuer", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@index([createdByUserId])
 }

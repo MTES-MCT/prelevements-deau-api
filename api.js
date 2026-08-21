@@ -19,10 +19,14 @@ import {validateAuditContextConfig} from './lib/audit/context.js'
 import {auditMiddleware} from './lib/audit/middleware.js'
 import {searchCacheInvalidationMiddleware} from './lib/services/search-corpus-cache.js'
 import {warnInvalidSearchCacheConfiguration} from './lib/services/search-cache-config.js'
+import {validateAuthConfig} from './lib/config/auth.js'
+import {validateSessionTokenConfig} from './lib/models/session-token.js'
 
 Sentry.setTag('service', process.env.SENTRY_SERVICE?.trim() || 'api')
 
 // Validate configuration
+validateAuthConfig()
+validateSessionTokenConfig()
 validateEmailConfig()
 validateAuditContextConfig()
 warnInvalidSearchCacheConfiguration()

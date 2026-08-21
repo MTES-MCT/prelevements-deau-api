@@ -270,6 +270,74 @@ jobs:
           assert_required_effective_secret_keys "$SCW_DEMO_CONTAINER_ID_WORKER" \
             DATABASE_URL REDIS_URL S3_ACCESS_KEY S3_SECRET_KEY
 
+          api_container="$(scw container container get "$SCW_DEMO_CONTAINER_ID_API" \
+            region="$SCW_REGION" \
+            -o json)"
+          worker_container="$(scw container container get "$SCW_DEMO_CONTAINER_ID_WORKER" \
+            region="$SCW_REGION" \
+            -o json)"
+          jq -e '
+            (.environment_variables // {} | keys) as $keys
+            | ([
+                "APP_ENV",
+                "FRONT_URL",
+                "MAIL_SUBJECT_PREFIX",
+                "ORCHESTRATION_BASE_URL",
+                "ORCHESTRATION_REQUIRED",
+                "REDIS_TLS_CA_FILE_PATH",
+                "S3_BUCKET_PREFIX",
+                "S3_ENDPOINT",
+                "S3_REGION",
+                "SENTRY_ENV",
+                "SENTRY_RELEASE",
+                "SENTRY_SERVICE",
+                "SMTP_FROM",
+                "SMTP_HOST",
+                "SMTP_PORT"
+              ] - $keys | length) == 0
+            and ($keys - [
+                "APP_ENV",
+                "AUTH_METHODS",
+                "FRONT_URL",
+                "MAIL_SUBJECT_PREFIX",
+                "ORCHESTRATION_BASE_URL",
+                "ORCHESTRATION_REQUIRED",
+                "PASSWORD_PEPPER_CURRENT_VERSION",
+                "REDIS_TLS_CA_FILE_PATH",
+                "S3_BUCKET_PREFIX",
+                "S3_ENDPOINT",
+                "S3_REGION",
+                "SENTRY_ENV",
+                "SENTRY_RELEASE",
+                "SENTRY_SERVICE",
+                "SESSION_TOKEN_TTL",
+                "SMTP_FROM",
+                "SMTP_HOST",
+                "SMTP_PORT"
+              ] | length) == 0
+            and ((.environment_variables.AUTH_METHODS // "password,magic_link") == "password,magic_link")
+            and ((.environment_variables.PASSWORD_PEPPER_CURRENT_VERSION // "1") == "1")
+            and ((.environment_variables.SESSION_TOKEN_TTL // "28800") == "28800")
+          ' <<< "$api_container" >/dev/null || {
+            echo "::error::Refusing to replace an unexpected demo API environment-variable map"
+            exit 1
+          }
+          jq -e \
+            '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' \
+            <<< "$api_container" >/dev/null || {
+            echo "::error::Missing PASSWORD_PEPPER_V1 runtime secret on the demo API container"
+            exit 1
+          }
+          if jq -e \
+            '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' \
+            <<< "$namespace" >/dev/null \
+            || jq -e \
+              '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' \
+              <<< "$worker_container" >/dev/null; then
+            echo "::error::PASSWORD_PEPPER_V1 must be scoped to the demo API container"
+            exit 1
+          fi
+
           job_definition="$(scw jobs definition get "$SCW_DEMO_JOB_DEFINITION_ID_DB" \
             region="$SCW_REGION" \
             -o json)"
@@ -405,6 +473,9 @@ jobs:
             private-network-id="$SCW_DEMO_PRIVATE_NETWORK_ID" \
             environment-variables.APP_ENV=demo \
             environment-variables.FRONT_URL=https://app.demo.partageonsleau.beta.gouv.fr \
+            environment-variables.AUTH_METHODS=password,magic_link \
+            environment-variables.PASSWORD_PEPPER_CURRENT_VERSION=1 \
+            environment-variables.SESSION_TOKEN_TTL=28800 \
             environment-variables.ORCHESTRATION_BASE_URL=https://demopartageonsleauc90182ec-demo-orchestration.functions.fnc.fr-par.scw.cloud \
             environment-variables.ORCHESTRATION_REQUIRED=true \
             environment-variables.REDIS_TLS_CA_FILE_PATH=/usr/local/share/ca-certificates/scw-redis-ca.crt \
@@ -435,7 +506,15 @@ jobs:
           [[ "$(jq -er '.image' <<< "$updated")" == "$image_ref" \
             && "$(jq -er '.namespace_id' <<< "$updated")" == "$SCW_DEMO_NAMESPACE_ID" \
             && "$(jq -er '.private_network_id' <<< "$updated")" == "$SCW_DEMO_PRIVATE_NETWORK_ID" \
-            && "$(jq -er '.https_connections_only' <<< "$updated")" == "true" ]] || {
+            && "$(jq -er '.https_connections_only' <<< "$updated")" == "true" \
+            && "$(jq -er '.environment_variables.AUTH_METHODS' <<< "$updated")" == "password,magic_link" \
+            && "$(jq -er '.environment_variables.PASSWORD_PEPPER_CURRENT_VERSION' <<< "$updated")" == "1" \
+            && "$(jq -er '.environment_variables.SESSION_TOKEN_TTL' <<< "$updated")" == "28800" \
+            && "$(jq -er '.environment_variables.SMTP_HOST' <<< "$updated")" == "mail.testing.partageonsleau.beta.gouv.fr" \
+            && "$(jq -er '.environment_variables.SMTP_PORT' <<< "$updated")" == "1025" \
+            && "$(jq -er '.environment_variables.SMTP_FROM' <<< "$updated")" == "Partageons l'eau Demo <noreply@demo.partageonsleau.beta.gouv.fr>" \
+            && "$(jq -er '.environment_variables.MAIL_SUBJECT_PREFIX' <<< "$updated")" == "[DEMO] " \
+            && "$(jq -er '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' <<< "$updated")" == "true" ]] || {
             echo "::error::Unexpected API deployment result"
             exit 1
           }
