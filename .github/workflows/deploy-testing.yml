@@ -117,7 +117,12 @@ jobs:
         run: |
           scw container container update "$SCW_SERVERLESS_CONTAINER_ID_TESTING_API" \
             image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:testing-${{ github.sha }}" \
+            environment-variables.BREVO_TEMPLATE_DECLARATION_FOLLOWUP_MONTH=5 \
+            environment-variables.BREVO_TEMPLATE_DECLARATION_FOLLOWUP_WEEK=4 \
+            environment-variables.BREVO_TEMPLATE_DECLARATION_REMINDER_MONTH=2 \
+            environment-variables.BREVO_TEMPLATE_DECLARATION_REMINDER_WEEK=3 \
             environment-variables.MAIL_SUBJECT_PREFIX="[TESTING] " \
+            environment-variables.SMTP_HOST=mail.testing.partageonsleau.beta.gouv.fr \
             liveness-probe.http.path=/healthz \
             liveness-probe.interval=10s \
             liveness-probe.timeout=2s \
