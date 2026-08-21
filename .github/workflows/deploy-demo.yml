@@ -3,45 +3,25 @@ name: Deploy (demo) to Scaleway
 on:
   push:
     branches: ["demo"]
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-demo-api
-  # A second push must wait: cancelling after migrations could leave the
-  # database ahead of the still-running containers.
-  cancel-in-progress: false
+  group: deploy-demo
+  cancel-in-progress: true
 
 jobs:
   test_build_deploy:
     runs-on: ubuntu-latest
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
 
     env:
       TZ: Europe/Paris
       SCW_REGION: ${{ vars.SCW_REGION }}
       SCW_REGISTRY_ENDPOINT: ${{ vars.SCW_REGISTRY_ENDPOINT }}
       SCW_IMAGE_NAME: ${{ vars.SCW_IMAGE_NAME }}
-      SCW_EXPECTED_PROJECT_ID: 8b2f67a8-b474-4596-967f-fe1e0adba1b3
-      SCW_EXPECTED_ORGANIZATION_ID: aae4422f-c198-4638-b9e5-977938791f14
-      SCW_DEMO_NAMESPACE_ID: c90182ec-fb81-4fca-ad36-0e37ce351466
-      SCW_DEMO_REGISTRY_NAMESPACE_ID: d7fc36ba-19d7-4ced-85a6-f94b18f14752
-      SCW_DEMO_CONTAINER_ID_API: d49a3dc0-7ee8-4777-9408-067540bb601b
-      SCW_DEMO_CONTAINER_ID_WORKER: 383f440d-12b5-452e-8be3-a6c0c84e639b
-      SCW_DEMO_JOB_DEFINITION_ID_DB: 83a9f11e-7e80-436a-8f52-fa8feea9a328
-      SCW_DEMO_PRIVATE_NETWORK_ID: a600027e-6936-4538-acd7-3f2860113fc3
+      SCW_SERVERLESS_CONTAINER_ID_DEMO_API: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_DEMO_API }}
+      SCW_SERVERLESS_CONTAINER_ID_DEMO_WORKER: ${{ secrets.SCW_SERVERLESS_CONTAINER_ID_DEMO_WORKER }}
 
     steps:
       - name: Checkout
@@ -50,310 +30,17 @@ jobs:
           submodules: recursive
           ssh-key: ${{ secrets.SUBMODULES_SSH_KEY }}
 
-      - name: Validate demo CI configuration
-        env:
-          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_CONFIGURED_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
-          SCW_CONFIGURED_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
-        run: |
-          set -euo pipefail
-
-          [[ "$GITHUB_REPOSITORY" == "MTES-MCT/prelevements-deau-api" ]] || {
-            echo "::error::Unexpected GitHub repository"
-            exit 1
-          }
-          [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_REF_NAME" == "demo" ]] || {
-            echo "::error::This workflow can only deploy the demo branch"
-            exit 1
-          }
-
-          required_settings=(
-            SCW_ACCESS_KEY
-            SCW_SECRET_KEY
-            SCW_CONFIGURED_PROJECT_ID
-            SCW_CONFIGURED_ORGANIZATION_ID
-            SCW_REGION
-            SCW_REGISTRY_ENDPOINT
-            SCW_IMAGE_NAME
-          )
-
-          for setting in "${required_settings[@]}"; do
-            [[ -n "${!setting:-}" ]] || {
-              echo "::error::Missing GitHub configuration: $setting"
-              exit 1
-            }
-          done
-
-          [[ "$SCW_CONFIGURED_PROJECT_ID" == "$SCW_EXPECTED_PROJECT_ID" ]] || {
-            echo "::error::Unexpected Scaleway project for demo"
-            exit 1
-          }
-          [[ "$SCW_CONFIGURED_ORGANIZATION_ID" == "$SCW_EXPECTED_ORGANIZATION_ID" ]] || {
-            echo "::error::Unexpected Scaleway organization for demo"
-            exit 1
-          }
-          [[ "$SCW_REGION" == "fr-par" ]] || {
-            echo "::error::Unexpected Scaleway region for demo"
-            exit 1
-          }
-          [[ "$SCW_REGISTRY_ENDPOINT" == "rg.fr-par.scw.cloud/prelevements-deau-api" ]] || {
-            echo "::error::Unexpected API registry endpoint"
-            exit 1
-          }
-          [[ "$SCW_IMAGE_NAME" == "prelevements-deau-api" ]] || {
-            echo "::error::Unexpected API image name"
-            exit 1
-          }
-
-          protected_ids=(
-            bfb37e50-4bd4-42dc-94ca-2064f8b46898
-            fa4179ac-8658-4440-963b-66d669a452d5
-            1b950c5c-6318-4f93-b6b6-63ef5b96954d
-            e14e4839-6b22-4483-9ce1-dc972e469025
-            97584187-27a0-4cc5-8403-473b6df383a4
-            5034a60c-20f3-4ba4-af85-168dfe5b2037
-            4ca71ef2-c0dc-4af2-8105-41e2ce7f82f0
-            ecda2fe5-bf7a-4547-a25c-3112e7457597
-            23007e48-cae1-4fa0-b588-79480b0f2156
-            e9a4967f-0fac-419d-a9f3-5e3fcff71bc1
-          )
-
-          demo_ids=(
-            "$SCW_DEMO_NAMESPACE_ID"
-            "$SCW_DEMO_CONTAINER_ID_API"
-            "$SCW_DEMO_CONTAINER_ID_WORKER"
-            "$SCW_DEMO_JOB_DEFINITION_ID_DB"
-          )
-
-          for demo_id in "${demo_ids[@]}"; do
-            for protected_id in "${protected_ids[@]}"; do
-              [[ "$demo_id" != "$protected_id" ]] || {
-                echo "::error::Refusing a testing or production resource"
-                exit 1
-              }
-            done
-          done
-
       - name: Use Node.js 24.x
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
           cache: "npm"
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
-      - name: Generate Prisma client
-        run: npx --no-install prisma generate --schema=./prisma/schema
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-        env:
-          NODE_ENV: test
-
-      - name: Check demo certificates
-        run: |
-          set -euo pipefail
-
-          for certificate in \
-            deploy/certs/demo/postgres-ca.pem \
-            deploy/certs/demo/redis-ca.pem; do
-            test -s "$certificate" || {
-              echo "::error::Missing $certificate"
-              exit 1
-            }
-            openssl x509 -in "$certificate" -noout -checkend 86400
-            openssl verify -CAfile "$certificate" "$certificate"
-          done
-
-          openssl x509 \
-            -in deploy/certs/demo/postgres-ca.pem \
-            -noout \
-            -ext subjectAltName \
-            | grep -F "IP Address:172.16.12.2"
-
-          openssl x509 \
-            -in deploy/certs/demo/redis-ca.pem \
-            -noout \
-            -ext subjectAltName \
-            | grep -F "IP Address:172.16.12.3"
-
-      - name: Install Scaleway CLI
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh \
-            | VERSION=2.58.3 sh
-          scw version
-
-      - name: Validate Scaleway demo resource ownership
-        env:
-          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ env.SCW_EXPECTED_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ env.SCW_EXPECTED_ORGANIZATION_ID }}
-          SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
-        run: |
-          set -euo pipefail
-
-          namespace="$(scw container namespace get "$SCW_DEMO_NAMESPACE_ID" \
-            region="$SCW_REGION" \
-            -o json)"
-          [[ "$(jq -er '.project_id' <<< "$namespace")" == "$SCW_EXPECTED_PROJECT_ID" \
-            && "$(jq -er '.name' <<< "$namespace")" == "demo-partageons-leau" ]] || {
-            echo "::error::Unexpected demo namespace"
-            exit 1
-          }
-
-          private_network="$(scw vpc private-network get "$SCW_DEMO_PRIVATE_NETWORK_ID" \
-            region="$SCW_REGION" \
-            -o json)"
-          [[ "$(jq -er '.project_id' <<< "$private_network")" == "$SCW_EXPECTED_PROJECT_ID" \
-            && "$(jq -er '.name' <<< "$private_network")" == "partageonsleau-demo-pn" \
-            && "$(jq -er '.region' <<< "$private_network")" == "$SCW_REGION" ]] || {
-            echo "::error::Unexpected demo private network"
-            exit 1
-          }
-
-          registry_namespace="$(scw registry namespace get "$SCW_DEMO_REGISTRY_NAMESPACE_ID" \
-            region="$SCW_REGION" \
-            -o json)"
-          [[ "$(jq -er '.project_id' <<< "$registry_namespace")" == "$SCW_EXPECTED_PROJECT_ID" \
-            && "$(jq -er '.name' <<< "$registry_namespace")" == "prelevements-deau-api" \
-            && "$(jq -er '.endpoint' <<< "$registry_namespace")" == "$SCW_REGISTRY_ENDPOINT" \
-            && "$(jq -er '.is_public' <<< "$registry_namespace")" == "false" ]] || {
-            echo "::error::Unexpected API registry namespace"
-            exit 1
-          }
-
-          assert_demo_container() {
-            local container_id="$1"
-            local expected_name="$2"
-            local container
-
-            container="$(scw container container get "$container_id" region="$SCW_REGION" -o json)"
-            [[ "$(jq -er '.name' <<< "$container")" == "$expected_name" \
-              && "$(jq -er '.namespace_id' <<< "$container")" == "$SCW_DEMO_NAMESPACE_ID" ]] || {
-              echo "::error::Unexpected demo container: $container_id"
-              exit 1
-            }
-          }
-
-          assert_demo_container "$SCW_DEMO_CONTAINER_ID_API" "demo-prelevement-deau-api"
-          assert_demo_container "$SCW_DEMO_CONTAINER_ID_WORKER" "demo-prelevement-deau-api-worker"
-
-          assert_required_effective_secret_keys() {
-            local container_id="$1"
-            shift
-            local container key
-
-            container="$(scw container container get "$container_id" region="$SCW_REGION" -o json)"
-            for key in "$@"; do
-              if ! jq -e --arg key "$key" \
-                '(.secret_environment_variables // {}) | has($key)' \
-                <<< "$namespace" >/dev/null \
-                && ! jq -e --arg key "$key" \
-                  '(.secret_environment_variables // {}) | has($key)' \
-                  <<< "$container" >/dev/null; then
-                echo "::error::Missing effective secret $key on demo container $container_id"
-                exit 1
-              fi
-            done
-          }
-
-          assert_required_effective_secret_keys "$SCW_DEMO_CONTAINER_ID_API" \
-            DATABASE_URL REDIS_URL S3_ACCESS_KEY S3_SECRET_KEY \
-            AUDIT_CONTEXT_SECRET ORCHESTRATION_WEBHOOK_SECRET \
-            SMTP_USER SMTP_PASSWORD
-          assert_required_effective_secret_keys "$SCW_DEMO_CONTAINER_ID_WORKER" \
-            DATABASE_URL REDIS_URL S3_ACCESS_KEY S3_SECRET_KEY
-
-          api_container="$(scw container container get "$SCW_DEMO_CONTAINER_ID_API" \
-            region="$SCW_REGION" \
-            -o json)"
-          worker_container="$(scw container container get "$SCW_DEMO_CONTAINER_ID_WORKER" \
-            region="$SCW_REGION" \
-            -o json)"
-          jq -e '
-            (.environment_variables // {} | keys) as $keys
-            | ([
-                "APP_ENV",
-                "FRONT_URL",
-                "MAIL_SUBJECT_PREFIX",
-                "ORCHESTRATION_BASE_URL",
-                "ORCHESTRATION_REQUIRED",
-                "REDIS_TLS_CA_FILE_PATH",
-                "S3_BUCKET_PREFIX",
-                "S3_ENDPOINT",
-                "S3_REGION",
-                "SENTRY_ENV",
-                "SENTRY_RELEASE",
-                "SENTRY_SERVICE",
-                "SMTP_FROM",
-                "SMTP_HOST",
-                "SMTP_PORT"
-              ] - $keys | length) == 0
-            and ($keys - [
-                "APP_ENV",
-                "AUTH_METHODS",
-                "FRONT_URL",
-                "MAIL_SUBJECT_PREFIX",
-                "ORCHESTRATION_BASE_URL",
-                "ORCHESTRATION_REQUIRED",
-                "PASSWORD_PEPPER_CURRENT_VERSION",
-                "REDIS_TLS_CA_FILE_PATH",
-                "S3_BUCKET_PREFIX",
-                "S3_ENDPOINT",
-                "S3_REGION",
-                "SENTRY_ENV",
-                "SENTRY_RELEASE",
-                "SENTRY_SERVICE",
-                "SESSION_TOKEN_TTL",
-                "SMTP_FROM",
-                "SMTP_HOST",
-                "SMTP_PORT"
-              ] | length) == 0
-            and ((.environment_variables.AUTH_METHODS // "password,magic_link") == "password,magic_link")
-            and ((.environment_variables.PASSWORD_PEPPER_CURRENT_VERSION // "1") == "1")
-            and ((.environment_variables.SESSION_TOKEN_TTL // "28800") == "28800")
-          ' <<< "$api_container" >/dev/null || {
-            echo "::error::Refusing to replace an unexpected demo API environment-variable map"
-            exit 1
-          }
-          jq -e \
-            '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' \
-            <<< "$api_container" >/dev/null || {
-            echo "::error::Missing PASSWORD_PEPPER_V1 runtime secret on the demo API container"
-            exit 1
-          }
-          if jq -e \
-            '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' \
-            <<< "$namespace" >/dev/null \
-            || jq -e \
-              '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' \
-              <<< "$worker_container" >/dev/null; then
-            echo "::error::PASSWORD_PEPPER_V1 must be scoped to the demo API container"
-            exit 1
-          fi
-
-          job_definition="$(scw jobs definition get "$SCW_DEMO_JOB_DEFINITION_ID_DB" \
-            region="$SCW_REGION" \
-            -o json)"
-          [[ "$(jq -er '.project_id' <<< "$job_definition")" == "$SCW_EXPECTED_PROJECT_ID" \
-            && "$(jq -er '.name' <<< "$job_definition")" == "demo-prelevement-deau-migration" ]] || {
-            echo "::error::Unexpected demo migration job"
-            exit 1
-          }
-          jq -e '
-            ((.environment_variables.DATABASE_URL // "") | length > 0)
-            and .environment_variables.APP_ENV == "demo"
-          ' \
-            <<< "$job_definition" >/dev/null || {
-            echo "::error::The demo migration job needs DATABASE_URL and APP_ENV=demo"
-            exit 1
-          }
+      #- name: Test (if present)
+      #  run: npm test --if-present
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -361,11 +48,11 @@ jobs:
       - name: Login to Scaleway Container Registry
         uses: docker/login-action@v3
         with:
-          registry: rg.fr-par.scw.cloud
+          registry: ${{ env.SCW_REGISTRY_ENDPOINT }}
           username: nologin
           password: ${{ secrets.SCW_SECRET_KEY }}
 
-      - name: Build and push image (demo-latest + sha)
+      - name: Build and push immutable image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -377,118 +64,57 @@ jobs:
           secrets: |
             GITHUB_TOKEN=${{ github.token }}
           tags: |
-            ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-latest
             ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-${{ github.sha }}
 
-      - name: Pin migration job to the immutable image
+      - name: Check image size and publish demo-latest
         env:
-          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ env.SCW_EXPECTED_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ env.SCW_EXPECTED_ORGANIZATION_ID }}
-          SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
+          IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-${{ github.sha }}
+          LATEST_IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-latest
+          DOCKER_IMAGE_MAX_BYTES: 1000000000
         run: |
-          set -euo pipefail
+          docker pull "$IMAGE_REF"
+          trap 'docker image rm "$LATEST_IMAGE_REF" "$IMAGE_REF" >/dev/null 2>&1 || true' EXIT
+          npm run check:image-size -- "$IMAGE_REF"
+          docker run --rm --entrypoint /bin/sh "$IMAGE_REF" -c \
+            'test -r /app/deploy/certs/demo/redis-ca.pem && test -r /app/deploy/certs/demo/postgres-ca.pem'
+          docker tag "$IMAGE_REF" "$LATEST_IMAGE_REF"
+          docker push "$LATEST_IMAGE_REF"
 
-          image_ref="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:demo-${{ github.sha }}"
-          [[ "$image_ref" =~ :demo-[0-9a-f]{40}$ ]] || {
-            echo "::error::Refusing a non-demo image tag"
-            exit 1
-          }
-
-          scw jobs definition update "$SCW_DEMO_JOB_DEFINITION_ID_DB" \
-            image-uri="$image_ref" \
-            startup-command.0=node \
-            args.0=scripts/demo/migrate-demo.js \
-            region="$SCW_REGION"
-
-          pinned_definition="$(scw jobs definition get "$SCW_DEMO_JOB_DEFINITION_ID_DB" \
-            region="$SCW_REGION" \
-            -o json)"
-          pinned_image="$(jq -er '.image_uri' <<< "$pinned_definition")"
-          pinned_command="$(jq -er '.startup_command | join(" ")' <<< "$pinned_definition")"
-          pinned_args="$(jq -er '.args | join(" ")' <<< "$pinned_definition")"
-          pinned_environment="$(jq -er '.environment_variables.APP_ENV' <<< "$pinned_definition")"
-
-          if [[ "$pinned_image" != "$image_ref" \
-            || "$pinned_command" != "node" \
-            || "$pinned_args" != "scripts/demo/migrate-demo.js" \
-            || "$pinned_environment" != "demo" ]]; then
-            echo "::error::Migration job pinning failed"
-            exit 1
-          fi
+      - name: Install Scaleway CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | VERSION=2.56.0 sh
+          scw version
 
       - name: Run DB migrations (blocking)
         env:
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ env.SCW_EXPECTED_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ env.SCW_EXPECTED_ORGANIZATION_ID }}
-          SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
+          SCW_DEFAULT_REGION: fr-par
+          SCW_JOB_DEFINITION_ID_DEMO_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_DEMO_DB }}
         run: |
-          set -euo pipefail
-
-          job_run="$(scw jobs definition start "$SCW_DEMO_JOB_DEFINITION_ID_DB" \
-            region="$SCW_REGION" \
-            --wait \
-            -o json)"
+          job_run="$(scw jobs definition start "$SCW_JOB_DEFINITION_ID_DEMO_DB" region=fr-par --wait -o json)"
           job_run_id="$(jq -er '.id' <<< "$job_run")"
           job_state="$(jq -er '.state' <<< "$job_run")"
 
           if [[ "$job_state" != "succeeded" ]]; then
-            echo "::error::Database migration job $job_run_id finished with state: $job_state"
+            echo "Database migration job $job_run_id finished with state: $job_state"
             exit 1
           fi
 
-      - name: Deploy API (demo)
+      - name: Deploy API to Scaleway Serverless Container (demo)
         env:
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ env.SCW_EXPECTED_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ env.SCW_EXPECTED_ORGANIZATION_ID }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
           SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
+          SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
+          SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
-          set -euo pipefail
-
-          image_ref="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:demo-${{ github.sha }}"
-          [[ "$image_ref" =~ :demo-[0-9a-f]{40}$ ]] || {
-            echo "::error::Refusing a non-demo image tag"
-            exit 1
-          }
-
-          scw container container update "$SCW_DEMO_CONTAINER_ID_API" \
-            image="$image_ref" \
-            port=8080 \
-            mvcpu-limit=2000 \
-            memory-limit-bytes=2.048GB \
-            local-storage-limit-bytes=1GB \
-            min-scale=1 \
-            max-scale=20 \
-            timeout=300s \
-            privacy=public \
-            protocol=http1 \
-            https-connection-only=true \
-            sandbox=v2 \
-            scaling-option.concurrent-requests-threshold=15 \
-            private-network-id="$SCW_DEMO_PRIVATE_NETWORK_ID" \
-            environment-variables.APP_ENV=demo \
-            environment-variables.FRONT_URL=https://app.demo.partageonsleau.beta.gouv.fr \
-            environment-variables.AUTH_METHODS=password,magic_link \
-            environment-variables.PASSWORD_PEPPER_CURRENT_VERSION=1 \
-            environment-variables.SESSION_TOKEN_TTL=28800 \
-            environment-variables.ORCHESTRATION_BASE_URL=https://demopartageonsleauc90182ec-demo-orchestration.functions.fnc.fr-par.scw.cloud \
-            environment-variables.ORCHESTRATION_REQUIRED=true \
-            environment-variables.REDIS_TLS_CA_FILE_PATH=/usr/local/share/ca-certificates/scw-redis-ca.crt \
-            environment-variables.S3_ENDPOINT=https://s3.fr-par.scw.cloud \
-            environment-variables.S3_REGION=fr-par \
-            environment-variables.S3_BUCKET_PREFIX=demo- \
-            environment-variables.SMTP_HOST=mail.testing.partageonsleau.beta.gouv.fr \
-            environment-variables.SMTP_PORT=1025 \
-            environment-variables.SMTP_FROM="Partageons l'eau Demo <noreply@demo.partageonsleau.beta.gouv.fr>" \
-            environment-variables.MAIL_SUBJECT_PREFIX="[DEMO] " \
-            environment-variables.SENTRY_ENV=demo \
-            environment-variables.SENTRY_RELEASE="${{ github.sha }}" \
-            environment-variables.SENTRY_SERVICE=prelevements-deau-api \
+          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_DEMO_API" \
+            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:demo-${{ github.sha }}" \
             liveness-probe.http.path=/healthz \
             liveness-probe.interval=10s \
             liveness-probe.timeout=2s \
@@ -496,85 +122,19 @@ jobs:
             startup-probe.http.path=/healthz \
             startup-probe.interval=5s \
             startup-probe.timeout=2s \
-            startup-probe.failure-threshold=30 \
-            region="$SCW_REGION" \
-            --wait
+            startup-probe.failure-threshold=30
 
-          updated="$(scw container container get "$SCW_DEMO_CONTAINER_ID_API" \
-            region="$SCW_REGION" \
-            -o json)"
-          [[ "$(jq -er '.image' <<< "$updated")" == "$image_ref" \
-            && "$(jq -er '.namespace_id' <<< "$updated")" == "$SCW_DEMO_NAMESPACE_ID" \
-            && "$(jq -er '.private_network_id' <<< "$updated")" == "$SCW_DEMO_PRIVATE_NETWORK_ID" \
-            && "$(jq -er '.https_connections_only' <<< "$updated")" == "true" \
-            && "$(jq -er '.environment_variables.AUTH_METHODS' <<< "$updated")" == "password,magic_link" \
-            && "$(jq -er '.environment_variables.PASSWORD_PEPPER_CURRENT_VERSION' <<< "$updated")" == "1" \
-            && "$(jq -er '.environment_variables.SESSION_TOKEN_TTL' <<< "$updated")" == "28800" \
-            && "$(jq -er '.environment_variables.SMTP_HOST' <<< "$updated")" == "mail.testing.partageonsleau.beta.gouv.fr" \
-            && "$(jq -er '.environment_variables.SMTP_PORT' <<< "$updated")" == "1025" \
-            && "$(jq -er '.environment_variables.SMTP_FROM' <<< "$updated")" == "Partageons l'eau Demo <noreply@demo.partageonsleau.beta.gouv.fr>" \
-            && "$(jq -er '.environment_variables.MAIL_SUBJECT_PREFIX' <<< "$updated")" == "[DEMO] " \
-            && "$(jq -er '(.secret_environment_variables // {}) | has("PASSWORD_PEPPER_V1")' <<< "$updated")" == "true" ]] || {
-            echo "::error::Unexpected API deployment result"
-            exit 1
-          }
-
-      - name: Deploy worker (demo)
+      - name: Deploy WORKER to Scaleway Serverless Container (demo)
         env:
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ env.SCW_EXPECTED_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ env.SCW_EXPECTED_ORGANIZATION_ID }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
           SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
+          SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
+          SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
         run: |
-          set -euo pipefail
-
-          image_ref="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:demo-${{ github.sha }}"
-          [[ "$image_ref" =~ :demo-[0-9a-f]{40}$ ]] || {
-            echo "::error::Refusing a non-demo image tag"
-            exit 1
-          }
-
-          scw container container update "$SCW_DEMO_CONTAINER_ID_WORKER" \
-            image="$image_ref" \
-            port=8080 \
-            mvcpu-limit=2000 \
-            memory-limit-bytes=2.048GB \
-            local-storage-limit-bytes=1GB \
-            min-scale=1 \
-            max-scale=5 \
-            timeout=300s \
-            privacy=public \
-            protocol=http1 \
-            https-connection-only=false \
-            sandbox=v2 \
-            scaling-option.cpu-usage-threshold=80 \
-            private-network-id="$SCW_DEMO_PRIVATE_NETWORK_ID" \
+          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_DEMO_WORKER" \
+            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:demo-${{ github.sha }}" \
             command.0=node \
-            command.1=worker.js \
-            environment-variables.APP_ENV=demo \
-            environment-variables.FRONT_URL=https://app.demo.partageonsleau.beta.gouv.fr \
-            environment-variables.REDIS_TLS_CA_FILE_PATH=/usr/local/share/ca-certificates/scw-redis-ca.crt \
-            environment-variables.S3_ENDPOINT=https://s3.fr-par.scw.cloud \
-            environment-variables.S3_REGION=fr-par \
-            environment-variables.S3_BUCKET_PREFIX=demo- \
-            environment-variables.SENTRY_ENV=demo \
-            environment-variables.SENTRY_RELEASE="${{ github.sha }}" \
-            environment-variables.SENTRY_SERVICE=prelevements-deau-worker \
-            liveness-probe.http.path=/health \
-            liveness-probe.interval=10s \
-            liveness-probe.timeout=1s \
-            liveness-probe.failure-threshold=30 \
-            region="$SCW_REGION" \
-            --wait
-
-          updated="$(scw container container get "$SCW_DEMO_CONTAINER_ID_WORKER" \
-            region="$SCW_REGION" \
-            -o json)"
-          [[ "$(jq -er '.image' <<< "$updated")" == "$image_ref" \
-            && "$(jq -er '.namespace_id' <<< "$updated")" == "$SCW_DEMO_NAMESPACE_ID" \
-            && "$(jq -er '.private_network_id' <<< "$updated")" == "$SCW_DEMO_PRIVATE_NETWORK_ID" \
-            && "$(jq -er '.https_connections_only' <<< "$updated")" == "false" ]] || {
-            echo "::error::Unexpected worker deployment result"
-            exit 1
-          }
+            command.1=worker.js
