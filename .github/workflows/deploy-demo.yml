@@ -414,6 +414,7 @@ jobs:
             environment-variables.SMTP_HOST=mail.testing.partageonsleau.beta.gouv.fr \
             environment-variables.SMTP_PORT=1025 \
             environment-variables.SMTP_FROM="Partageons l'eau Demo <noreply@demo.partageonsleau.beta.gouv.fr>" \
+            environment-variables.MAIL_SUBJECT_PREFIX="[DEMO] " \
             environment-variables.SENTRY_ENV=demo \
             environment-variables.SENTRY_RELEASE="${{ github.sha }}" \
             environment-variables.SENTRY_SERVICE=prelevements-deau-api \
