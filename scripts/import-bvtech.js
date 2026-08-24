@@ -788,6 +788,10 @@ async function upsertPointDeclarantLink(point, declarant, rawUsage) {
     }
   })
 
+  await prisma.declarantPointPrelevementSecondaryUsage.deleteMany({
+    where: {exploitationId: exploitation.id}
+  })
+
   await syncDeclarantZonesFromPoint({
     declarantUserIds: [declarant.userId],
     pointPrelevementId: point.id,

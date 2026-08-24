@@ -687,9 +687,22 @@ function normalizedUsages(value) {
   return usages.length > 0 ? usages : ['INCONNU']
 }
 
-async function resolveUsageId(usages) {
-  const waterUse = await getWaterUseByLegacyUsage(usages.find(Boolean) ?? 'INCONNU', {rootOnly: true})
-  return waterUse.id
+async function resolveUsageAssignment(usages) {
+  const waterUsesById = new Map()
+
+  for (const usage of usages.length > 0 ? usages : ['INCONNU']) {
+    const waterUse = await getWaterUseByLegacyUsage(usage, {rootOnly: true})
+    waterUsesById.set(waterUse.id, waterUse)
+  }
+
+  const waterUses = [...waterUsesById.values()]
+  const realWaterUses = waterUses.filter(waterUse => !['0', '1'].includes(waterUse.code))
+  const normalizedWaterUses = realWaterUses.length > 0 ? realWaterUses : waterUses.slice(0, 1)
+
+  return {
+    usageId: normalizedWaterUses[0].id,
+    secondaryUsageIds: normalizedWaterUses.slice(1).map(waterUse => waterUse.id)
+  }
 }
 
 function buildNormalizedPointPayload(row) {
@@ -873,13 +886,32 @@ async function importNormalizedPoints(workbook) {
   return summary
 }
 
-async function saveExploitationAndSync(existing, data) {
+async function saveExploitationAndSync(existing, data, secondaryUsageIds = []) {
   const exploitation = existing
     ? await prisma.declarantPointPrelevement.update({
       where: {id: existing.id},
-      data
+      data: {
+        ...data,
+        secondaryUsageLinks: {
+          deleteMany: {},
+          ...(secondaryUsageIds.length > 0
+            ? {createMany: {data: secondaryUsageIds.map(usageId => ({usageId}))}}
+            : {})
+        }
+      }
     })
-    : await prisma.declarantPointPrelevement.create({data})
+    : await prisma.declarantPointPrelevement.create({
+      data: {
+        ...data,
+        ...(secondaryUsageIds.length > 0
+          ? {
+            secondaryUsageLinks: {
+              createMany: {data: secondaryUsageIds.map(usageId => ({usageId}))}
+            }
+          }
+          : {})
+      }
+    })
 
   await syncDeclarantZonesFromPoint({
     declarantUserIds: [data.declarantUserId],
@@ -904,18 +936,19 @@ async function upsertNormalizedExploitation({point, declarant, sourceId, legacyU
     select: {id: true}
   })
 
+  const {usageId, secondaryUsageIds} = await resolveUsageAssignment(legacyUsages)
   const data = {
     declarantUserId: declarant.userId,
     pointPrelevementId: point.id,
     status: 'EN_ACTIVITE',
-    usageId: await resolveUsageId(legacyUsages),
+    usageId,
     startDate,
     endDate,
     sourceId,
     comment
   }
 
-  return saveExploitationAndSync(existing, data)
+  return saveExploitationAndSync(existing, data, secondaryUsageIds)
 }
 
 async function importNormalizedExploitations(workbook, declarants, points) {
@@ -1486,11 +1519,12 @@ async function upsertPointDeclarantLink({point, pointPayload, declarant, rawUsag
     select: {id: true}
   })
 
+  const {usageId, secondaryUsageIds} = await resolveUsageAssignment(mapUsages(rawUsage))
   const data = {
     declarantUserId: declarant.userId,
     pointPrelevementId: point.id,
     status: 'EN_ACTIVITE',
-    usageId: await resolveUsageId(mapUsages(rawUsage)),
+    usageId,
     sourceId,
     comment: compactLines([
       ['Usage source', cell(row, PP_COLUMNS.usage)],
@@ -1498,7 +1532,7 @@ async function upsertPointDeclarantLink({point, pointPayload, declarant, rawUsag
     ])
   }
 
-  return saveExploitationAndSync(existing, data)
+  return saveExploitationAndSync(existing, data, secondaryUsageIds)
 }
 
 async function importPoints(workbook, declarants) {

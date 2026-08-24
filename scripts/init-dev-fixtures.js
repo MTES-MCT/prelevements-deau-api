@@ -4,6 +4,7 @@ import {prisma} from '../db/prisma.js'
 import {randomUUID} from 'node:crypto'
 import {ZONE_PERMISSION_CODES} from '../lib/constants/zone-permissions.js'
 import {allowTemplateDeclarationTypeForDeclarant} from '../lib/models/declaration-type.js'
+import {getWaterUseByCode} from '../lib/services/sandre-water-uses.js'
 import {syncDeclarantZonesFromPoint} from '../lib/services/zone-permissions.js'
 
 const usersToCreate = [
@@ -70,6 +71,7 @@ async function main() {
   const point2 = await prisma.pointPrelevement.findUniqueOrThrow({
     where: {name: '26-2485'}
   })
+  const unknownWaterUse = await getWaterUseByCode('0', {rootOnly: true})
 
   await prisma.instructorZone.upsert({
     where: {
@@ -111,11 +113,9 @@ async function main() {
     create: {
       declarantUserId: declarantUser.declarant.userId,
       pointPrelevementId: point1.id,
-      type: 'PRELEVEUR_DECLARANT'
+      usageId: unknownWaterUse.id
     },
-    update: {
-      type: 'PRELEVEUR_DECLARANT'
-    }
+    update: {}
   })
   await syncDeclarantZonesFromPoint({
     declarantUserIds: [declarantUser.declarant.userId],
@@ -133,11 +133,9 @@ async function main() {
     create: {
       declarantUserId: declarantUser.declarant.userId,
       pointPrelevementId: point2.id,
-      type: 'PRELEVEUR_DECLARANT'
+      usageId: unknownWaterUse.id
     },
-    update: {
-      type: 'PRELEVEUR_DECLARANT'
-    }
+    update: {}
   })
   await syncDeclarantZonesFromPoint({
     declarantUserIds: [declarantUser.declarant.userId],

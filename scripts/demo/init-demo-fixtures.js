@@ -236,7 +236,7 @@ async function resolveUsageId(usage) {
   return waterUse?.id ?? null
 }
 
-async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, type, usage, sourceKey}) {
+async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, usage, sourceKey}) {
   const usageId = await resolveUsageId(usage)
   const points = await prisma.pointPrelevement.findMany({
     where: {
@@ -264,7 +264,7 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, typ
   })
 
   for (const point of points) {
-    await prisma.declarantPointPrelevement.upsert({
+    const exploitation = await prisma.declarantPointPrelevement.upsert({
       where: {
         declarantUserId_pointPrelevementId: {
           declarantUserId,
@@ -272,7 +272,6 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, typ
         }
       },
       update: {
-        type,
         status: 'EN_ACTIVITE',
         usageId,
         startDate: null,
@@ -284,11 +283,13 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, typ
       create: {
         declarantUserId,
         pointPrelevementId: point.id,
-        type,
         status: 'EN_ACTIVITE',
         usageId,
         sourceId: `demo-dpp-${sourceKey}-${point.id}`
       }
+    })
+    await prisma.declarantPointPrelevementSecondaryUsage.deleteMany({
+      where: {exploitationId: exploitation.id}
     })
     await syncDeclarantZonesFromPoint({
       declarantUserIds: [declarantUserId],
@@ -458,7 +459,6 @@ async function main() {
     await syncDeclarantPointPrelevements({
       declarantUserId: user.id,
       pointPrefix: config.pointPrefix,
-      type: config.type,
       usage: config.usage,
       sourceKey: config.key
     })

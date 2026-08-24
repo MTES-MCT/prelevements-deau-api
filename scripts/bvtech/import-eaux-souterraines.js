@@ -526,9 +526,22 @@ function mapUsages(values) {
   return usages.length > 0 ? usages : ['INCONNU']
 }
 
-async function resolveUsageId(usages) {
-  const waterUse = await getWaterUseByLegacyUsage(usages.find(Boolean) ?? 'INCONNU', {rootOnly: true})
-  return waterUse.id
+async function resolveUsageAssignment(usages) {
+  const waterUsesById = new Map()
+
+  for (const usage of usages.length > 0 ? usages : ['INCONNU']) {
+    const waterUse = await getWaterUseByLegacyUsage(usage, {rootOnly: true})
+    waterUsesById.set(waterUse.id, waterUse)
+  }
+
+  const waterUses = [...waterUsesById.values()]
+  const realWaterUses = waterUses.filter(waterUse => !['0', '1'].includes(waterUse.code))
+  const normalizedWaterUses = realWaterUses.length > 0 ? realWaterUses : waterUses.slice(0, 1)
+
+  return {
+    usageId: normalizedWaterUses[0].id,
+    secondaryUsageIds: normalizedWaterUses.slice(1).map(waterUse => waterUse.id)
+  }
 }
 
 function generatedPointSourceId(row) {
@@ -1214,11 +1227,12 @@ async function upsertExploitation({
     select: {id: true}
   })
 
+  const {usageId, secondaryUsageIds} = await resolveUsageAssignment(legacyUsages)
   const data = {
     declarantUserId: declarant.userId,
     pointPrelevementId: point.id,
     status: 'EN_ACTIVITE',
-    usageId: await resolveUsageId(legacyUsages),
+    usageId,
     startDate,
     endDate,
     sourceId,
@@ -1228,11 +1242,28 @@ async function upsertExploitation({
   const exploitation = existing
     ? await prisma.declarantPointPrelevement.update({
       where: {id: existing.id},
-      data,
+      data: {
+        ...data,
+        secondaryUsageLinks: {
+          deleteMany: {},
+          ...(secondaryUsageIds.length > 0
+            ? {createMany: {data: secondaryUsageIds.map(usageId => ({usageId}))}}
+            : {})
+        }
+      },
       select: {id: true}
     })
     : await prisma.declarantPointPrelevement.create({
-      data,
+      data: {
+        ...data,
+        ...(secondaryUsageIds.length > 0
+          ? {
+            secondaryUsageLinks: {
+              createMany: {data: secondaryUsageIds.map(usageId => ({usageId}))}
+            }
+          }
+          : {})
+      },
       select: {id: true}
     })
 

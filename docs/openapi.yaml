@@ -1440,7 +1440,7 @@ components:
     CollecteurExploitationCandidate:
       type: object
       additionalProperties: false
-      required: [id, status, startDate, endDate, isAssociated, canAdd, canRemove, readOnlyReason, point, preleveur, usage, zones]
+      required: [id, status, startDate, endDate, isAssociated, canAdd, canRemove, readOnlyReason, point, preleveur, usage, secondaryUsages, zones]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         status:
@@ -1477,6 +1477,16 @@ components:
                 code: {type: string}
                 label: {type: string}
             - type: 'null'
+        secondaryUsages:
+          type: array
+          uniqueItems: true
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, label]
+            properties:
+              code: {type: string}
+              label: {type: string}
         zones:
           type: array
           items:
@@ -2138,10 +2148,34 @@ components:
     Exploitation:
       type: object
       additionalProperties: true
+      required: [id, status, usageId, usage, secondaryUsages]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         status: {type: string}
-        usage: {type: string}
+        usageId: {$ref: '#/components/schemas/Uuid'}
+        usage: {$ref: '#/components/schemas/WaterUse'}
+        secondaryUsageIds:
+          description: Liste des usages secondaires à enregistrer sur l'exploitation.
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Uuid'}
+        secondaryUsages:
+          description: Usages secondaires sérialisés, distincts de l'usage principal.
+          type: array
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/WaterUse'}
+        expectedUsageId:
+          description: Usage principal observé avant une mise à jour concurrente.
+          oneOf:
+            - {$ref: '#/components/schemas/Uuid'}
+            - type: 'null'
+        expectedSecondaryUsageIds:
+          description: Liste exacte des usages secondaires observés avant mise à jour.
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Uuid'}
         collecteurUserIds:
           type: array
           uniqueItems: true

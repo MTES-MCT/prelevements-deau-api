@@ -39,11 +39,11 @@ enum PointKind {
 model PointPrelevement {
   id String @id @default(uuid()) @db.Uuid
 
-  name          String         @db.Text
-  usageName     String?        @db.Text
+  name          String        @db.Text
+  usageName     String?       @db.Text
   waterBodyType WaterBodyType
   flowType      PointFlowType
-  pointKind     PointKind      @default(PHYSIQUE)
+  pointKind     PointKind     @default(PHYSIQUE)
 
   nature         PointPrelevementNature?
   withdrawalType PrelevementType?
@@ -140,8 +140,8 @@ model DeclarantPointPrelevement {
   status                      DeclarantPointPrelevementStatus @default(NON_RENSEIGNE)
   startDate                   DateTime?                       @db.Date
   endDate                     DateTime?                       @db.Date
-  usageId                     String?                         @db.Uuid
-  usage                       SandreWaterUse?                 @relation(fields: [usageId], references: [id], onDelete: SetNull)
+  usageId                     String                          @db.Uuid
+  usage                       SandreWaterUse                  @relation(fields: [usageId], references: [id], onDelete: Restrict)
   pointPrelevementNameAliases String[]                        @default([])
 
   abandonReason String? @db.Text
@@ -154,10 +154,11 @@ model DeclarantPointPrelevement {
 
   mostRecentAvailableDate DateTime?
 
-  connectors  DeclarantPointPrelevementConnector[]
-  collecteurs DeclarantCollecteurExploitation[]
-  documents   ResourceDocument[]
-  rules       ResourceRuleExploitation[]
+  connectors          DeclarantPointPrelevementConnector[]
+  collecteurs         DeclarantCollecteurExploitation[]
+  secondaryUsageLinks DeclarantPointPrelevementSecondaryUsage[]
+  documents           ResourceDocument[]
+  rules               ResourceRuleExploitation[]
 
   @@unique([sourceId])
   @@unique([declarantUserId, pointPrelevementId])
@@ -168,6 +169,19 @@ model DeclarantPointPrelevement {
   @@index([endDate])
   @@index([usageId])
   @@index([pointPrelevementNameAliases], type: Gin)
+}
+
+model DeclarantPointPrelevementSecondaryUsage {
+  exploitationId String                    @db.Uuid
+  exploitation   DeclarantPointPrelevement @relation(fields: [exploitationId], references: [id], onDelete: Cascade)
+
+  usageId String         @db.Uuid
+  usage   SandreWaterUse @relation(fields: [usageId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@id([exploitationId, usageId])
+  @@index([usageId])
 }
 
 model DeclarantCollecteurExploitation {

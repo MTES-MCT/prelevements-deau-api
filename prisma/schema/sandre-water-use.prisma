@@ -21,11 +21,12 @@ model SandreWaterUse {
   color            String  @default("#6A6A6A") @db.VarChar(7)
   dashboardVisible Boolean @default(true)
 
-  sourceUpdatedAt DateTime?
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
-  exploitations   DeclarantPointPrelevement[]
-  chunks          Chunk[]
+  sourceUpdatedAt            DateTime?
+  createdAt                  DateTime                                  @default(now())
+  updatedAt                  DateTime                                  @updatedAt
+  exploitations              DeclarantPointPrelevement[]
+  secondaryExploitationLinks DeclarantPointPrelevementSecondaryUsage[]
+  chunks                     Chunk[]
 
   @@index([kind])
   @@index([parentId])
