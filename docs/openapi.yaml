@@ -52,6 +52,31 @@ paths:
       responses:
         '204': {description: Demande acceptée}
         default: {$ref: '#/components/responses/Error'}
+  /auth/config:
+    get:
+      tags: [Auth]
+      operationId: getAuthConfig
+      summary: Lister les méthodes d’authentification actives
+      description: >-
+        Route publique. L’ordre retourné correspond à l’ordre configuré dans
+        AUTH_METHODS et indique au client la méthode à proposer par défaut.
+      responses:
+        '200':
+          description: Configuration publique d’authentification
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [methods]
+                properties:
+                  methods:
+                    type: array
+                    minItems: 1
+                    uniqueItems: true
+                    items:
+                      type: string
+                      enum: [magic_link, password]
   /auth/verify:
     post:
       tags: [Auth]
@@ -72,7 +97,86 @@ paths:
           description: Session créée
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/UserSession'}
+              schema: {$ref: '#/components/schemas/AuthSessionResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/password:
+    post:
+      tags: [Auth]
+      operationId: authenticateWithPassword
+      summary: Se connecter par email et mot de passe
+      description: Cette route existe uniquement lorsque la méthode `password` est active.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, minLength: 1, maxLength: 128, writeOnly: true}
+      responses:
+        '200':
+          description: Session créée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthSessionResponse'}
+        '401': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/password/activate:
+    post:
+      tags: [Auth]
+      operationId: activatePassword
+      summary: Choisir le mot de passe initial
+      description: Consomme un lien d’activation à usage unique valable 72 heures.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, password]
+              properties:
+                token: {type: string, writeOnly: true}
+                password: {type: string, minLength: 15, maxLength: 128, writeOnly: true}
+      responses:
+        '200':
+          description: Mot de passe activé et session créée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthSessionResponse'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/password/change:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Modifier son mot de passe
+      description: Invalide les autres sessions et retourne une nouvelle session.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: {type: string, minLength: 1, maxLength: 128, writeOnly: true}
+                newPassword: {type: string, minLength: 15, maxLength: 128, writeOnly: true}
+      responses:
+        '200':
+          description: Mot de passe modifié et session remplacée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthSessionResponse'}
         default: {$ref: '#/components/responses/Error'}
   /auth/logout:
     post:
@@ -95,6 +199,107 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/UserSession'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/password-accesses:
+    get:
+      tags: [Administration, Auth]
+      operationId: listPasswordAccesses
+      summary: Lister les accès par mot de passe
+      description: Cette route administrateur existe uniquement lorsque `password` est actif.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        '200':
+          description: Accès configurés ou activables
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/PasswordAccess'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Administration, Auth]
+      operationId: issuePasswordActivation
+      summary: Créer ou remplacer un lien d’activation
+      description: >-
+        Remplace tout lien antérieur et retourne une URL à usage unique valable
+        72 heures. Un reset d’un credential actif invalide immédiatement ce
+        credential et ses sessions ; une première activation conserve les
+        sessions existantes jusqu’à la consommation du lien. Un administrateur
+        ne peut pas cibler son propre compte.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [userId]
+              properties:
+                userId: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '201':
+          description: Lien créé
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [success, reset, sessionsRevoked, access, activationUrl, expiresAt]
+                properties:
+                  success: {type: boolean, const: true}
+                  reset:
+                    type: boolean
+                    description: Indique si un credential existant a été révoqué.
+                  sessionsRevoked:
+                    type: integer
+                    minimum: 0
+                  access: {$ref: '#/components/schemas/PasswordAccess'}
+                  activationUrl: {type: string, format: uri, writeOnly: true}
+                  expiresAt: {type: string, format: date-time}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/password-accesses/{userId}:
+    delete:
+      tags: [Administration, Auth]
+      operationId: revokePasswordAccess
+      summary: Révoquer un accès par mot de passe
+      description: >-
+        Supprime le credential, le lien éventuel et toutes les sessions de la
+        personne. Un administrateur ne peut pas cibler son propre compte.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Accès révoqué de façon idempotente
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [success, revoked, sessionsRevoked]
+                properties:
+                  success: {type: boolean, const: true}
+                  revoked: {type: boolean}
+                  sessionsRevoked: {type: integer, minimum: 0}
         default: {$ref: '#/components/responses/Error'}
   /declarations:
     post:
@@ -1224,6 +1429,11 @@ paths:
                 additionalProperties: true
         default: {$ref: '#/components/responses/Error'}
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
   parameters:
     DeclarationId:
       in: path
@@ -2093,9 +2303,37 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: string, format: email}
+        expiresAt: {type: string, format: date-time}
         roles:
           type: array
           items: {type: string}
+    AuthSessionResponse:
+      type: object
+      additionalProperties: false
+      required: [success, token, expiresAt]
+      properties:
+        success: {type: boolean, const: true}
+        token: {type: string, writeOnly: true}
+        expiresAt: {type: string, format: date-time}
+    PasswordAccess:
+      type: object
+      additionalProperties: false
+      required: [user, status, passwordSetAt, activationCreatedAt, activationExpiresAt]
+      properties:
+        user:
+          type: object
+          additionalProperties: false
+          required: [id, email, firstName, lastName, role]
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            email: {type: string, format: email}
+            firstName: {type: [string, 'null']}
+            lastName: {type: [string, 'null']}
+            role: {type: string, enum: [DECLARANT, INSTRUCTOR, ADMIN]}
+        status: {type: string, enum: [ACTIVE, PENDING, EXPIRED, NONE]}
+        passwordSetAt: {type: [string, 'null'], format: date-time}
+        activationCreatedAt: {type: [string, 'null'], format: date-time}
+        activationExpiresAt: {type: [string, 'null'], format: date-time}
     Declaration:
       type: object
       additionalProperties: true
