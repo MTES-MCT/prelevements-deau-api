@@ -51,6 +51,7 @@ model Declaration {
   @@index([consolidatedAt])
   @@index([processingStatus])
   @@index([processingQueuedAt])
+  @@index([createdAt, id])
 }
 
 enum DeclarationDataSourceType {

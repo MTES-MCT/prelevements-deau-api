@@ -376,6 +376,33 @@ paths:
                 type: array
                 items: {$ref: '#/components/schemas/Declaration'}
         default: {$ref: '#/components/responses/Error'}
+  /declarations/me/feed:
+    get:
+      tags: [Declarations]
+      operationId: listMyDeclarationFeed
+      summary: Parcourir mon flux de déclarations
+      description: >-
+        Retourne dans un ordre chronologique stable les déclarations et sources de
+        télérelève accessibles au déclarant connecté. Le curseur opaque doit être
+        réutilisé sans modification pour charger la page suivante.
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+        - in: query
+          name: cursor
+          schema: {type: string, minLength: 1, maxLength: 512}
+        - in: query
+          name: includeMeta
+          description: Inclut les compteurs globaux et les droits de création. Peut être désactivé après la première page.
+          schema: {type: boolean, default: true}
+      responses:
+        '200':
+          description: Page du flux unifié
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarationFeedResponse'}
+        default: {$ref: '#/components/responses/Error'}
   /declarations/me/telemetry-sources:
     get:
       tags: [Declarations]
@@ -397,6 +424,14 @@ paths:
       operationId: listMyAllowedDeclarationTypes
       summary: Types de déclaration autorisés
       description: Retourne les types de déclaration disponibles pour le déclarant connecté.
+      parameters:
+        - in: query
+          name: includePreleveurs
+          required: false
+          description: Inclut les préleveurs gérés dans les métadonnées pour un compte collecteur.
+          schema:
+            type: boolean
+            default: true
       responses:
         '200':
           description: Types autorisés
@@ -1156,6 +1191,63 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ResourceAuditHistoryResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /dashboard/territory:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardTerritory
+      summary: Lire les indicateurs du tableau de bord territorial
+      description: >-
+        Retourne les indicateurs du périmètre accessible. Le corpus cartographique
+        historique reste inclus par défaut et peut être omis pour accélérer le rendu
+        initial, puis chargé séparément avec /dashboard/map.
+      parameters:
+        - $ref: '#/components/parameters/DashboardZones'
+        - in: query
+          name: periodType
+          schema: {type: string, enum: [week, month]}
+        - in: query
+          name: period
+          schema: {type: string}
+        - in: query
+          name: year
+          schema: {type: integer, minimum: 2000}
+        - in: query
+          name: waterBodyTypes
+          schema: {type: string}
+        - in: query
+          name: includePoints
+          description: Inclut les points des cartes dans la réponse. Vaut true par défaut pour préserver le contrat historique.
+          schema: {type: boolean, default: true}
+      responses:
+        '200':
+          description: Indicateurs territoriaux
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardTerritory'}
+        default: {$ref: '#/components/responses/Error'}
+  /dashboard/map:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardMap
+      summary: Charger les points d'une carte du tableau de bord
+      description: >-
+        Retourne uniquement le corpus cartographique autorisé. Le périmètre activity
+        est réservé aux déclarants et collecteurs.
+      parameters:
+        - $ref: '#/components/parameters/DashboardZones'
+        - in: query
+          name: scope
+          schema:
+            type: string
+            enum: [territory, activity]
+            default: territory
+      responses:
+        '200':
+          description: Points de la carte demandée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardMap'}
         default: {$ref: '#/components/responses/Error'}
   /dashboard/water-resources/piezometry:
     get:
@@ -2343,6 +2435,57 @@ components:
         type: {type: string}
         status: {type: string}
         createdAt: {type: string, format: date-time}
+    DeclarationFeedEntry:
+      type: object
+      additionalProperties: false
+      required: [id, entryType, kind, createdAt, declaration, source, url]
+      properties:
+        id: {type: string}
+        entryType:
+          type: string
+          enum: [DECLARATION, TELEMETRY]
+        kind:
+          type: string
+          enum: [MANUAL, SPREADSHEET, TELEMETRY, NONE]
+        createdAt: {type: string, format: date-time}
+        declaration: {$ref: '#/components/schemas/Declaration'}
+        source:
+          oneOf:
+            - {$ref: '#/components/schemas/Source'}
+            - type: 'null'
+        url: {type: string, pattern: '^/mes-declarations/'}
+    DeclarationFeedResponse:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: {type: boolean, const: true}
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarationFeedEntry'}
+        meta:
+          type: object
+          additionalProperties: true
+          required: [pagination]
+          properties:
+            countsByKind:
+              type: object
+              additionalProperties: false
+              required: [MANUAL, SPREADSHEET, TELEMETRY, NONE]
+              properties:
+                MANUAL: {type: integer, minimum: 0}
+                SPREADSHEET: {type: integer, minimum: 0}
+                TELEMETRY: {type: integer, minimum: 0}
+                NONE: {type: integer, minimum: 0}
+            total: {type: integer, minimum: 0}
+            pagination:
+              type: object
+              additionalProperties: false
+              required: [limit, hasNext, nextCursor]
+              properties:
+                limit: {type: integer, minimum: 1, maximum: 50}
+                hasNext: {type: boolean}
+                nextCursor: {type: [string, 'null']}
     Source:
       type: object
       additionalProperties: true
@@ -2550,6 +2693,49 @@ components:
         sync: {$ref: '#/components/schemas/MonitoringStationSync'}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+    DashboardMap:
+      type: object
+      additionalProperties: false
+      required: [scope, selectedZoneCodes, unknownZoneCodes, points]
+      properties:
+        scope: {type: string, enum: [territory, activity]}
+        selectedZoneCodes:
+          type: array
+          items: {type: string}
+        unknownZoneCodes:
+          type: array
+          items: {type: string}
+        points:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    DashboardTerritory:
+      type: object
+      additionalProperties: true
+      required: [scope, zones, selectedZoneCodes, unknownZoneCodes, metrics, registeredPrelevements, volumesByUsage, points, activityPoints]
+      properties:
+        scope: {type: string, enum: [TERRITORY, DECLARANT, COLLECTOR]}
+        zones:
+          type: array
+          items: {type: object, additionalProperties: true}
+        selectedZoneCodes:
+          type: array
+          items: {type: string}
+        unknownZoneCodes:
+          type: array
+          items: {type: string}
+        metrics: {type: object, additionalProperties: true}
+        registeredPrelevements: {type: object, additionalProperties: true}
+        volumesByUsage: {type: object, additionalProperties: true}
+        points:
+          type: array
+          items: {type: object, additionalProperties: true}
+        activityPoints:
+          oneOf:
+            - type: array
+              items: {type: object, additionalProperties: true}
+            - type: 'null'
     DashboardWaterResourceStation:
       type: object
       required: [id, type, label, stationCode, details, zones, sync, values]

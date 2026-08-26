@@ -43,6 +43,7 @@ model Source {
   @@index([status])
   @@index([declarationId])
   @@index([apiImportId])
+  @@index([createdAt, id])
 }
 
 enum ChunkInstructionStatus {
