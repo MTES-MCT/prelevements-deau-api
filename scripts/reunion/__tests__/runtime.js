@@ -14,6 +14,7 @@ import {
   assertVersionedS3Bucket,
   attestTargetDatabase,
   completeS3Upload,
+  completeS3UploadWithRetries,
   copyS3Object,
   hashS3Object,
   normalizeMongoReferences,
@@ -142,6 +143,52 @@ test('borne et annule un upload S3 qui ne répond jamais', async t => {
 
   t.regex(error.message, /délai de 10 ms dépassé/)
   t.true(aborted)
+})
+
+test('recrée un upload S3 après une erreur transitoire', async t => {
+  let created = 0
+  let aborted = 0
+  const result = await completeS3UploadWithRetries(() => {
+    created += 1
+    return {
+      async abort() {
+        aborted += 1
+      },
+      async done() {
+        if (created === 1) {
+          const error = new Error('internal error')
+          error.name = 'InternalError'
+          error.$metadata = {httpStatusCode: 500}
+          throw error
+        }
+
+        return {ETag: 'ok'}
+      }
+    }
+  }, 'upload test')
+
+  t.deepEqual(result, {ETag: 'ok'})
+  t.is(created, 2)
+  t.is(aborted, 1)
+})
+
+test('ne retente pas un upload S3 refusé', async t => {
+  let created = 0
+  const error = await t.throwsAsync(completeS3UploadWithRetries(() => {
+    created += 1
+    return {
+      async abort() {},
+      async done() {
+        const forbidden = new Error('forbidden')
+        forbidden.name = 'AccessDenied'
+        forbidden.$metadata = {httpStatusCode: 403}
+        throw forbidden
+      }
+    }
+  }, 'upload test'))
+
+  t.regex(error.message, /upload test: forbidden/)
+  t.is(created, 1)
 })
 
 test('reprend une plage S3 interrompue sans dupliquer son contenu', async t => {

@@ -92,6 +92,36 @@ export async function completeS3Upload(
   }
 }
 
+export async function completeS3UploadWithRetries(
+  createUpload,
+  label,
+  timeoutMs = DEFAULT_S3_STREAM_TIMEOUT_MS
+) {
+  const attempts = 3
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const upload = createUpload()
+    try {
+      return await completeS3Upload(upload, label, timeoutMs)
+    } catch (error) {
+      lastError = error
+      await Promise.resolve().then(() => upload.abort()).catch(() => {})
+      if (attempt === attempts || !isRetryableS3Error(error)) {
+        break
+      }
+
+      await new Promise(resolve => {
+        setTimeout(resolve, attempt * 250)
+      })
+    }
+  }
+
+  const contextualError = new Error(`${label}: ${lastError.message}`, {cause: lastError})
+  contextualError.name = lastError.name
+  contextualError.$metadata = lastError.$metadata
+  throw contextualError
+}
+
 async function streamS3ObjectRanges(context, key, {
   expectedETag,
   onChunk,
@@ -375,23 +405,25 @@ export async function copyS3Object({
       throw new Error(`L’objet source a changé depuis le snapshot: ${sourceKey}`)
     }
 
-    const upload = new Upload({
-      client: target.client,
-      params: {
-        Bucket: target.bucket,
-        Key: normalizedTargetKey,
-        Body: createReadStream(temporaryFile),
-        ContentType: mimeType || sourceResult.mimeType,
-        ContentDisposition: sourceResult.contentDisposition
-          || (filename ? `attachment; filename*=UTF-8''${encodeURIComponent(filename)}` : undefined),
-        Metadata: {
-          sha256: expectedSha256,
-          migration: 'reunion-dep-974',
-          verification: 'complete'
+    await completeS3UploadWithRetries(
+      () => new Upload({
+        client: target.client,
+        params: {
+          Bucket: target.bucket,
+          Key: normalizedTargetKey,
+          Body: createReadStream(temporaryFile),
+          ContentType: mimeType || sourceResult.mimeType,
+          ContentDisposition: sourceResult.contentDisposition
+            || (filename ? `attachment; filename*=UTF-8''${encodeURIComponent(filename)}` : undefined),
+          Metadata: {
+            sha256: expectedSha256,
+            migration: 'reunion-dep-974',
+            verification: 'complete'
+          }
         }
-      }
-    })
-    await completeS3Upload(upload, `Envoi S3 cible ${normalizedTargetKey}`)
+      }),
+      `Envoi S3 cible ${normalizedTargetKey}`
+    )
     outcome = 'created'
   } catch (error) {
     operationError = error
