@@ -90,6 +90,7 @@ model Declarant {
 
   resourceDocuments ResourceDocument[]
   resourceRules     ResourceRule[]
+  contactEmails     DeclarantContactEmail[]
 
   lastDeclarationAt DateTime?
 
@@ -120,6 +121,23 @@ model Declarant {
   @@index([declarantRole])
   @@index([quickDeclarationEnabled])
   @@index([declarationNotificationsEnabled])
+}
+
+model DeclarantContactEmail {
+  id String @id @default(uuid()) @db.Uuid
+
+  declarantUserId String    @db.Uuid
+  declarant       Declarant @relation(fields: [declarantUserId], references: [userId], onDelete: Cascade)
+
+  email     String  @db.Citext
+  isPrimary Boolean @default(false)
+  sourceId  String? @unique @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([declarantUserId, email])
+  @@index([declarantUserId])
 }
 
 enum DeclarantZoneSource {

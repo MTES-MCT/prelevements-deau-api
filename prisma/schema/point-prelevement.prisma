@@ -158,10 +158,11 @@ model DeclarantPointPrelevement {
   collecteurs         DeclarantCollecteurExploitation[]
   secondaryUsageLinks DeclarantPointPrelevementSecondaryUsage[]
   documents           ResourceDocument[]
+  documentLinks       ResourceDocumentExploitation[]
   rules               ResourceRuleExploitation[]
 
   @@unique([sourceId])
-  @@unique([declarantUserId, pointPrelevementId])
+  @@index([declarantUserId, pointPrelevementId], map: "DPP_declarant_point_idx")
   @@index([declarantUserId])
   @@index([pointPrelevementId])
   @@index([status])

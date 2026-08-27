@@ -1,0 +1,3 @@
+legacy_point_id,water_body_type,forced_zone_code,reason
+513,SOUTERRAIN,reg-04,Milieu absent dans Mongo; forage explicitement souterrain
+256,,reg-04,Coordonnees conservees; rattachement territorial explicite a La Reunion

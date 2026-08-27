@@ -18,6 +18,7 @@ import {
 import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
 import {getPreleveurTypeFromUsages} from '../../lib/services/preleveur-types.js'
 import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
+import {findUniqueExploitationBySourceOrPeriod} from '../../lib/services/exploitation-periods.js'
 
 const SOURCE = 'BVTECH'
 const POINT_SOURCE_PREFIX = 'bvtech:eaux-souterraines:point-prelevement'
@@ -1214,16 +1215,13 @@ async function upsertExploitation({
   comment,
   collecteurUserId
 }) {
-  const existing = await prisma.declarantPointPrelevement.findFirst({
-    where: {
-      OR: [
-        {sourceId},
-        {
-          declarantUserId: declarant.userId,
-          pointPrelevementId: point.id
-        }
-      ]
-    },
+  const existing = await findUniqueExploitationBySourceOrPeriod({
+    client: prisma,
+    sourceId,
+    declarantUserId: declarant.userId,
+    pointPrelevementId: point.id,
+    start: startDate,
+    end: endDate,
     select: {id: true}
   })
 

@@ -938,6 +938,53 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DeclarantOverview'}
         default: {$ref: '#/components/responses/Error'}
+  /declarants/{declarantId}/contact-emails:
+    get:
+      tags: [Declarants]
+      operationId: listDeclarantContactEmails
+      summary: Lister les emails de contact métier d’un déclarant
+      description: >-
+        Ces adresses servent aux affichages et notifications métier. Elles ne
+        modifient ni l’adresse de connexion ni ses alias d’authentification.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      responses:
+        '200':
+          description: Emails de contact du déclarant
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarantContactEmailsResponse'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      tags: [Declarants]
+      operationId: replaceDeclarantContactEmails
+      summary: Remplacer atomiquement les emails de contact d’un déclarant
+      description: >-
+        La collection complète est réconciliée dans une transaction. Les
+        identifiants des adresses inchangées sont conservés et un seul contact
+        peut être marqué comme principal.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [contactEmails]
+              properties:
+                contactEmails:
+                  type: array
+                  maxItems: 20
+                  items: {$ref: '#/components/schemas/DeclarantContactEmailInput'}
+      responses:
+        '200':
+          description: Emails de contact remplacés
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarantContactEmailsResponse'}
+        default: {$ref: '#/components/responses/Error'}
   /preleveurs/{declarantId}/points-prelevement:
     get:
       tags: [Instruction]
@@ -2211,6 +2258,10 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        loginEmail: {type: [string, 'null'], format: email}
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
         firstName: {type: [string, 'null']}
         lastName: {type: [string, 'null']}
         role: {type: string, const: DECLARANT}
@@ -2246,6 +2297,10 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        loginEmail: {type: [string, 'null'], format: email}
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
         civility:
           oneOf:
             - type: string
@@ -2372,6 +2427,10 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         userId: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        loginEmail: {type: [string, 'null'], format: email}
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
         firstName: {type: [string, 'null']}
         lastName: {type: [string, 'null']}
         preleveurType:
@@ -2389,6 +2448,32 @@ components:
             type: object
             additionalProperties: true
         right: {$ref: '#/components/schemas/DeclarantRight'}
+    DeclarantContactEmail:
+      type: object
+      additionalProperties: false
+      required: [id, email, isPrimary]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: string, format: email}
+        isPrimary: {type: boolean}
+    DeclarantContactEmailInput:
+      type: object
+      additionalProperties: false
+      required: [email, isPrimary]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Adresse métier; les adresses techniques `@import.local` sont refusées.
+        isPrimary: {type: boolean}
+    DeclarantContactEmailsResponse:
+      type: object
+      additionalProperties: false
+      required: [contactEmails]
+      properties:
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
     UserSession:
       type: object
       additionalProperties: true

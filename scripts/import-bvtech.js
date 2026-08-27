@@ -16,6 +16,7 @@ import {
 import {getWaterUseByLegacyUsage} from '../lib/services/sandre-water-uses.js'
 import {getPreleveurTypeFromUsages} from '../lib/services/preleveur-types.js'
 import {syncDeclarantZonesFromPoint} from '../lib/services/zone-permissions.js'
+import {findUniqueExploitationBySourceOrPeriod} from '../lib/services/exploitation-periods.js'
 
 const DEFAULT_INPUT = 'data/bvtech'
 const SOURCE = 'BVTECH'
@@ -767,26 +768,31 @@ async function upsertPointDeclarantLink(point, declarant, rawUsage) {
   const waterUse = await getWaterUseByLegacyUsage(mapUsage(rawUsage), {rootOnly: true})
   const sourceId = `bvtech:exploitation:${declarant.userId}:${point.id}`
 
-  const exploitation = await prisma.declarantPointPrelevement.upsert({
-    where: {
-      declarantUserId_pointPrelevementId: {
-        declarantUserId: declarant.userId,
-        pointPrelevementId: point.id
-      }
-    },
-    create: {
-      declarantUserId: declarant.userId,
-      pointPrelevementId: point.id,
-      status: 'EN_ACTIVITE',
-      usageId: waterUse.id,
-      sourceId
-    },
-    update: {
-      status: 'EN_ACTIVITE',
-      usageId: waterUse.id,
-      sourceId
-    }
+  const existing = await findUniqueExploitationBySourceOrPeriod({
+    client: prisma,
+    sourceId,
+    declarantUserId: declarant.userId,
+    pointPrelevementId: point.id,
+    operationalOnly: true,
+    select: {id: true}
   })
+  const exploitationData = {
+    status: 'EN_ACTIVITE',
+    usageId: waterUse.id,
+    sourceId
+  }
+  const exploitation = existing
+    ? await prisma.declarantPointPrelevement.update({
+      where: {id: existing.id},
+      data: exploitationData
+    })
+    : await prisma.declarantPointPrelevement.create({
+      data: {
+        declarantUserId: declarant.userId,
+        pointPrelevementId: point.id,
+        ...exploitationData
+      }
+    })
 
   await prisma.declarantPointPrelevementSecondaryUsage.deleteMany({
     where: {exploitationId: exploitation.id}

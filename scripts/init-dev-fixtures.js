@@ -6,6 +6,7 @@ import {ZONE_PERMISSION_CODES} from '../lib/constants/zone-permissions.js'
 import {allowTemplateDeclarationTypeForDeclarant} from '../lib/models/declaration-type.js'
 import {getWaterUseByCode} from '../lib/services/sandre-water-uses.js'
 import {syncDeclarantZonesFromPoint} from '../lib/services/zone-permissions.js'
+import {findUniqueExploitationBySourceOrPeriod} from '../lib/services/exploitation-periods.js'
 
 const usersToCreate = [
   {
@@ -21,6 +22,33 @@ const usersToCreate = [
     role: 'INSTRUCTOR'
   }
 ]
+
+async function upsertFixtureExploitation({sourceId, declarantUserId, pointPrelevementId, usageId}) {
+  const existing = await findUniqueExploitationBySourceOrPeriod({
+    client: prisma,
+    sourceId,
+    declarantUserId,
+    pointPrelevementId,
+    operationalOnly: true,
+    select: {id: true}
+  })
+
+  if (existing) {
+    return prisma.declarantPointPrelevement.update({
+      where: {id: existing.id},
+      data: {sourceId}
+    })
+  }
+
+  return prisma.declarantPointPrelevement.create({
+    data: {
+      declarantUserId,
+      pointPrelevementId,
+      usageId,
+      sourceId
+    }
+  })
+}
 
 async function main() {
   const declarantUser = await prisma.user.upsert({
@@ -103,19 +131,11 @@ async function main() {
     }
   })
 
-  await prisma.declarantPointPrelevement.upsert({
-    where: {
-      declarantUserId_pointPrelevementId: {
-        declarantUserId: declarantUser.declarant.userId,
-        pointPrelevementId: point1.id
-      }
-    },
-    create: {
-      declarantUserId: declarantUser.declarant.userId,
-      pointPrelevementId: point1.id,
-      usageId: unknownWaterUse.id
-    },
-    update: {}
+  await upsertFixtureExploitation({
+    sourceId: 'dev-fixture:exploitation:surface',
+    declarantUserId: declarantUser.declarant.userId,
+    pointPrelevementId: point1.id,
+    usageId: unknownWaterUse.id
   })
   await syncDeclarantZonesFromPoint({
     declarantUserIds: [declarantUser.declarant.userId],
@@ -123,19 +143,11 @@ async function main() {
     source: 'EXPLOITATION'
   })
 
-  await prisma.declarantPointPrelevement.upsert({
-    where: {
-      declarantUserId_pointPrelevementId: {
-        declarantUserId: declarantUser.declarant.userId,
-        pointPrelevementId: point2.id
-      }
-    },
-    create: {
-      declarantUserId: declarantUser.declarant.userId,
-      pointPrelevementId: point2.id,
-      usageId: unknownWaterUse.id
-    },
-    update: {}
+  await upsertFixtureExploitation({
+    sourceId: 'dev-fixture:exploitation:groundwater',
+    declarantUserId: declarantUser.declarant.userId,
+    pointPrelevementId: point2.id,
+    usageId: unknownWaterUse.id
   })
   await syncDeclarantZonesFromPoint({
     declarantUserIds: [declarantUser.declarant.userId],

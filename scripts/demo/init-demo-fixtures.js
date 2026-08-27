@@ -264,13 +264,9 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, usa
   })
 
   for (const point of points) {
+    const exploitationSourceId = `demo-dpp-${sourceKey}-${point.id}`
     const exploitation = await prisma.declarantPointPrelevement.upsert({
-      where: {
-        declarantUserId_pointPrelevementId: {
-          declarantUserId,
-          pointPrelevementId: point.id
-        }
-      },
+      where: {sourceId: exploitationSourceId},
       update: {
         status: 'EN_ACTIVITE',
         usageId,
@@ -278,14 +274,14 @@ async function syncDeclarantPointPrelevements({declarantUserId, pointPrefix, usa
         endDate: null,
         abandonReason: null,
         comment: null,
-        sourceId: `demo-dpp-${sourceKey}-${point.id}`
+        sourceId: exploitationSourceId
       },
       create: {
         declarantUserId,
         pointPrelevementId: point.id,
         status: 'EN_ACTIVITE',
         usageId,
-        sourceId: `demo-dpp-${sourceKey}-${point.id}`
+        sourceId: exploitationSourceId
       }
     })
     await prisma.declarantPointPrelevementSecondaryUsage.deleteMany({
