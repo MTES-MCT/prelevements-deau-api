@@ -4,6 +4,21 @@ enum UserRole {
   ADMIN
 }
 
+enum EmailVerificationPurpose {
+  PRIMARY_CHANGE
+  ALIAS_ADD
+}
+
+enum EmailVerificationStatus {
+  PENDING
+  SEND_FAILED
+  EXPIRED
+  VERIFIED
+  CANCELLED
+  SUPERSEDED
+  CONFLICT
+}
+
 model User {
   id    String   @id @default(uuid()) @db.Uuid
   email String?  @unique @db.Citext
@@ -17,14 +32,16 @@ model User {
   deletedAt                 DateTime?
   lastLoginAt               DateTime?
   accountCreationMailSentAt DateTime?
+  authVersion               Int       @default(0)
 
   declarant  Declarant?  @relation("UserDeclarant")
   instructor Instructor? @relation("UserInstructor")
 
-  authTokens    AuthToken[]
-  sessionTokens SessionToken[]
-  emailAliases  UserEmailAlias[]
-  dataExports   DataExport[]
+  authTokens         AuthToken[]
+  sessionTokens      SessionToken[]
+  emailAliases       UserEmailAlias[]
+  emailVerifications UserEmailVerification[]
+  dataExports        DataExport[]
 
   passwordCredential        PasswordCredential?  @relation("PasswordCredentialOwner")
   passwordActivation        PasswordActivation?  @relation("PasswordActivationOwner")
@@ -33,6 +50,47 @@ model User {
   auditEventsAsActor   AuditEvent[] @relation("AuditEventActorUser")
   auditEventsEffective AuditEvent[] @relation("AuditEventEffectiveUser")
   auditEventsAsSubject AuditEvent[] @relation("AuditEventSubjectUser")
+}
+
+model UserEmailVerification {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  purpose EmailVerificationPurpose
+  status  EmailVerificationStatus  @default(PENDING)
+
+  email                String  @db.Citext
+  primaryEmailSnapshot String? @db.Citext
+  tokenHash            String? @unique @db.Char(64)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastAttemptedAt DateTime
+  sentAt          DateTime?
+  expiresAt       DateTime
+  verifiedAt      DateTime?
+  cancelledAt     DateTime?
+
+  @@index([userId])
+  @@index([userId, purpose, createdAt])
+  @@index([status, expiresAt])
+  @@index([email])
+}
+
+// Registre interne maintenu par des triggers SQL afin de sérialiser les
+// revendications concurrentes d'une même adresse entre plusieurs tables.
+model UserEmailIdentity {
+  email String @id @db.Citext
+
+  primaryUserId String? @db.Uuid
+  aliasUserId   String? @db.Uuid
+
+  verificationUserId    String?                   @db.Uuid
+  verificationId        String?                   @unique @db.Uuid
+  verificationPurpose   EmailVerificationPurpose?
+  verificationExpiresAt DateTime?
 }
 
 model UserEmailAlias {
@@ -97,8 +155,8 @@ model Declarant {
   quickDeclarationEnabled         Boolean @default(true)
   declarationNotificationsEnabled Boolean @default(true)
 
-  declarantType DeclarantType @default(NATURAL_PERSON)
-  declarantRole DeclarantRole @default(PRELEVEUR)
+  declarantType DeclarantType  @default(NATURAL_PERSON)
+  declarantRole DeclarantRole  @default(PRELEVEUR)
   preleveurType PreleveurType?
 
   jobTitle     String? @db.Text
@@ -192,6 +250,8 @@ model AuthToken {
   userId String @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  authVersion Int @default(0)
+
   createdAt DateTime @default(now())
   expiresAt DateTime
 
@@ -210,6 +270,9 @@ model SessionToken {
 
   impersonatedByUserId String?   @db.Uuid
   impersonatedByRole   UserRole?
+
+  authVersion               Int  @default(0)
+  impersonatedByAuthVersion Int?
 
   createdAt DateTime @default(now())
   expiresAt DateTime
@@ -239,6 +302,8 @@ model PasswordActivation {
 
   createdByUserId String? @db.Uuid
   createdByUser   User?   @relation("PasswordActivationIssuer", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  authVersion Int @default(0)
 
   createdAt DateTime @default(now())
   expiresAt DateTime

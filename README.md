@@ -130,6 +130,8 @@ Le plafond peut être resserré avec `DOCKER_IMAGE_MAX_BYTES`.
 ## Documentation API
 
 La spec OpenAPI est dans [docs/openapi.yaml](docs/openapi.yaml).
+Le parcours et les précautions de déploiement de la validation des adresses sont
+décrits dans [docs/email-validation.md](docs/email-validation.md).
 
 ```bash
 npm run lint:openapi

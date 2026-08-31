@@ -8,6 +8,7 @@ servers:
     description: Local
 tags:
   - name: Administration
+  - name: Compte
   - name: Auth
   - name: Dashboard
   - name: Declarants
@@ -98,6 +99,49 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AuthSessionResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/email-verifications/confirm:
+    post:
+      tags: [Compte]
+      operationId: confirmEmailVerification
+      summary: Valider une nouvelle adresse email
+      description: >-
+        Consomme un jeton à usage unique reçu sur la nouvelle adresse. La
+        validation d’un changement d’adresse principale révoque les sessions
+        humaines et les liens de connexion en cours, sans ouvrir de session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, minLength: 32, maxLength: 512, writeOnly: true}
+      responses:
+        '200':
+          description: Adresse validée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '400':
+          description: Jeton invalide
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '409':
+          description: L’adresse n’est plus disponible
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '410':
+          description: Lien expiré
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /auth/password:
     post:
@@ -199,6 +243,171 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/UserSession'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/profile:
+    patch:
+      tags: [Compte]
+      operationId: updateMyProfile
+      summary: Modifier mes informations
+      description: >-
+        Modifie uniquement les coordonnées autorisées pour le type de compte.
+        Les rôles, droits, identifiants métier et paramètres de déclaration ne
+        sont pas modifiables depuis Mon compte.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserProfileChanges'}
+      responses:
+        '200':
+          description: Profil mis à jour
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserProfile'}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-change:
+    post:
+      tags: [Compte]
+      operationId: requestPrimaryEmailChange
+      summary: Demander le changement de mon adresse de connexion
+      description: >-
+        Envoie un lien valable 24 heures sur la nouvelle adresse et une alerte
+        de sécurité sur l’adresse actuelle. L’adresse ne change qu’après
+        validation du lien.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailVerificationRequest'}
+      responses:
+        '202':
+          description: Demande enregistrée; le statut indique si l’email a pu être envoyé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-aliases:
+    get:
+      tags: [Compte]
+      operationId: listMyEmailAliases
+      summary: Lister mes autres adresses de connexion validées
+      description: Retourne uniquement les adresses déjà validées et utilisables pour se connecter.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Adresses validées
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [emailAliases]
+                properties:
+                  emailAliases:
+                    type: array
+                    items: {$ref: '#/components/schemas/UserEmailAlias'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Compte]
+      operationId: requestEmailAliasAddition
+      summary: Demander l’ajout d’une autre adresse de connexion
+      description: L’adresse devient utilisable uniquement après validation du lien reçu.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailVerificationRequest'}
+      responses:
+        '202':
+          description: Demande enregistrée; le statut indique si l’email a pu être envoyé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-aliases/{emailAliasId}:
+    delete:
+      tags: [Compte]
+      operationId: deleteMyEmailAlias
+      summary: Supprimer une autre adresse de connexion
+      description: La dernière adresse utilisable d’un compte ne peut pas être supprimée.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: emailAliasId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Adresse supprimée
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [success]
+                properties:
+                  success: {type: boolean, const: true}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-verifications/{verificationId}/resend:
+    post:
+      tags: [Compte]
+      operationId: resendMyEmailVerification
+      summary: Renvoyer un email de validation
+      description: Génère un nouveau lien à usage unique, sous réserve du délai de sécurité entre deux envois.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: verificationId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: État actualisé de la demande
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-verifications/{verificationId}:
+    delete:
+      tags: [Compte]
+      operationId: cancelMyEmailVerification
+      summary: Annuler une validation d’adresse email
+      description: Invalide immédiatement le lien en attente sans modifier les adresses déjà validées.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: verificationId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Demande annulée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /admin/password-accesses:
     get:
@@ -2474,14 +2683,122 @@ components:
         contactEmails:
           type: array
           items: {$ref: '#/components/schemas/DeclarantContactEmail'}
-    UserSession:
+    UserEmailAlias:
       type: object
-      additionalProperties: true
+      additionalProperties: false
+      required: [id, email, createdAt, updatedAt]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: string, format: email}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    UserEmailVerification:
+      type: object
+      additionalProperties: false
+      required: [id, purpose, email, status, createdAt, sentAt, expiresAt, verifiedAt, cancelledAt, nextResendAt, canResend]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        purpose: {type: string, enum: [PRIMARY_CHANGE, ALIAS_ADD]}
+        email: {type: string, format: email}
+        status:
+          type: string
+          enum: [PENDING, SEND_FAILED, EXPIRED, VERIFIED, CANCELLED, SUPERSEDED, CONFLICT]
+        createdAt: {type: string, format: date-time}
+        sentAt: {type: [string, 'null'], format: date-time}
         expiresAt: {type: string, format: date-time}
-        roles:
+        verifiedAt: {type: [string, 'null'], format: date-time}
+        cancelledAt: {type: [string, 'null'], format: date-time}
+        nextResendAt: {type: [string, 'null'], format: date-time}
+        canResend: {type: boolean}
+    EmailVerificationRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: {type: string, format: email, maxLength: 320}
+    EmailVerificationConfirmation:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome: {type: string, enum: [VERIFIED, EXPIRED, CONFLICT, INVALID]}
+        verification: {$ref: '#/components/schemas/UserEmailVerification'}
+        purpose: {type: string, enum: [PRIMARY_CHANGE, ALIAS_ADD]}
+        email: {type: string, format: email}
+        requiresReauthentication: {type: boolean}
+    UserProfileChanges:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        firstName: {type: [string, 'null'], minLength: 1, maxLength: 80}
+        lastName: {type: [string, 'null'], minLength: 1, maxLength: 80}
+        civility:
+          oneOf:
+            - type: string
+              enum: [MR, MRS]
+            - type: 'null'
+        phoneNumber: {type: [string, 'null'], pattern: '^\\d{10}$'}
+        jobTitle: {type: [string, 'null'], minLength: 2, maxLength: 200}
+        socialReason: {type: [string, 'null'], minLength: 3, maxLength: 200}
+        addressLine1: {type: [string, 'null'], minLength: 3, maxLength: 200}
+        addressLine2: {type: [string, 'null'], minLength: 3, maxLength: 200}
+        poBox: {type: [string, 'null'], maxLength: 20}
+        postalCode: {type: [string, 'null'], pattern: '^\\d{5}$'}
+        city: {type: [string, 'null'], minLength: 2, maxLength: 100}
+    UserProfile:
+      type: object
+      additionalProperties: false
+      required: [id, email, emailAliases, emailVerifications, firstName, lastName, lastLoginAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: [string, 'null'], format: email}
+        emailAliases:
+          type: array
+          items: {$ref: '#/components/schemas/UserEmailAlias'}
+        emailVerifications:
+          type: array
+          maxItems: 2
+          items: {$ref: '#/components/schemas/UserEmailVerification'}
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        lastLoginAt: {type: [string, 'null'], format: date-time}
+        declarantType:
+          oneOf:
+            - type: string
+              enum: [NATURAL_PERSON, LEGAL_PERSON]
+            - type: 'null'
+        declarantRole:
+          oneOf:
+            - type: string
+              enum: [PRELEVEUR, COLLECTEUR]
+            - type: 'null'
+        preleveurType:
+          oneOf:
+            - {$ref: '#/components/schemas/PreleveurType'}
+            - type: 'null'
+        socialReason: {type: [string, 'null']}
+        civility:
+          oneOf:
+            - type: string
+              enum: [MR, MRS]
+            - type: 'null'
+        addressLine1: {type: [string, 'null']}
+        addressLine2: {type: [string, 'null']}
+        poBox: {type: [string, 'null']}
+        postalCode: {type: [string, 'null']}
+        city: {type: [string, 'null']}
+        phoneNumber: {type: [string, 'null']}
+        jobTitle: {type: [string, 'null']}
+    UserSession:
+      type: object
+      additionalProperties: true
+      required: [role, user]
+      properties:
+        role: {type: string, enum: [DECLARANT, INSTRUCTOR, ADMIN]}
+        user: {$ref: '#/components/schemas/UserProfile'}
+        expiresAt: {type: string, format: date-time}
+        permissions:
           type: array
           items: {type: string}
     AuthSessionResponse:
