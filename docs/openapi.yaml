@@ -1228,6 +1228,23 @@ paths:
                 type: array
                 items: {$ref: '#/components/schemas/Exploitation'}
         default: {$ref: '#/components/responses/Error'}
+  /points-prelevement/map:
+    get:
+      tags: [Instruction]
+      operationId: listPointMapSummaries
+      summary: Lister les résumés cartographiques des points
+      description: >-
+        Retourne en une seule réponse les données nécessaires à la carte et à
+        la liste des points, limitées au périmètre autorisé de l’utilisateur.
+      responses:
+        '200':
+          description: Résumés cartographiques des points accessibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PointPrelevementMapSummary'}
+        default: {$ref: '#/components/responses/Error'}
   /points-prelevement/{pointId}/usage-name:
     patch:
       tags: [Instruction]
@@ -1504,6 +1521,39 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DashboardMap'}
+        default: {$ref: '#/components/responses/Error'}
+  /dashboard/map/points/{pointId}/actors:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardPointActors
+      summary: Lire les acteurs d’un point affiché sur le tableau de bord
+      description: >-
+        Retourne uniquement les libellés des préleveurs et collecteurs que
+        l’utilisateur est autorisé à voir pour ce point. Aucun email, document,
+        connecteur ou détail de compte n’est inclus.
+      parameters:
+        - $ref: '#/components/parameters/PointId'
+      responses:
+        '200':
+          description: Acteurs visibles du point
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardPointActors'}
+        '400':
+          description: Identifiant du point invalide
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Point hors périmètre dashboard ou droits acteurs insuffisants
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Point absent ou supprimé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         default: {$ref: '#/components/responses/Error'}
   /dashboard/water-resources/piezometry:
     get:
@@ -2928,6 +2978,106 @@ components:
         isReferencePoint: {type: [boolean, 'null']}
         isWaterBodyConnectedToStream: {type: [boolean, 'null']}
         isWaterBodyConnectedToGroundwater: {type: [boolean, 'null']}
+    PointPrelevementMapSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - flowType
+        - waterBodyType
+        - nature
+        - withdrawalType
+        - canReadDetail
+        - usages
+        - searchAliases
+        - searchIdentifiers
+        - managementZones
+        - exploitationStatuses
+        - preleveurLabels
+        - preleveurSirets
+        - preleveurTypes
+        - collecteurStatus
+        - connectorStatus
+        - searchAccess
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+        codeBSS: {type: [string, 'null']}
+        usageName: {type: [string, 'null']}
+        flowType:
+          type: string
+          enum: [PRELEVEMENT, REJET]
+        waterBodyType:
+          type: string
+          enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION]
+        nature:
+          description: Origine du prélèvement ou du rejet.
+          oneOf:
+            - {type: string, enum: [NAPPE, NAPPE_ACCOMPAGNEMENT, COURS_EAU, SOURCE, PLAN_EAU]}
+            - {type: 'null'}
+        withdrawalType:
+          description: Type de prélèvement ou de rejet.
+          oneOf:
+            - {type: string, enum: [LITTORAL, CONTINENTAL, SOUTERRAIN, STOCKAGE]}
+            - {type: 'null'}
+        coordinates:
+          oneOf:
+            - {$ref: '#/components/schemas/GeoJsonPoint'}
+            - type: 'null'
+        canReadDetail: {type: boolean}
+        usages:
+          type: array
+          items: {$ref: '#/components/schemas/WaterUse'}
+        searchAliases:
+          type: array
+          items: {type: string}
+        searchIdentifiers:
+          type: array
+          items: {type: string}
+        communeName: {type: [string, 'null']}
+        managementZones:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, code, name, type]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              code: {type: [string, 'null']}
+              name: {type: string}
+              type:
+                type: string
+                enum: [REGION, DEPARTEMENT, SAGE]
+        exploitationStatuses:
+          type: array
+          items:
+            type: string
+            enum: [EN_ACTIVITE, NON_RENSEIGNE, ABANDONNEE, TERMINEE]
+        preleveurLabels:
+          type: array
+          items: {type: string}
+        preleveurSirets:
+          type: array
+          items: {type: string}
+        preleveurTypes:
+          type: array
+          items: {$ref: '#/components/schemas/PreleveurType'}
+        collecteurStatus:
+          oneOf:
+            - {type: string, enum: [WITH_COLLECTEUR, WITHOUT_COLLECTEUR]}
+            - type: 'null'
+        connectorStatus:
+          oneOf:
+            - {type: string, enum: [WITH_CONNECTOR, WITHOUT_CONNECTOR]}
+            - type: 'null'
+        searchAccess:
+          type: object
+          additionalProperties: false
+          required: [exploitations, declarants]
+          properties:
+            exploitations: {type: boolean}
+            declarants: {type: boolean}
     Exploitation:
       type: object
       additionalProperties: true
@@ -3098,7 +3248,7 @@ components:
     DashboardMap:
       type: object
       additionalProperties: false
-      required: [scope, selectedZoneCodes, unknownZoneCodes, points]
+      required: [scope, selectedZoneCodes, unknownZoneCodes, capabilities, points]
       properties:
         scope: {type: string, enum: [territory, activity]}
         selectedZoneCodes:
@@ -3107,11 +3257,70 @@ components:
         unknownZoneCodes:
           type: array
           items: {type: string}
+        capabilities: {$ref: '#/components/schemas/DashboardMapCapabilities'}
         points:
           type: array
-          items:
-            type: object
-            additionalProperties: true
+          items: {$ref: '#/components/schemas/DashboardMapPoint'}
+    DashboardMapCapabilities:
+      type: object
+      additionalProperties: false
+      required: [readPointActors, readPointDetails]
+      properties:
+        readPointActors:
+          type: boolean
+          description: >-
+            Vaut true uniquement si les acteurs sont lisibles pour tous les
+            points du périmètre sélectionné.
+        readPointDetails:
+          type: boolean
+          description: >-
+            Vaut true uniquement si les fiches sont lisibles pour tous les
+            points du périmètre sélectionné.
+    DashboardMapPoint:
+      type: object
+      additionalProperties: false
+      required: [id, name, usageName, flowType, nature, withdrawalType, coordinates, usages]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+        usageName: {type: [string, 'null']}
+        flowType:
+          type: string
+          enum: [PRELEVEMENT, REJET]
+        nature:
+          oneOf:
+            - {type: string, enum: [NAPPE, NAPPE_ACCOMPAGNEMENT, COURS_EAU, SOURCE, PLAN_EAU]}
+            - type: 'null'
+        withdrawalType:
+          oneOf:
+            - {type: string, enum: [LITTORAL, CONTINENTAL, SOUTERRAIN, STOCKAGE]}
+            - type: 'null'
+        coordinates:
+          oneOf:
+            - {$ref: '#/components/schemas/GeoJsonPoint'}
+            - type: 'null'
+        usages:
+          type: array
+          items: {$ref: '#/components/schemas/WaterUse'}
+    DashboardPointActor:
+      type: object
+      additionalProperties: false
+      required: [id, label]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        label: {type: string}
+    DashboardPointActors:
+      type: object
+      additionalProperties: false
+      required: [pointId, preleveurs, collecteurs]
+      properties:
+        pointId: {$ref: '#/components/schemas/Uuid'}
+        preleveurs:
+          type: array
+          items: {$ref: '#/components/schemas/DashboardPointActor'}
+        collecteurs:
+          type: array
+          items: {$ref: '#/components/schemas/DashboardPointActor'}
     DashboardTerritory:
       type: object
       additionalProperties: true
