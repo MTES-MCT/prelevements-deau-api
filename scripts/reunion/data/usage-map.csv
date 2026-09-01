@@ -1137,3 +1137,5 @@ legacy_exploitation_id,source_usage_codes,primary_usage_code,secondary_usage_cod
 "1248","AEP","5","","override:AEP posterieur au fichier ODS"
 "1249","AEP","5","","override:AEP posterieur au fichier ODS"
 "1250","AEP","5","","override:AEP posterieur au fichier ODS"
+"1251","4B","4","","override:Camion citerne posterieur au fichier ODS"
+"1252","4B","4","","override:Camion citerne posterieur au fichier ODS"
