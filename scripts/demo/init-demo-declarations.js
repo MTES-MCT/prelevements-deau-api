@@ -4,6 +4,7 @@ import '../../lib/config/env.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import process from 'node:process'
 import {fileURLToPath} from 'node:url'
 import {randomUUID} from 'node:crypto'
 import ExcelJS from 'exceljs'
@@ -19,17 +20,18 @@ import {closeQueues} from '../../lib/queues/config.js'
 import {closeRedis} from '../../lib/queues/redis.js'
 import {updateLastDeclarationAt} from '../../lib/models/declarant.js'
 import {notifyDeclarationUploaded} from '../../lib/services/orchestration-client.js'
+import {
+  authorizeLegacyDemoMutation,
+  printLegacyAuthorization
+} from './legacy-demo-guard.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const TEMPLATE_PATH = path.resolve(__dirname, './template_declaration.xlsx')
 
-const OUTPUT_DIR = fs.mkdtempSync(
-  path.join(os.tmpdir(), 'demo-declarations-2025-')
-)
-
 const YEAR = 2025
+let outputDirectory
 
 function mkdirp(dir) {
   fs.mkdirSync(dir, {recursive: true})
@@ -442,8 +444,8 @@ async function createDeclarationsForDeclarant(declarant) {
       month
     })
 
-    mkdirp(OUTPUT_DIR)
-    fs.writeFileSync(path.join(OUTPUT_DIR, filename), Buffer.from(buffer))
+    mkdirp(outputDirectory)
+    fs.writeFileSync(path.join(outputDirectory, filename), Buffer.from(buffer))
 
     await upsertDeclarationAndReplaceFile({
       importSourceId,
@@ -462,7 +464,10 @@ async function main() {
     throw new Error(`Template introuvable: ${TEMPLATE_PATH}`)
   }
 
-  mkdirp(OUTPUT_DIR)
+  outputDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'demo-declarations-2025-')
+  )
+  mkdirp(outputDirectory)
 
   const declarants = await listDemoDeclarants()
 
@@ -477,13 +482,24 @@ async function main() {
   console.log('Terminé')
 }
 
-try {
-  await main()
-} catch (error) {
-  console.error(error)
-  throw error
-} finally {
-  await closeQueues()
-  await closeRedis()
-  await prisma.$disconnect()
+async function run() {
+  const authorization = authorizeLegacyDemoMutation({requireLocalServices: true})
+  printLegacyAuthorization(authorization, 'déclarations PostgreSQL, S3 et orchestration')
+
+  if (!authorization.authorized) {
+    return
+  }
+
+  try {
+    await main()
+  } finally {
+    await closeQueues()
+    await closeRedis()
+    await prisma.$disconnect()
+  }
 }
+
+run().catch(error => {
+  console.error(error?.message ?? error)
+  process.exitCode = 1
+})

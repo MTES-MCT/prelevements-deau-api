@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "recette",
+  "production": false,
+  "appEnv": "recette",
+  "database": {
+    "host": "postgresql.recette.example",
+    "port": "5432",
+    "name": "prelevements_recette",
+    "user": "prelevements_recette_app",
+    "tls": true,
+    "caSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

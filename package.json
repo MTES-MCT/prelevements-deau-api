@@ -8,6 +8,7 @@
     "migrate:demo": "node scripts/demo/migrate-demo.js",
     "migrate:reunion": "node scripts/reunion/migrate-reunion.js",
     "bootstrap:demo": "node scripts/demo/bootstrap-demo.js",
+    "seed:demo": "node scripts/demo/seed-demo.js",
     "import-bvtech": "node scripts/import-bvtech.js",
     "audit:declaration-overlaps": "node scripts/audit-declaration-value-overlaps.js",
     "audit:zone-agent-permissions": "node scripts/audit-zone-agent-permissions.js",

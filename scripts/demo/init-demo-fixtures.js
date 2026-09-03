@@ -1,10 +1,16 @@
 import '../../lib/config/env.js'
+import process from 'node:process'
+
 import {prisma} from '../../db/prisma.js'
 import {ZONE_PERMISSION_CODES} from '../../lib/constants/zone-permissions.js'
 import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
 import {allowTemplateDeclarationTypeForDeclarant} from '../../lib/models/declaration-type.js'
 import {legacyUsageToRootUsageCode} from '../../lib/constants/sandre-water-uses.js'
 import {getPreleveurTypeFromUsages} from '../../lib/services/preleveur-types.js'
+import {
+  authorizeLegacyDemoMutation,
+  printLegacyAuthorization
+} from './legacy-demo-guard.js'
 
 const DEMO_SERIES = [
   {prefix: 'ougc', count: 50, waterBodyTypes: ['SOUTERRAIN', 'SUPERFICIELLE'], labels: ['Forage', 'Pompage']},
@@ -465,11 +471,22 @@ async function main() {
   await upsertInstructorAccount(zone.id)
 }
 
-main()
-  .catch(error => {
-    console.error(error)
-    process.exit(1)
-  })
-  .finally(async () => {
+async function run() {
+  const authorization = authorizeLegacyDemoMutation()
+  printLegacyAuthorization(authorization, 'fixtures PostgreSQL')
+
+  if (!authorization.authorized) {
+    return
+  }
+
+  try {
+    await main()
+  } finally {
     await prisma.$disconnect()
-  })
+  }
+}
+
+run().catch(error => {
+  console.error(error?.message ?? error)
+  process.exitCode = 1
+})
