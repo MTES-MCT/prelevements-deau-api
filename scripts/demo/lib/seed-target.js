@@ -3,6 +3,7 @@ import {readFile, stat} from 'node:fs/promises'
 import path from 'node:path'
 
 import dotenvFlow from 'dotenv-flow'
+import {DEMO_DATABASE_ENDPOINTS} from '../database-target.js'
 
 const TARGET_POLICY_VERSION = 1
 export const ACCOUNT_KEYS = Object.freeze([
@@ -61,11 +62,7 @@ export const BUILTIN_TARGET_POLICIES = deepFreeze({
     appEnvironments: ['demo'],
     database: {
       mode: 'exact',
-      hosts: [
-        '163.172.7.73',
-        'rw-ea5a07db-05df-4869-9e57-fa5f5c6c81cc.rdb.fr-par.scw.cloud'
-      ],
-      port: '17063',
+      endpoints: DEMO_DATABASE_ENDPOINTS,
       name: 'prelevements_demo',
       user: 'prelevements_demo_app',
       tls: true,
@@ -462,17 +459,17 @@ function assertDatabaseMatchesPolicy(database, policy, target) {
     return
   }
 
+  const endpoints = policy.endpoints ?? policy.hosts.map(host => ({host, port: policy.port}))
+  const endpoint = endpoints.find(candidate => candidate.host === database.host)
   const expected = {
-    host: policy.hosts,
-    port: policy.port,
     name: policy.name,
     user: policy.user,
     tls: policy.tls,
     caSha256: policy.tls ? policy.caSha256 : null
   }
   const comparisons = {
-    host: expected.host.includes(database.host),
-    port: database.port === expected.port,
+    host: Boolean(endpoint),
+    port: database.port === endpoint?.port,
     name: database.name === expected.name,
     user: database.user === expected.user,
     tls: database.tls === expected.tls,

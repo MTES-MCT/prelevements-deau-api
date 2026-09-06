@@ -43,6 +43,27 @@ test('accepte l’adresse IP publique exacte de PostgreSQL demo', t => {
   t.is(parsed.hostname, '163.172.7.73')
 })
 
+test('accepte uniquement le couple IP et port privés de PostgreSQL demo', t => {
+  const parsed = validateDemoAdminDatabaseUrl(databaseUrl({host: '172.16.12.2', port: '5432'}))
+  t.is(parsed.hostname, '172.16.12.2')
+  t.is(parsed.port, '5432')
+
+  t.throws(() => validateDemoAdminDatabaseUrl(databaseUrl({host: '172.16.12.2'})), {message: /port PostgreSQL demo doit être 5432/})
+  t.throws(() => validateDemoAdminDatabaseUrl(databaseUrl({host: '127.0.0.1', port: '5432'})), {message: /instance PostgreSQL demo attendue/})
+  t.throws(() => validateDemoAdminDatabaseUrl(databaseUrl({host: '172.16.12.3', port: '5432'})), {message: /instance PostgreSQL demo attendue/})
+})
+
+test('le réseau privé ne relâche ni le rôle ni la base ni TLS', t => {
+  for (const override of [
+    {user: 'prelevements_demo_app'},
+    {database: 'prod-partageons-leau-api'},
+    {sslmode: 'require'},
+    {sslrootcert: null}
+  ]) {
+    t.throws(() => validateDemoAdminDatabaseUrl(databaseUrl({host: '172.16.12.2', port: '5432', ...override})))
+  }
+})
+
 test('refuse une autre instance PostgreSQL', t => {
   const error = t.throws(() => validateDemoAdminDatabaseUrl(
     databaseUrl({host: 'database.example.test'})

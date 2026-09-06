@@ -9,11 +9,12 @@ permissions:
 
 concurrency:
   group: deploy-demo
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test_build_deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 70
 
     env:
       TZ: Europe/Paris
@@ -39,8 +40,10 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      #- name: Test (if present)
-      #  run: npm test --if-present
+      - name: Generate Prisma client and run tests
+        run: |
+          npx prisma generate
+          npm test -- --concurrency=3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,6 +56,7 @@ jobs:
           password: ${{ secrets.SCW_SECRET_KEY }}
 
       - name: Build and push immutable image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -66,75 +70,33 @@ jobs:
           tags: |
             ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-${{ github.sha }}
 
-      - name: Check image size and publish demo-latest
+      - name: Check immutable image size and certificates
         env:
-          IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-${{ github.sha }}
-          LATEST_IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-latest
+          IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           DOCKER_IMAGE_MAX_BYTES: 1000000000
         run: |
           docker pull "$IMAGE_REF"
-          trap 'docker image rm "$LATEST_IMAGE_REF" "$IMAGE_REF" >/dev/null 2>&1 || true' EXIT
+          trap 'docker image rm "$IMAGE_REF" >/dev/null 2>&1 || true' EXIT
           npm run check:image-size -- "$IMAGE_REF"
           docker run --rm --entrypoint /bin/sh "$IMAGE_REF" -c \
-            'test -r /app/deploy/certs/demo/redis-ca.pem && test -r /app/deploy/certs/demo/postgres-ca.pem'
+            'test -r /app/deploy/certs/demo/redis-ca.pem && test -r /app/deploy/certs/demo/postgres-ca.pem && test -r /app/scripts/network/migration-service.js'
+
+      - name: Migrate privately and deploy the same digest to demo
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          SCW_DEMO_MIGRATION_CONTAINER_ID: ${{ vars.SCW_DEMO_MIGRATION_CONTAINER_ID }}
+          SCW_DEMO_MIGRATION_NAMESPACE_ID: ${{ vars.SCW_DEMO_MIGRATION_NAMESPACE_ID }}
+          DEMO_MIGRATION_INVOKE_SECRET: ${{ secrets.DEMO_MIGRATION_INVOKE_SECRET }}
+          IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: node deploy/network/ci-demo-deploy.js
+
+      - name: Publish demo-latest after successful deployment
+        env:
+          IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          LATEST_IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:demo-latest
+        run: |
+          docker pull "$IMAGE_REF"
+          trap 'docker image rm "$LATEST_IMAGE_REF" "$IMAGE_REF" >/dev/null 2>&1 || true' EXIT
           docker tag "$IMAGE_REF" "$LATEST_IMAGE_REF"
           docker push "$LATEST_IMAGE_REF"
-
-      - name: Install Scaleway CLI
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | VERSION=2.56.0 sh
-          scw version
-
-      - name: Run DB migrations (blocking)
-        env:
-          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
-          SCW_DEFAULT_REGION: fr-par
-          SCW_JOB_DEFINITION_ID_DEMO_DB: ${{ secrets.SCW_JOB_DEFINITION_ID_DEMO_DB }}
-        run: |
-          job_run="$(scw jobs definition start "$SCW_JOB_DEFINITION_ID_DEMO_DB" region=fr-par --wait -o json)"
-          job_run_id="$(jq -er '.id' <<< "$job_run")"
-          job_state="$(jq -er '.state' <<< "$job_run")"
-
-          if [[ "$job_state" != "succeeded" ]]; then
-            echo "Database migration job $job_run_id finished with state: $job_state"
-            exit 1
-          fi
-
-      - name: Deploy API to Scaleway Serverless Container (demo)
-        env:
-          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
-          SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
-          SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
-          SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
-        run: |
-          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_DEMO_API" \
-            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:demo-${{ github.sha }}" \
-            liveness-probe.http.path=/healthz \
-            liveness-probe.interval=10s \
-            liveness-probe.timeout=2s \
-            liveness-probe.failure-threshold=5 \
-            startup-probe.http.path=/healthz \
-            startup-probe.interval=5s \
-            startup-probe.timeout=2s \
-            startup-probe.failure-threshold=30
-
-      - name: Deploy WORKER to Scaleway Serverless Container (demo)
-        env:
-          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
-          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
-          SCW_DEFAULT_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
-          SCW_DEFAULT_REGION: ${{ env.SCW_REGION }}
-          SCW_REGISTRY_ENDPOINT: ${{ env.SCW_REGISTRY_ENDPOINT }}
-          SCW_IMAGE_NAME: ${{ env.SCW_IMAGE_NAME }}
-        run: |
-          scw container container update "$SCW_SERVERLESS_CONTAINER_ID_DEMO_WORKER" \
-            image="$SCW_REGISTRY_ENDPOINT/$SCW_IMAGE_NAME:demo-${{ github.sha }}" \
-            command.0=node \
-            command.1=worker.js

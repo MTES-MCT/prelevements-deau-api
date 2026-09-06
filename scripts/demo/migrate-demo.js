@@ -2,6 +2,7 @@ import {spawnSync} from 'node:child_process'
 import process from 'node:process'
 
 import pgPkg from 'pg'
+import {getPostgresConnectionOptions} from '../../db/connection-options.js'
 
 import {
   assertConnectedDemoAdminDatabase,
@@ -16,7 +17,7 @@ function fail(message) {
 }
 
 async function assertMigrationTarget(databaseUrl) {
-  const client = new Client({connectionString: databaseUrl})
+  const client = new Client(getPostgresConnectionOptions(databaseUrl))
 
   try {
     await client.connect()

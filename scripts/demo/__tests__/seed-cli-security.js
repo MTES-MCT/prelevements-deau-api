@@ -362,6 +362,41 @@ test('la policy demo exige le rôle applicatif, TLS verify-full et la CA attendu
   }), {message: /TLS PostgreSQL exige/})
 })
 
+test('la policy demo accepte le privé exact sans autoriser localhost ou un croisement de ports', async t => {
+  const attestationInputs = {
+    target: 'demo',
+    dataset: DEFAULT_DATASET,
+    datasetSha256: DATASET_SHA256,
+    accountsSha256: ACCOUNTS_SHA256
+  }
+  const privateUrl = new URL(demoEnvironment().DATABASE_URL)
+  privateUrl.hostname = '172.16.12.2'
+  privateUrl.port = '5432'
+  const attestation = await buildTargetAttestation({
+    ...attestationInputs,
+    targetEnvironment: demoEnvironment({DATABASE_URL: privateUrl.toString()})
+  })
+  t.is(attestation.database.host, '172.16.12.2')
+  t.is(attestation.database.port, '5432')
+  t.is(attestation.database.user, 'prelevements_demo_app')
+  t.true(attestation.database.tls)
+
+  for (const [host, port, field] of [
+    ['127.0.0.1', '5432', 'host'],
+    ['172.16.12.3', '5432', 'host'],
+    ['172.16.12.2', '17063', 'port'],
+    ['rw-ea5a07db-05df-4869-9e57-fa5f5c6c81cc.rdb.fr-par.scw.cloud', '5432', 'port']
+  ]) {
+    const url = new URL(privateUrl)
+    url.hostname = host
+    url.port = port
+    await t.throwsAsync(buildTargetAttestation({
+      ...attestationInputs,
+      targetEnvironment: demoEnvironment({DATABASE_URL: url.toString()})
+    }), {message: new RegExp(`identité PostgreSQL non autorisée \\(${field}\\)`)})
+  }
+})
+
 test('une cible custom exige une policy non-production exacte et sans secret', async t => {
   const directory = await createTestDirectory(t)
   const certificatePath = await writePrivateFile(directory, 'ca.pem', 'fake public CA')

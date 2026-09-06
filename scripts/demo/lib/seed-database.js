@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto'
 import pgPkg from 'pg'
+import {getPostgresConnectionOptions} from '../../../db/connection-options.js'
 
 import {
   READ_ONLY_ZONE_PERMISSIONS,
@@ -87,7 +88,7 @@ export async function withSeedStateSnapshot({
   assertFunction(collect, 'collect')
   assertFunction(createLockClient, 'createLockClient')
 
-  const lockClient = await createLockClient({connectionString: databaseUrl})
+  const lockClient = await createLockClient(getPostgresConnectionOptions(databaseUrl))
   assertLockClient(lockClient)
   let lockAcquired = false
   let state
