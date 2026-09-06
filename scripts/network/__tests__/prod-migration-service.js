@@ -1,4 +1,5 @@
 import {EventEmitter} from 'node:events'
+import {readdir} from 'node:fs/promises'
 
 import test from 'ava'
 import request from 'supertest'
@@ -355,6 +356,41 @@ test('le statut utilise uniquement une transaction lecture seule, vérifie la ci
   t.deepEqual(status.pending, ['20260907_pending'])
   t.deepEqual(status.unfinished, [])
   t.true(disconnected)
+})
+
+test('le registre inclut aussi les migrations historiques sans underscore', async t => {
+  const entries = await readdir(new URL('../../../prisma/migrations/', import.meta.url), {withFileTypes: true})
+  const names = entries.filter(entry => entry.isDirectory()).map(entry => entry.name)
+  const historical = ['20260309093415', '20260312165102', '20260323134706']
+  t.true(historical.every(name => names.includes(name)))
+  let applied = names
+  const createPrisma = async () => ({
+    async $transaction(callback) {
+      return callback({
+        async $executeRawUnsafe() {},
+        async $queryRawUnsafe(sql) {
+          if (sql.includes('current_database()')) {
+            return [DATABASE_STATUS.identity]
+          }
+
+          if (sql.includes('to_regclass')) {
+            return [{present: true}]
+          }
+
+          return applied.map(name => ({name, finishedAt: new Date(), rolledBackAt: null}))
+        }
+      })
+    },
+    async $disconnect() {}
+  })
+  const complete = await readMigrationStatus(DATABASE_URL, {createPrisma})
+  t.is(complete.expectedCount, names.length)
+  t.deepEqual(complete.pending, [])
+
+  applied = names.filter(name => !historical.includes(name))
+  const missingHistorical = await readMigrationStatus(DATABASE_URL, {createPrisma})
+  t.is(missingHistorical.expectedCount, names.length)
+  t.deepEqual(missingHistorical.pending, historical)
 })
 
 test('un arrêt à vide ne déclenche ni SQL ni migration', async t => {

@@ -26,7 +26,7 @@ export async function readMigrationStatus(databaseUrl, {
 
   try {
     const entries = await readDirectory(MIGRATIONS_DIRECTORY, {withFileTypes: true})
-    const expected = entries.filter(entry => entry.isDirectory() && /^\d+_/.test(entry.name))
+    const expected = entries.filter(entry => entry.isDirectory())
       .map(entry => entry.name).sort()
 
     return await prisma.$transaction(async transaction => {
