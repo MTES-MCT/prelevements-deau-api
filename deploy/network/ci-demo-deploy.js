@@ -13,7 +13,7 @@ export const DEMO = Object.freeze({
   workerId: '383f440d-12b5-452e-8be3-a6c0c84e639b',
   registry: 'rg.fr-par.scw.cloud/prelevements-deau-api/prelevements-deau-api',
   migrationNamespaceName: 'demo-partageons-leau-migrations',
-  migrationName: 'demo-prelevement-deau-api-migrations'
+  migrationName: 'demo-api-migrations'
 })
 
 const SHA = /^[\da-f]{40}$/

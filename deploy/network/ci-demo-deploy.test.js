@@ -2,6 +2,12 @@ import test from 'ava'
 import {readFile} from 'node:fs/promises'
 import {DEMO, deployDemo, readDemoConfiguration} from './ci-demo-deploy.js'
 
+test('le nom de l’exécuteur respecte la limite Scaleway sans changer le namespace', t => {
+  t.is(DEMO.migrationName, 'demo-api-migrations')
+  t.true(DEMO.migrationName.length <= 34)
+  t.is(DEMO.migrationNamespaceName, 'demo-partageons-leau-migrations')
+})
+
 const MIGRATION_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const MIGRATION_NAMESPACE_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
 const OLD_RELEASE = '1'.repeat(40)

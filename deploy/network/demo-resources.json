@@ -18,6 +18,8 @@
   "proxySecurityGroupId": "7ad746d3-d659-4db7-bc97-59f8e5e2fc0d",
   "proxyRootVolumeId": "ee198410-bea0-4c5e-b094-0bf142992530",
   "migrationNamespaceId": "734b7bd7-fb7b-47e8-9798-deb10d33ece9",
+  "migrationContainerId": "c5a1cf3d-2787-4855-a182-16076bf0b887",
+  "migrationContainerName": "demo-api-migrations",
   "postgresqlInstanceId": "ea5a07db-05df-4869-9e57-fa5f5c6c81cc",
   "postgresqlPrivateHost": "172.16.12.2",
   "postgresqlPrivatePort": 5432,
