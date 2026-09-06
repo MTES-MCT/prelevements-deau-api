@@ -254,6 +254,8 @@ test('le workflow demo bloque sur le service privé et transmet le digest du bui
   const workflow = await readFile(new URL('../../.github/workflows/deploy-demo.yml', import.meta.url), 'utf8')
   t.true(workflow.includes('branches: ["demo"]'))
   t.regex(workflow, /cancel-in-progress: false/)
+  t.regex(workflow, /Generate Prisma client and run tests\n\s+timeout-minutes: 10/)
+  t.regex(workflow, /npm test -- --concurrency=3 --timeout=2m/)
   t.regex(workflow, /id: build/)
   t.regex(workflow, /@\${{ steps\.build\.outputs\.digest }}/)
   t.regex(workflow, /run: node deploy\/network\/ci-demo-deploy\.js/)

@@ -41,9 +41,11 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client and run tests
+        timeout-minutes: 10
         run: |
           npx prisma generate
-          npm test -- --concurrency=3
+          # Large in-memory fixtures can exceed AVA's default 10s inactivity window on CI.
+          npm test -- --concurrency=3 --timeout=2m
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
