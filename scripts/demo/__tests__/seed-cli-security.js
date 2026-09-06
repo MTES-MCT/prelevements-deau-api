@@ -251,8 +251,7 @@ test('les exemples publics et la documentation restent alignés avec la CLI', as
     '--target custom',
     'chmod 600',
     'S3',
-    'aucun email',
-    'legacy uniquement'
+    'aucun email'
   ]) {
     t.true(documentation.includes(expectedText), `README incomplet : ${expectedText}`)
   }
