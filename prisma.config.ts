@@ -3,10 +3,11 @@
 import './lib/config/env.js'
 import process from 'node:process'
 import {defineConfig} from 'prisma/config'
+import {getPrismaDatabaseUrl} from './scripts/network/prisma-database-url.js'
 
 function getDatabaseUrl(): string | undefined {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-  return process.env.DATABASE_URL
+  return getPrismaDatabaseUrl(process.env.DATABASE_URL)
 }
 
 export default defineConfig({
