@@ -20,6 +20,26 @@ const SHA = /^[\da-f]{40}$/
 const UUID = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/
 const API = 'https://api.scaleway.com/containers/v1/regions/fr-par'
 const MIGRATION_COMMAND = ['node', 'scripts/network/migration-service.js']
+const READ_ATTEMPTS = 6
+const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504])
+const TRANSIENT_NETWORK_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET'
+])
+
+function isTransientNetworkError(error) {
+  return error?.name === 'TimeoutError'
+    || TRANSIENT_NETWORK_CODES.has(error?.code ?? error?.cause?.code)
+}
 
 function requireCondition(condition, message) {
   if (!condition) {
@@ -111,19 +131,49 @@ export async function deployDemo(configuration, {fetch: fetchRequest = globalThi
   ]
 
   async function jsonRequest(url, options = {}, timeout = 30_000) {
-    let response
-    try {
-      response = await fetchRequest(url, {...options, redirect: 'error', signal: AbortSignal.timeout(timeout)})
-    } catch {
-      throw new Error('Réponse réseau absente ; aucune répétition automatique de l’action.')
+    const method = options.method ?? 'GET'
+    const label = `${method} ${new URL(url).pathname}`
+    const attempts = method === 'GET' ? READ_ATTEMPTS : 1
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      let response
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        response = await fetchRequest(url, {...options, redirect: 'error', signal: AbortSignal.timeout(timeout)})
+      } catch (error) {
+        if (attempt + 1 < attempts && isTransientNetworkError(error)) {
+          // eslint-disable-next-line no-await-in-loop
+          await wait(5000)
+          continue
+        }
+
+        throw new Error(`Réponse réseau absente pour ${label} ; déploiement interrompu, aucune répétition d’écriture.`)
+      }
+
+      if (!response.ok) {
+        // Never consume or log error bodies, which may contain sensitive data.
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await response.body?.cancel()
+        } catch {}
+
+        if (attempt + 1 < attempts && TRANSIENT_HTTP_STATUSES.has(response.status)) {
+          // eslint-disable-next-line no-await-in-loop
+          await wait(5000)
+          continue
+        }
+
+        throw new Error(`Requête ${label} refusée (HTTP ${response.status}), déploiement interrompu.`)
+      }
+
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        return await response.json()
+      } catch {
+        throw new Error(`Réponse JSON invalide pour ${label} ; déploiement interrompu.`)
+      }
     }
 
-    requireCondition(response.ok, `Requête refusée (HTTP ${response.status}), déploiement interrompu.`)
-    try {
-      return await response.json()
-    } catch {
-      throw new Error('Réponse JSON invalide ; déploiement interrompu.')
-    }
+    throw new Error(`Lecture ${label} indisponible après ${attempts} tentatives.`)
   }
 
   const getContainer = id => jsonRequest(`${API}/containers/${id}`, {headers})

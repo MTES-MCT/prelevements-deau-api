@@ -82,6 +82,10 @@ function fixture(options = {}) {
       }
 
       if (method === 'PATCH') {
+        if (id === MIGRATION_ID && options.patchFailure) {
+          return json({detail: INVOKE_SECRET}, 503)
+        }
+
         Object.assign(containers[id], body)
         if (id === MIGRATION_ID && options.secretDrift) {
           containers[id].secret_environment_variables.UNEXPECTED = 'redacted'
@@ -101,6 +105,19 @@ function fixture(options = {}) {
       }
 
       if (url.pathname === '/healthz') {
+        if (containers[MIGRATION_ID].environment_variables.MIGRATION_RELEASE_SHA === RELEASE && options.readFailures?.length) {
+          const failure = options.readFailures.shift()
+          if (failure instanceof Error) {
+            throw failure
+          }
+
+          if (failure === 'invalid-json') {
+            return new Response(INVOKE_SECRET, {status: 200})
+          }
+
+          return json({detail: INVOKE_SECRET}, failure)
+        }
+
         return json({ok: true, release: containers[MIGRATION_ID].environment_variables.MIGRATION_RELEASE_SHA})
       }
 
@@ -113,6 +130,10 @@ function fixture(options = {}) {
       }
 
       if (url.pathname === '/migrate') {
+        if (options.postFailure) {
+          return json({detail: INVOKE_SECRET}, 503)
+        }
+
         if (options.lostResponse === 'before') {
           throw new Error('Simulated lost response')
         }
@@ -164,6 +185,104 @@ test('migration puis API et worker utilisent le même digest sans réécrire les
   t.is(posts[0].headers['X-Auth-Token'], AUTH)
   t.is(posts[0].headers['X-Migration-Secret'], INVOKE_SECRET)
   t.is(result.migrationOperationId, OPERATION_ID)
+})
+
+for (const status of [502, 503, 504]) {
+  test(`un GET ${status} après redéploiement migration est retenté sans répéter les écritures`, async t => {
+    const fake = fixture({readFailures: [status]})
+    const waits = []
+    await deployDemo(configuration(), {...fake, async wait(duration) {
+      waits.push(duration)
+    }})
+
+    t.deepEqual(waits, [5000])
+    t.is(fake.calls.filter(call => call.method === 'POST').length, 1)
+    t.deepEqual(fake.calls.filter(call => call.method === 'PATCH').map(call => call.url.split('/').at(-1)), [MIGRATION_ID, DEMO.apiId, DEMO.workerId])
+  })
+}
+
+test('les erreurs réseau transitoires d’un GET peuvent être retentées', async t => {
+  const reset = new TypeError('fetch failed', {cause: Object.assign(new Error(INVOKE_SECRET), {code: 'ECONNRESET'})})
+  const timeout = new DOMException(INVOKE_SECRET, 'TimeoutError')
+  const fake = fixture({readFailures: [reset, timeout]})
+  const waits = []
+  await deployDemo(configuration(), {...fake, async wait(duration) {
+    waits.push(duration)
+  }})
+
+  t.deepEqual(waits, [5000, 5000])
+  t.is(fake.calls.filter(call => call.method === 'POST').length, 1)
+})
+
+test('une lecture 503 persistante est bornée et bloque avant tout déploiement métier', async t => {
+  const fake = fixture({readFailures: Array.from({length: 6}, () => 503)})
+  const waits = []
+  const error = await t.throwsAsync(deployDemo(configuration(), {...fake, async wait(duration) {
+    waits.push(duration)
+  }}), {message: /GET \/healthz refusée \(HTTP 503\)/})
+
+  t.is(waits.length, 5)
+  t.false(error.message.includes(INVOKE_SECRET))
+  t.is(fake.calls.filter(call => call.url.endsWith('/healthz') && call.headers?.['X-Auth-Token'] === AUTH).length, 7)
+  t.false(fake.calls.some(call => call.method === 'POST'))
+  t.deepEqual(fake.calls.filter(call => call.method === 'PATCH').map(call => call.url.split('/').at(-1)), [MIGRATION_ID])
+})
+
+for (const status of [401, 403]) {
+  test(`un GET ${status} ne peut pas être retenté`, async t => {
+    const fake = fixture({readFailures: [status]})
+    const waits = []
+    const error = await t.throwsAsync(deployDemo(configuration(), {...fake, async wait(duration) {
+      waits.push(duration)
+    }}), {message: new RegExp(`GET /healthz refusée \\(HTTP ${status}\\)`)})
+
+    t.deepEqual(waits, [])
+    t.false(error.message.includes(INVOKE_SECRET))
+    t.false(fake.calls.some(call => call.method === 'POST'))
+  })
+}
+
+test('un JSON invalide n’est pas retenté et son contenu reste masqué', async t => {
+  const fake = fixture({readFailures: ['invalid-json']})
+  const waits = []
+  const error = await t.throwsAsync(deployDemo(configuration(), {...fake, async wait(duration) {
+    waits.push(duration)
+  }}), {message: /JSON invalide pour GET \/healthz/})
+
+  t.deepEqual(waits, [])
+  t.false(error.message.includes(INVOKE_SECRET))
+  t.false(fake.calls.some(call => call.method === 'POST'))
+})
+
+test('une erreur TLS non transitoire échoue sans retry ni détails sensibles', async t => {
+  const tlsError = new TypeError('fetch failed', {cause: Object.assign(new Error(INVOKE_SECRET), {code: 'CERT_HAS_EXPIRED'})})
+  const fake = fixture({readFailures: [tlsError]})
+  const waits = []
+  const error = await t.throwsAsync(deployDemo(configuration(), {...fake, async wait(duration) {
+    waits.push(duration)
+  }}), {message: /Réponse réseau absente pour GET \/healthz/})
+
+  t.deepEqual(waits, [])
+  t.false(error.message.includes(INVOKE_SECRET))
+  t.false(fake.calls.some(call => call.method === 'POST'))
+})
+
+test('un PATCH 503 n’est jamais retenté', async t => {
+  const fake = fixture({patchFailure: true})
+  const error = await t.throwsAsync(deployDemo(configuration(), fake), {message: /PATCH \/containers\/v1\/regions\/fr-par\/containers\/.*HTTP 503/})
+
+  t.false(error.message.includes(INVOKE_SECRET))
+  t.is(fake.calls.filter(call => call.method === 'PATCH').length, 1)
+  t.false(fake.calls.some(call => call.method === 'POST'))
+})
+
+test('un POST 503 est suivi seulement d’une lecture de statut, jamais d’un second POST', async t => {
+  const fake = fixture({postFailure: true})
+  await t.throwsAsync(deployDemo(configuration(), fake), {message: /opération non identifiable/})
+
+  t.is(fake.calls.filter(call => call.method === 'POST').length, 1)
+  t.is(fake.calls.filter(call => call.method === 'PATCH').length, 1)
+  t.true(fake.calls.at(-1).url.endsWith('/status'))
 })
 
 test('un namespace hors projet bloque avant toute écriture', async t => {
