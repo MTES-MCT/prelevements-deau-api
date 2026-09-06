@@ -22,7 +22,7 @@ Les scripts spécialisés hors npm sont conservés dans `scripts/` et doivent ê
 
 - `scripts/bvtech/*.js`
 - `scripts/dropt/**`
-- `scripts/demo/init-demo-declarations.js`
+- `scripts/demo/bootstrap-demo.js` : initialisation administrative de demo, décrite dans `scripts/demo/README.md`.
 
 Avant de lancer un import, vérifier les variables `.env`, l'accès PostgreSQL, l'accès S3 et la présence des fichiers source dans `data/`.
 

@@ -24,7 +24,6 @@
     "backfill:chunk-actors": "node scripts/backfill-chunk-actors.js",
     "backfill:declarant-activity": "node scripts/backfill-declarant-activity.js",
     "backfill:point-flow-types": "node scripts/backfill-point-flow-types.js",
-    "fix:tech-piezometer-zone": "node scripts/fix-tech-piezometer-zone.js",
     "sync:declaration-files": "node scripts/sync-declaration-files.js",
     "import-zone-monitoring-stations": "node scripts/import-zone-monitoring-stations.js",
     "sync:sandre-alert-zones": "node scripts/sync-sandre-alert-zones.js"

@@ -1,79 +1,58 @@
-# Bootstrap minimal de l'environnement demo
+# Outils manuels de préparation de demo
 
-Le nouvel environnement `demo` doit rester vide de données métier. Le bootstrap
-importe les zones de référence, vérifie le référentiel SANDRE créé par les
-migrations, configure `agent@demo.fr` comme instructeur administrateur de la
-zone `sage-SAGE04025`, puis injecte le compte de service fourni par variables
-d'environnement. Le secret du compte de service n'est jamais affiché.
+Ces outils ciblent uniquement l'environnement `demo` autorisé par leurs
+garde-fous. Ils ne sont pas les points d'entrée des migrations privées de la CI.
 
-Variables obligatoires :
+## Bootstrap minimal
+
+`npm run bootstrap:demo` importe les zones de référence, vérifie le référentiel
+SANDRE créé par les migrations, initialise un instructeur et un compte de service,
+puis accorde les droits au rôle applicatif.
+
+Le bootstrap exige une base métier vide. Il refuse de continuer si un déclarant,
+un point ou une déclaration existe déjà et contrôle ces compteurs en fin
+d'exécution. Il ne doit pas être lancé sur un environnement contenant un jeu
+métier à conserver.
+
+Préparer séparément une configuration privée :
 
 - `APP_ENV=demo` ;
-- `DATABASE_URL` ;
-- `DEMO_DATABASE_NAME=prelevements_demo`, nom exact figé de la base demo ;
-- `DEMO_DATABASE_APP_USER=prelevements_demo_app`, rôle non administrateur figé utilisé par l'API et le worker ;
-- `DEMO_SERVICE_ACCOUNT_CLIENT_ID` avec un identifiant commençant par `sa_` ;
-- `DEMO_SERVICE_ACCOUNT_CLIENT_SECRET`, transmis comme secret d'exécution.
+- `DATABASE_URL` avec la base, le rôle administrateur, le point d'accès et le
+  certificat autorisés par le garde-fou ;
+- `DEMO_DATABASE_NAME` et `DEMO_DATABASE_APP_USER`, conformes aux identités attendues ;
+- `DEMO_SERVICE_ACCOUNT_CLIENT_ID`, commençant par `sa_` ;
+- `DEMO_SERVICE_ACCOUNT_CLIENT_SECRET`.
 
-Pour éviter toute migration ou initialisation sur une autre instance, le garde
-exige que `DATABASE_URL` cible l'endpoint public de l'instance PostgreSQL demo,
-le port `17063`, la base `prelevements_demo`, l'utilisateur `demo_admin` et
-`sslmode=verify-full`. Il exige aussi le CA embarqué via
-`sslrootcert=/usr/local/share/ca-certificates/scw-postgres-ca.crt`.
-
-Exécution idempotente :
+Après contrôle de la cible et autorisation explicite :
 
 ```bash
 APP_ENV=demo npm run bootstrap:demo
 ```
 
-Le bootstrap refuse de continuer si un déclarant, un point ou une déclaration
-existe déjà. Il termine en vérifiant que ces trois compteurs restent à zéro.
-Il accorde aussi au rôle applicatif les droits sur les tables, séquences et
-fonctions existantes, ainsi que les privilèges par défaut nécessaires aux
-objets créés par les migrations suivantes.
+Le bootstrap accorde les droits sur les tables, séquences et fonctions
+existantes ainsi que les privilèges par défaut requis pour les objets suivants.
 
-Les migrations du job Scaleway appellent directement
-`node scripts/demo/migrate-demo.js` ; la commande locale équivalente est
-`npm run migrate:demo`. Le garde refuse toute URL qui ne cible pas exactement
-la base `prelevements_demo` avec l'utilisateur `demo_admin`, avant d'appeler
-Prisma.
+## Migrations manuelles
+
+`npm run migrate:demo` vérifie l'identité PostgreSQL autorisée avant d'appeler
+`prisma migrate deploy`. Il reste un utilitaire manuel distinct du migrateur
+privé utilisé lors des déploiements.
+
+Les garde-fous imposent l'environnement, la base, le rôle, l'adresse, le port,
+`sslmode=verify-full` et le certificat attendu. Utiliser une révision compatible
+avec la cible et son accès réseau : ces scripts ne créent ni réseau ni tunnel
+et ne rendent pas implicitement admissible une adresse locale de transport.
+Ne pas contourner un refus pour réutiliser une ancienne configuration.
 
 ## Reset manuel
 
-Le reset efface les données métier, sans supprimer les zones ni les
-référentiels. Il est protégé par quatre contrôles indépendants :
+Le reset efface les données métier, sans supprimer les zones ni les référentiels.
+Il exige une sauvegarde adaptée, une autorisation explicite et les protections :
 
-1. `APP_ENV` vaut exactement `demo` ;
-2. l'option `--reset` est présente ;
-3. l'option `--confirm-reset=RESET_DEMO` et la variable
-   `DEMO_ALLOW_RESET=RESET_DEMO` concordent ;
-4. `DEMO_DATABASE_URL_SHA256` correspond à l'empreinte SHA-256 exacte de la
-   `DATABASE_URL` autorisée.
+1. `APP_ENV=demo` ;
+2. `--reset` ;
+3. `--confirm-reset=RESET_DEMO` et `DEMO_ALLOW_RESET=RESET_DEMO` ;
+4. `DEMO_DATABASE_URL_SHA256` correspondant à la cible expressément autorisée.
 
-```bash
-APP_ENV=demo \
-DEMO_ALLOW_RESET=RESET_DEMO \
-DEMO_DATABASE_URL_SHA256='<empreinte autorisée>' \
-npm run bootstrap:demo -- --reset --confirm-reset=RESET_DEMO
-```
-
-Ne jamais afficher ni versionner `DATABASE_URL`, l'empreinte autorisée ou le
-secret du compte de service.
-
-## Ancien jeu de démonstration riche
-
-Les commandes historiques ci-dessous créent volontairement des déclarants,
-des points et des déclarations. Elles ne font pas partie du bootstrap minimal
-du nouvel environnement `demo` et ne doivent pas y être lancées.
-
-Depuis la racine du projet :
-
-```bash
-# Import des zones
-node scripts/import-zones.js
-
-# Irrigants Aquasys
-node scripts/demo/init-demo-fixtures.js
-node scripts/demo/init-demo-declarations.js
-```
+Ne jamais afficher ni versionner la configuration privée, l'URL, son empreinte
+autorisée ou le secret du compte de service.
