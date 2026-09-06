@@ -1,4 +1,5 @@
 import test from 'ava'
+import {TESTING_DATABASE_ENDPOINT} from '../../network/testing-database-target.js'
 
 import {
   EXCLUDED_DOCUMENT_ID,
@@ -147,6 +148,34 @@ test('assertSafeTarget exige une confirmation identique et refuse production', t
     },
     manifestSha256
   }), {message: /absent ou dupliqué/})
+})
+
+test('testing conserve le tunnel nommé et borne l’accès privé à son seul endpoint', t => {
+  const publicHost = 'rw-a94bb20e-1f62-4203-9b60-234c12170876.rdb.fr-par.scw.cloud'
+  const privateHost = TESTING_DATABASE_ENDPOINT.host
+  const environment = {
+    APP_ENV: 'testing',
+    S3_ENDPOINT: 'https://s3.fr-par.scw.cloud',
+    S3_REGION: 'fr-par',
+    S3_BUCKET_PREFIX: 'testing-'
+  }
+  const attest = (host, port) => buildTargetAttestation({
+    target: 'testing',
+    manifestSha256: 'a'.repeat(64),
+    targetEnvironment: {
+      ...environment,
+      DATABASE_URL: `postgresql://testing-partageons-leau-api:secret@${host}:${port}/testing-partageons-leau-api?sslmode=verify-full&sslrootcert=%2Ftmp%2Ftesting-ca.pem`
+    }
+  })
+  const publicTarget = attest(publicHost, '5826')
+  const privateTarget = attest(privateHost, '5432')
+  t.is(publicTarget.database.host, publicHost)
+  t.is(privateTarget.database.host, privateHost)
+  t.not(publicTarget.confirmation, privateTarget.confirmation)
+
+  for (const [host, port] of [[publicHost, '5432'], [privateHost, '5826'], ['localhost', '5826'], ['127.0.0.1', '5826'], ['172.16.12.2', '5432']]) {
+    t.throws(() => attest(host, port), {message: /identité PostgreSQL non autorisée/})
+  }
 })
 
 test('usage-map conserve le premier usage racine et déduplique les secondaires', t => {

@@ -1,0 +1,326 @@
+import assert from 'node:assert/strict'
+import process from 'node:process'
+import {setTimeout as sleep} from 'node:timers/promises'
+import {pathToFileURL} from 'node:url'
+
+export const TESTING = Object.freeze({
+  projectId: '8b2f67a8-b474-4596-967f-fe1e0adba1b3',
+  namespaceId: 'bfb37e50-4bd4-42dc-94ca-2064f8b46898',
+  namespaceName: 'testing-partageons-leau',
+  privateNetworkId: '106f8ec1-1be9-4f0e-826b-a9fdcc157319',
+  vpcId: '7403f50f-fcc0-4a98-bbb4-733e4ca316a7',
+  apiId: '1b950c5c-6318-4f93-b6b6-63ef5b96954d',
+  workerId: '97584187-27a0-4cc5-8403-473b6df383a4',
+  registry: 'rg.fr-par.scw.cloud/prelevements-deau-api/prelevements-deau-api',
+  migrationNamespaceName: 'testing-partageons-leau-migrations',
+  migrationName: 'testing-api-migrations'
+})
+
+const SHA = /^[\da-f]{40}$/
+const UUID = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/
+const API = 'https://api.scaleway.com/containers/v1/regions/fr-par'
+const MIGRATION_COMMAND = ['node', 'scripts/network/testing-migration-service.js']
+const READ_ATTEMPTS = 6
+const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504])
+const TRANSIENT_NETWORK_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET'
+])
+
+function isTransientNetworkError(error) {
+  return error?.name === 'TimeoutError'
+    || TRANSIENT_NETWORK_CODES.has(error?.code ?? error?.cause?.code)
+}
+
+function requireCondition(condition, message) {
+  if (!condition) {
+    throw new Error(message)
+  }
+}
+
+function equal(actual, expected) {
+  try {
+    assert.deepEqual(actual, expected)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function readTestingConfiguration(environment) {
+  requireCondition(UUID.test(TESTING.privateNetworkId ?? '') && UUID.test(TESTING.vpcId ?? ''), 'Cible réseau testing non configurée : aucune écriture autorisée.')
+  requireCondition(environment.SCW_DEFAULT_PROJECT_ID === TESTING.projectId, 'Projet Scaleway différent du projet PE attendu.')
+  requireCondition(environment.SCW_REGION === 'fr-par', 'La région testing doit être fr-par.')
+  requireCondition(environment.GITHUB_REF === 'refs/heads/testing', 'Seule la branche testing peut exécuter ce déploiement.')
+  requireCondition(SHA.test(environment.GITHUB_SHA ?? ''), 'La release doit être un SHA Git complet.')
+  requireCondition(environment.IMAGE_REF?.startsWith(`${TESTING.registry}@sha256:`)
+    && /^[\da-f]{64}$/.test(environment.IMAGE_REF.slice(`${TESTING.registry}@sha256:`.length)), 'Une image immuable du registre API PE est obligatoire.')
+  requireCondition(environment.SCW_SERVERLESS_CONTAINER_ID_TESTING_API === TESTING.apiId
+    && environment.SCW_SERVERLESS_CONTAINER_ID_TESTING_WORKER === TESTING.workerId, 'Les identifiants API/worker ne correspondent pas à testing.')
+  requireCondition(UUID.test(environment.SCW_TESTING_MIGRATION_CONTAINER_ID ?? '')
+    && UUID.test(environment.SCW_TESTING_MIGRATION_NAMESPACE_ID ?? ''), 'Identifiants du service de migration testing manquants.')
+  requireCondition(environment.SCW_SECRET_KEY?.length > 0, 'Clé CI Scaleway manquante.')
+  requireCondition(environment.TESTING_MIGRATION_INVOKE_SECRET?.length >= 32, 'Secret d’invocation testing absent ou trop court.')
+  return {
+    release: environment.GITHUB_SHA,
+    image: environment.IMAGE_REF,
+    key: environment.SCW_SECRET_KEY,
+    migrationSecret: environment.TESTING_MIGRATION_INVOKE_SECRET,
+    migrationId: environment.SCW_TESTING_MIGRATION_CONTAINER_ID,
+    migrationNamespaceId: environment.SCW_TESTING_MIGRATION_NAMESPACE_ID
+  }
+}
+
+function assertNamespace(namespace, id, name) {
+  requireCondition(namespace.id === id && namespace.name === name
+    && namespace.project_id === TESTING.projectId && namespace.region === 'fr-par', 'Namespace testing inattendu : déploiement interrompu.')
+}
+
+function secretKeys(resource) {
+  return Object.keys(resource.secret_environment_variables ?? {}).sort()
+}
+
+function assertContainer(container, {id, name, namespaceId, privacy}) {
+  requireCondition(container.id === id && container.name === name && container.namespace_id === namespaceId
+    && container.region === 'fr-par' && container.private_network_id === TESTING.privateNetworkId
+    && container.privacy === privacy, 'Identité, réseau ou confidentialité du conteneur testing inattendus.')
+}
+
+function endpoint(container) {
+  const raw = container.public_endpoint ?? ''
+  const url = new URL(raw.startsWith('https://') ? raw : `https://${raw}`)
+  requireCondition(url.protocol === 'https:' && /\.(?:containers|functions)\.fnc\.fr-par\.scw\.cloud$/.test(url.hostname)
+    && !url.username && !url.password && !url.port && url.pathname === '/' && !url.search && !url.hash,
+  'Endpoint Scaleway non conforme : aucune clé ne sera transmise.')
+  return url.origin
+}
+
+function assertRelease(status, release) {
+  requireCondition(status.release === release, 'Le service de migration ne sert pas la release attendue.')
+}
+
+function assertLedger(database, requireComplete = false) {
+  requireCondition(database && Array.isArray(database.pending) && Array.isArray(database.unfinished)
+    && database.unfinished.length === 0 && (!requireComplete || database.pending.length === 0),
+  'État des migrations PostgreSQL incomplet ou non vérifiable.')
+}
+
+function assertMigrationSuccess(result, release) {
+  assertRelease(result, release)
+  requireCondition(result.state === 'succeeded' && result.operation?.state === 'succeeded'
+    && result.operation.release === release && UUID.test(result.operation.id ?? '')
+    && result.operation.exitCode === 0, 'La migration n’a pas confirmé sa réussite.')
+  assertLedger(result.operation.database, true)
+}
+
+export async function deployTesting(configuration, {fetch: fetchRequest = globalThis.fetch, wait = sleep, log = console.log} = {}) {
+  const {release, image, key, migrationSecret, migrationId, migrationNamespaceId} = configuration
+  const headers = {'X-Auth-Token': key}
+  const definitions = [
+    {id: TESTING.apiId, name: 'testing-prelevement-deau-api', namespaceId: TESTING.namespaceId, privacy: 'public'},
+    {id: TESTING.workerId, name: 'testing-prelevement-deau-api-worke', namespaceId: TESTING.namespaceId, privacy: 'public'},
+    {id: migrationId, name: TESTING.migrationName, namespaceId: migrationNamespaceId, privacy: 'private'}
+  ]
+
+  async function jsonRequest(url, options = {}, timeout = 30_000) {
+    const method = options.method ?? 'GET'
+    const label = `${method} ${new URL(url).pathname}`
+    const attempts = method === 'GET' ? READ_ATTEMPTS : 1
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      let response
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        response = await fetchRequest(url, {...options, redirect: 'error', signal: AbortSignal.timeout(timeout)})
+      } catch (error) {
+        if (attempt + 1 < attempts && isTransientNetworkError(error)) {
+          // eslint-disable-next-line no-await-in-loop
+          await wait(5000)
+          continue
+        }
+
+        throw new Error(`Réponse réseau absente pour ${label} ; déploiement interrompu, aucune répétition d’écriture.`)
+      }
+
+      if (!response.ok) {
+        // Never consume or log error bodies, which may contain sensitive data.
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await response.body?.cancel()
+        } catch {}
+
+        if (attempt + 1 < attempts && TRANSIENT_HTTP_STATUSES.has(response.status)) {
+          // eslint-disable-next-line no-await-in-loop
+          await wait(5000)
+          continue
+        }
+
+        throw new Error(`Requête ${label} refusée (HTTP ${response.status}), déploiement interrompu.`)
+      }
+
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        return await response.json()
+      } catch {
+        throw new Error(`Réponse JSON invalide pour ${label} ; déploiement interrompu.`)
+      }
+    }
+
+    throw new Error(`Lecture ${label} indisponible après ${attempts} tentatives.`)
+  }
+
+  const getContainer = id => jsonRequest(`${API}/containers/${id}`, {headers})
+  const getNamespace = id => jsonRequest(`${API}/namespaces/${id}`, {headers})
+  const patchContainer = (id, body) => jsonRequest(`${API}/containers/${id}`, {
+    method: 'PATCH', headers: {...headers, 'Content-Type': 'application/json'}, body: JSON.stringify(body)
+  })
+
+  const [namespace, migrationNamespace, privateNetwork, ...before] = await Promise.all([
+    getNamespace(TESTING.namespaceId),
+    getNamespace(migrationNamespaceId),
+    jsonRequest(`https://api.scaleway.com/vpc/v2/regions/fr-par/private-networks/${TESTING.privateNetworkId}`, {headers}),
+    ...definitions.map(definition => getContainer(definition.id))
+  ])
+  assertNamespace(namespace, TESTING.namespaceId, TESTING.namespaceName)
+  assertNamespace(migrationNamespace, migrationNamespaceId, TESTING.migrationNamespaceName)
+  requireCondition(privateNetwork.id === TESTING.privateNetworkId && privateNetwork.project_id === TESTING.projectId
+    && privateNetwork.vpc_id === TESTING.vpcId, 'Le Private Network ne correspond pas à testing.')
+  for (const [index, container] of before.entries()) {
+    assertContainer(container, definitions[index])
+    requireCondition(container.status === 'ready', 'Un conteneur testing n’est pas prêt avant déploiement.')
+  }
+
+  const migrationBefore = before[2]
+  requireCondition(migrationBefore.max_scale === 1 && migrationBefore.min_scale <= 1
+    && migrationBefore.port === 8080 && Number.parseFloat(migrationBefore.timeout) >= 1200
+    && equal(migrationBefore.command, MIGRATION_COMMAND) && equal(migrationBefore.args ?? [], [])
+    && migrationBefore.environment_variables?.APP_ENV === 'testing', 'Configuration du service de migration testing incorrecte.')
+  requireCondition(SHA.test(migrationBefore.environment_variables?.MIGRATION_RELEASE_SHA ?? ''), 'Release initiale du service de migration invalide.')
+  const availableSecrets = new Set([...secretKeys(migrationNamespace), ...secretKeys(migrationBefore)])
+  requireCondition(availableSecrets.has('DATABASE_URL') && availableSecrets.has('MIGRATION_INVOKE_SECRET'), 'Secrets du service de migration absents.')
+  const migrationEndpoint = endpoint(migrationBefore)
+  const invokeHeaders = {...headers, 'X-Migration-Secret': migrationSecret}
+  const getStatus = () => jsonRequest(`${migrationEndpoint}/status`, {headers: invokeHeaders}, 45_000)
+
+  // This proves privacy and the actual GitHub credential before changing any image.
+  const anonymous = await fetchRequest(`${migrationEndpoint}/healthz`, {redirect: 'error', signal: AbortSignal.timeout(30_000)})
+  requireCondition([401, 403].includes(anonymous.status), 'Le service de migration est accessible sans IAM ou sa confidentialité est indéterminée.')
+  await anonymous.body?.cancel()
+  const health = await jsonRequest(`${migrationEndpoint}/healthz`, {headers: invokeHeaders}, 45_000)
+  requireCondition(health.ok === true, 'Le service de migration ne répond pas à la sonde CI authentifiée.')
+  assertRelease(health, migrationBefore.environment_variables.MIGRATION_RELEASE_SHA)
+  const initialStatus = await getStatus()
+  assertRelease(initialStatus, health.release)
+  requireCondition(['idle', 'succeeded'].includes(initialStatus.state), 'Une migration précédente doit être résolue avant tout redéploiement.')
+  assertLedger(initialStatus.database)
+
+  async function waitReady(definition, expectedEnvironment) {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      // eslint-disable-next-line no-await-in-loop
+      const current = await getContainer(definition.id)
+      assertContainer(current, definition)
+      requireCondition(!['error', 'locked', 'deleting'].includes(current.status), 'Scaleway signale un échec de déploiement testing.')
+      if (current.status === 'ready' && current.image === image) {
+        requireCondition(equal(current.environment_variables ?? {}, expectedEnvironment), 'Les variables ordinaires ont changé de manière inattendue.')
+        const original = before.find(container => container.id === definition.id)
+        requireCondition(equal(secretKeys(current), secretKeys(original)), 'La liste des secrets a changé de manière inattendue.')
+        return current
+      }
+
+      // Only read operations are retried; a PATCH or POST is never repeated.
+      // eslint-disable-next-line no-await-in-loop
+      await wait(5000)
+    }
+
+    throw new Error('Le conteneur testing n’a pas confirmé sa disponibilité dans les dix minutes.')
+  }
+
+  const migrationEnvironment = {...migrationBefore.environment_variables, MIGRATION_RELEASE_SHA: release}
+  // No secret map is sent: write-only secret values cannot safely be reconstructed.
+  await patchContainer(migrationId, {image, environment_variables: migrationEnvironment})
+  await waitReady(definitions[2], migrationEnvironment)
+  let refreshedHealth
+  for (let attempt = 0; attempt < 60; attempt++) {
+    // eslint-disable-next-line no-await-in-loop
+    refreshedHealth = await jsonRequest(`${migrationEndpoint}/healthz`, {headers: invokeHeaders}, 45_000)
+    if (refreshedHealth.ok === true && refreshedHealth.release === release) {
+      break
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    await wait(5000)
+  }
+
+  assertRelease(refreshedHealth, release)
+  const readyStatus = await getStatus()
+  assertRelease(readyStatus, release)
+  requireCondition(['idle', 'succeeded'].includes(readyStatus.state), 'Le service de migration est occupé ou dans un état non résolu.')
+  assertLedger(readyStatus.database)
+
+  let migrated
+  try {
+    migrated = await jsonRequest(`${migrationEndpoint}/migrate`, {
+      method: 'POST', headers: {...invokeHeaders, 'Content-Type': 'application/json'}, body: JSON.stringify({expectedRelease: release})
+    }, 1_210_000)
+  } catch {
+    // A lost HTTP response does not authorize another Prisma invocation.
+    const recovered = await getStatus()
+    requireCondition(recovered.operation?.id && recovered.operation.id !== readyStatus.operation?.id,
+      'Réponse de migration perdue et opération non identifiable : intervention requise, aucun redéploiement.')
+    assertMigrationSuccess(recovered, release)
+    migrated = recovered
+  }
+
+  assertMigrationSuccess(migrated, release)
+  const verified = await getStatus()
+  assertMigrationSuccess(verified, release)
+  assertLedger(verified.database, true)
+  requireCondition(verified.operation.id === migrated.operation.id, 'L’opération de migration a changé pendant sa vérification.')
+
+  // Detect concurrent changes before touching either business container.
+  const freshBusiness = await Promise.all(definitions.slice(0, 2).map(definition => getContainer(definition.id)))
+  for (const [index, current] of freshBusiness.entries()) {
+    assertContainer(current, definitions[index])
+    requireCondition(current.status === 'ready' && current.image === before[index].image
+      && equal(current.environment_variables, before[index].environment_variables)
+      && equal(secretKeys(current), secretKeys(before[index])), 'Configuration métier modifiée pendant les migrations ; déploiement interrompu.')
+  }
+
+  await patchContainer(TESTING.apiId, {
+    image,
+    liveness_probe: {http: {path: '/healthz'}, interval: '10s', timeout: '2s', failure_threshold: 5},
+    startup_probe: {http: {path: '/healthz'}, interval: '5s', timeout: '2s', failure_threshold: 30}
+  })
+  const api = await waitReady(definitions[0], before[0].environment_variables ?? {})
+  await patchContainer(TESTING.workerId, {image, command: ['node', 'worker.js']})
+  const worker = await waitReady(definitions[1], before[1].environment_variables ?? {})
+  const apiHealth = await jsonRequest(`${endpoint(api)}/healthz`)
+  requireCondition(apiHealth.ok === true, 'La sonde API testing a échoué après le déploiement.')
+  const namespaceAfter = await getNamespace(TESTING.namespaceId)
+  const migrationNamespaceAfter = await getNamespace(migrationNamespaceId)
+  for (const [original, current] of [[namespace, namespaceAfter], [migrationNamespace, migrationNamespaceAfter]]) {
+    requireCondition(equal(original.environment_variables, current.environment_variables)
+      && equal(secretKeys(original), secretKeys(current)), 'Une configuration de namespace a changé pendant le déploiement.')
+  }
+
+  const result = {environment: 'testing', release, image, migrationOperationId: verified.operation.id, containers: [api.id, worker.id, migrationId]}
+  log(JSON.stringify(result))
+  return result
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    await deployTesting(readTestingConfiguration(process.env))
+  } catch (error) {
+    console.error(error.message)
+    process.exitCode = 1
+  }
+}

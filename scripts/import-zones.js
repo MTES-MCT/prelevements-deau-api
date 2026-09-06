@@ -6,6 +6,7 @@ import process from 'node:process'
 import {fileURLToPath} from 'node:url'
 import {randomUUID} from 'node:crypto'
 import pg from 'pg'
+import {getPostgresConnectionOptions} from '../db/connection-options.js'
 
 const {Pool} = pg
 
@@ -50,7 +51,7 @@ function readGeoJson(filePath) {
 }
 
 async function main() {
-  const pool = new Pool({connectionString: process.env.DATABASE_URL})
+  const pool = new Pool(getPostgresConnectionOptions(process.env.DATABASE_URL))
 
   const upsertSql = `
     INSERT INTO "Zone" (
