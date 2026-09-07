@@ -4,7 +4,10 @@ import path from 'node:path'
 import process from 'node:process'
 import {fileURLToPath} from 'node:url'
 
-import {validateDemoAdminDatabaseUrl} from './database-target.js'
+import {
+  assertConnectedDemoAdminDatabase,
+  validateDemoAdminDatabaseUrl
+} from './database-target.js'
 
 const DEMO_ENVIRONMENT = 'demo'
 const DEMO_INSTRUCTOR_EMAIL = 'agent@demo.fr'
@@ -381,6 +384,8 @@ async function main() {
   ])
 
   try {
+    await assertConnectedDemoAdminDatabase(prisma)
+
     if (options.reset) {
       await resetBusinessData(prisma)
     }

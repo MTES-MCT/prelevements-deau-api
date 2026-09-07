@@ -8,6 +8,7 @@ servers:
     description: Local
 tags:
   - name: Administration
+  - name: Compte
   - name: Auth
   - name: Dashboard
   - name: Declarants
@@ -98,6 +99,49 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AuthSessionResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/email-verifications/confirm:
+    post:
+      tags: [Compte]
+      operationId: confirmEmailVerification
+      summary: Valider une nouvelle adresse email
+      description: >-
+        Consomme un jeton à usage unique reçu sur la nouvelle adresse. La
+        validation d’un changement d’adresse principale révoque les sessions
+        humaines et les liens de connexion en cours, sans ouvrir de session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, minLength: 32, maxLength: 512, writeOnly: true}
+      responses:
+        '200':
+          description: Adresse validée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '400':
+          description: Jeton invalide
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '409':
+          description: L’adresse n’est plus disponible
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '410':
+          description: Lien expiré
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmailVerificationConfirmation'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /auth/password:
     post:
@@ -200,6 +244,171 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/UserSession'}
         default: {$ref: '#/components/responses/Error'}
+  /users/me/profile:
+    patch:
+      tags: [Compte]
+      operationId: updateMyProfile
+      summary: Modifier mes informations
+      description: >-
+        Modifie uniquement les coordonnées autorisées pour le type de compte.
+        Les rôles, droits, identifiants métier et paramètres de déclaration ne
+        sont pas modifiables depuis Mon compte.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UserProfileChanges'}
+      responses:
+        '200':
+          description: Profil mis à jour
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserProfile'}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-change:
+    post:
+      tags: [Compte]
+      operationId: requestPrimaryEmailChange
+      summary: Demander le changement de mon adresse de connexion
+      description: >-
+        Envoie un lien valable 24 heures sur la nouvelle adresse et une alerte
+        de sécurité sur l’adresse actuelle. L’adresse ne change qu’après
+        validation du lien.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailVerificationRequest'}
+      responses:
+        '202':
+          description: Demande enregistrée; le statut indique si l’email a pu être envoyé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-aliases:
+    get:
+      tags: [Compte]
+      operationId: listMyEmailAliases
+      summary: Lister mes autres adresses de connexion validées
+      description: Retourne uniquement les adresses déjà validées et utilisables pour se connecter.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Adresses validées
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [emailAliases]
+                properties:
+                  emailAliases:
+                    type: array
+                    items: {$ref: '#/components/schemas/UserEmailAlias'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Compte]
+      operationId: requestEmailAliasAddition
+      summary: Demander l’ajout d’une autre adresse de connexion
+      description: L’adresse devient utilisable uniquement après validation du lien reçu.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmailVerificationRequest'}
+      responses:
+        '202':
+          description: Demande enregistrée; le statut indique si l’email a pu être envoyé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-aliases/{emailAliasId}:
+    delete:
+      tags: [Compte]
+      operationId: deleteMyEmailAlias
+      summary: Supprimer une autre adresse de connexion
+      description: La dernière adresse utilisable d’un compte ne peut pas être supprimée.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: emailAliasId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Adresse supprimée
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [success]
+                properties:
+                  success: {type: boolean, const: true}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-verifications/{verificationId}/resend:
+    post:
+      tags: [Compte]
+      operationId: resendMyEmailVerification
+      summary: Renvoyer un email de validation
+      description: Génère un nouveau lien à usage unique, sous réserve du délai de sécurité entre deux envois.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: verificationId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: État actualisé de la demande
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/email-verifications/{verificationId}:
+    delete:
+      tags: [Compte]
+      operationId: cancelMyEmailVerification
+      summary: Annuler une validation d’adresse email
+      description: Invalide immédiatement le lien en attente sans modifier les adresses déjà validées.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: verificationId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Demande annulée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserEmailVerification'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
   /admin/password-accesses:
     get:
       tags: [Administration, Auth]
@@ -300,6 +509,215 @@ paths:
                   success: {type: boolean, const: true}
                   revoked: {type: boolean}
                   sessionsRevoked: {type: integer, minimum: 0}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/agents:
+    get:
+      tags: [Administration, Compte]
+      operationId: listAdminAgents
+      summary: Rechercher les agents
+      description: Liste transverse réservée aux administrateurs hors impersonation.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: query
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: pageSize
+          schema: {type: integer, enum: [10, 25, 50], default: 25}
+        - in: query
+          name: accountStatus
+          schema: {type: string, enum: [ACTIVE, DISABLED, ALL], default: ACTIVE}
+        - in: query
+          name: zoneIds
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 100
+            items: {$ref: '#/components/schemas/Uuid'}
+        - in: query
+          name: accessStatuses
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              type: string
+              enum: [ACTIVE, FUTURE, ENDED, NONE]
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [RELEVANCE, NAME, ACTIVE_ZONES, CREATED_AT]
+        - in: query
+          name: order
+          schema: {type: string, enum: [ASC, DESC]}
+      responses:
+        '200':
+          description: Page d’agents et facettes
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Administration, Compte]
+      operationId: createAdminAgent
+      summary: Créer un agent avec sa première habilitation
+      description: Le compte, l’habilitation et ses permissions sont créés atomiquement.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminAgentCreateInput'}
+      responses:
+        '201':
+          description: Agent créé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentDetail'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/agents/{agentId}:
+    get:
+      tags: [Administration, Compte]
+      operationId: getAdminAgent
+      summary: Consulter un agent et toutes ses habilitations
+      description: Retourne le compte agent, même désactivé, et l’ensemble de ses habilitations datées.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminAgentId'
+      responses:
+        '200':
+          description: Agent trouvé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentDetail'}
+        '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Administration, Compte]
+      operationId: disableAdminAgent
+      summary: Désactiver un agent
+      description: >-
+        Révoque les accès d’authentification mais conserve le compte et les
+        habilitations. L’opération est refusée si l’agent est le dernier
+        gestionnaire actif d’une zone.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminAgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminAgentDisableInput'}
+      responses:
+        '200':
+          description: Agent désactivé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentDetail'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/agents/{agentId}/profile:
+    patch:
+      tags: [Administration, Compte]
+      operationId: updateAdminAgentProfile
+      summary: Modifier les informations professionnelles d’un agent
+      description: Modifie uniquement le nom, le prénom, la fonction et le téléphone.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminAgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminAgentProfileInput'}
+      responses:
+        '200':
+          description: Profil mis à jour
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentDetail'}
+        '412': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/agents/{agentId}/email:
+    put:
+      tags: [Administration, Compte]
+      operationId: replaceAdminAgentEmail
+      summary: Remplacer directement l’adresse de connexion d’un agent
+      description: Déconnecte toutes les sessions mais conserve le mot de passe existant.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminAgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminAgentEmailInput'}
+      responses:
+        '200':
+          description: Adresse remplacée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentDetail'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/agents/{agentId}/restore:
+    post:
+      tags: [Administration, Compte]
+      operationId: restoreAdminAgent
+      summary: Réactiver un agent
+      description: >-
+        Les habilitations conservées redeviennent effectives selon leurs dates.
+        Les sessions, alias et accès par mot de passe ne sont pas restaurés.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminAgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminAgentRestoreInput'}
+      responses:
+        '200':
+          description: Agent réactivé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentDetail'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/agents/{agentId}/notifications/account-creation:
+    post:
+      tags: [Administration, Compte]
+      operationId: sendAdminAgentAccountCreationNotification
+      summary: Envoyer ou renvoyer l’invitation d’un agent
+      description: Envoie l’email d’accès au compte actif sans modifier ses habilitations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminAgentId'
+      responses:
+        '200':
+          description: Invitation envoyée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminAgentDetail'}
         default: {$ref: '#/components/responses/Error'}
   /declarations:
     post:
@@ -938,6 +1356,53 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DeclarantOverview'}
         default: {$ref: '#/components/responses/Error'}
+  /declarants/{declarantId}/contact-emails:
+    get:
+      tags: [Declarants]
+      operationId: listDeclarantContactEmails
+      summary: Lister les emails de contact métier d’un déclarant
+      description: >-
+        Ces adresses servent aux affichages et notifications métier. Elles ne
+        modifient ni l’adresse de connexion ni ses alias d’authentification.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      responses:
+        '200':
+          description: Emails de contact du déclarant
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarantContactEmailsResponse'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      tags: [Declarants]
+      operationId: replaceDeclarantContactEmails
+      summary: Remplacer atomiquement les emails de contact d’un déclarant
+      description: >-
+        La collection complète est réconciliée dans une transaction. Les
+        identifiants des adresses inchangées sont conservés et un seul contact
+        peut être marqué comme principal.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [contactEmails]
+              properties:
+                contactEmails:
+                  type: array
+                  maxItems: 20
+                  items: {$ref: '#/components/schemas/DeclarantContactEmailInput'}
+      responses:
+        '200':
+          description: Emails de contact remplacés
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeclarantContactEmailsResponse'}
+        default: {$ref: '#/components/responses/Error'}
   /preleveurs/{declarantId}/points-prelevement:
     get:
       tags: [Instruction]
@@ -971,6 +1436,23 @@ paths:
               schema:
                 type: array
                 items: {$ref: '#/components/schemas/Exploitation'}
+        default: {$ref: '#/components/responses/Error'}
+  /points-prelevement/map:
+    get:
+      tags: [Instruction]
+      operationId: listPointMapSummaries
+      summary: Lister les résumés cartographiques des points
+      description: >-
+        Retourne en une seule réponse les données nécessaires à la carte et à
+        la liste des points, limitées au périmètre autorisé de l’utilisateur.
+      responses:
+        '200':
+          description: Résumés cartographiques des points accessibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PointPrelevementMapSummary'}
         default: {$ref: '#/components/responses/Error'}
   /points-prelevement/{pointId}/usage-name:
     patch:
@@ -1248,6 +1730,39 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DashboardMap'}
+        default: {$ref: '#/components/responses/Error'}
+  /dashboard/map/points/{pointId}/actors:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardPointActors
+      summary: Lire les acteurs d’un point affiché sur le tableau de bord
+      description: >-
+        Retourne uniquement les libellés des préleveurs et collecteurs que
+        l’utilisateur est autorisé à voir pour ce point. Aucun email, document,
+        connecteur ou détail de compte n’est inclus.
+      parameters:
+        - $ref: '#/components/parameters/PointId'
+      responses:
+        '200':
+          description: Acteurs visibles du point
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardPointActors'}
+        '400':
+          description: Identifiant du point invalide
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: Point hors périmètre dashboard ou droits acteurs insuffisants
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: Point absent ou supprimé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         default: {$ref: '#/components/responses/Error'}
   /dashboard/water-resources/piezometry:
     get:
@@ -1527,6 +2042,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
   parameters:
+    AdminAgentId:
+      in: path
+      name: agentId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
     DeclarationId:
       in: path
       name: declarationId
@@ -1724,6 +2244,211 @@ components:
         message: {type: string}
         code: {type: string}
         details: {}
+    AdminAgentZone:
+      type: object
+      required: [id, type, code, name]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        type: {type: string, enum: [REGION, DEPARTEMENT, SAGE]}
+        code: {type: string}
+        name: {type: string}
+    AdminAgentZoneSummary:
+      allOf:
+        - {$ref: '#/components/schemas/AdminAgentZone'}
+        - type: object
+          required: [status]
+          properties:
+            status: {type: string, enum: [ACTIVE, FUTURE, ENDED]}
+    AdminAgentHabilitation:
+      type: object
+      required: [id, zoneId, zone, isAdmin, permissions, permissionsCount, startDate, endDate, status]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        zoneId: {$ref: '#/components/schemas/Uuid'}
+        zone: {$ref: '#/components/schemas/AdminAgentZone'}
+        isAdmin: {type: boolean}
+        permissions:
+          type: array
+          uniqueItems: true
+          items: {type: string}
+        permissionsCount: {type: integer, minimum: 0}
+        startDate: {type: string, format: date-time}
+        endDate: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [ACTIVE, FUTURE, ENDED]}
+        zoneAttachmentMailSentAt: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    AdminAgentSummary:
+      type: object
+      required:
+        - id
+        - email
+        - firstName
+        - lastName
+        - phoneNumber
+        - jobTitle
+        - createdAt
+        - updatedAt
+        - lastLoginAt
+        - accountCreationMailSentAt
+        - accountStatus
+        - accessStatus
+        - activeHabilitationsCount
+        - futureHabilitationsCount
+        - endedHabilitationsCount
+        - habilitationsCount
+        - zones
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: [string, 'null'], format: email}
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        phoneNumber: {type: [string, 'null']}
+        jobTitle: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        lastLoginAt: {type: [string, 'null'], format: date-time}
+        accountCreationMailSentAt: {type: [string, 'null'], format: date-time}
+        accountStatus: {type: string, enum: [ACTIVE, DISABLED]}
+        accessStatus: {type: string, enum: [ACTIVE, FUTURE, ENDED, NONE]}
+        activeHabilitationsCount: {type: integer, minimum: 0}
+        futureHabilitationsCount: {type: integer, minimum: 0}
+        endedHabilitationsCount: {type: integer, minimum: 0}
+        habilitationsCount: {type: integer, minimum: 0}
+        zones:
+          type: array
+          items: {$ref: '#/components/schemas/AdminAgentZoneSummary'}
+    AdminAgentDetail:
+      type: object
+      required:
+        - id
+        - email
+        - firstName
+        - lastName
+        - phoneNumber
+        - jobTitle
+        - createdAt
+        - updatedAt
+        - lastLoginAt
+        - accountCreationMailSentAt
+        - accountStatus
+        - accessStatus
+        - activeHabilitationsCount
+        - futureHabilitationsCount
+        - endedHabilitationsCount
+        - habilitationsCount
+        - zones
+        - habilitations
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: [string, 'null'], format: email}
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        phoneNumber: {type: [string, 'null']}
+        jobTitle: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        lastLoginAt: {type: [string, 'null'], format: date-time}
+        accountCreationMailSentAt: {type: [string, 'null'], format: date-time}
+        accountStatus: {type: string, enum: [ACTIVE, DISABLED]}
+        accessStatus: {type: string, enum: [ACTIVE, FUTURE, ENDED, NONE]}
+        activeHabilitationsCount: {type: integer, minimum: 0}
+        futureHabilitationsCount: {type: integer, minimum: 0}
+        endedHabilitationsCount: {type: integer, minimum: 0}
+        habilitationsCount: {type: integer, minimum: 0}
+        zones:
+          type: array
+          items: {$ref: '#/components/schemas/AdminAgentZoneSummary'}
+        habilitations:
+          type: array
+          items: {$ref: '#/components/schemas/AdminAgentHabilitation'}
+        warnings:
+          type: array
+          uniqueItems: true
+          items: {type: string}
+    AdminAgentSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total, totalPages, facets]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AdminAgentSummary'}
+        page: {type: integer, minimum: 1}
+        pageSize: {type: integer, enum: [10, 25, 50]}
+        total: {type: integer, minimum: 0}
+        totalPages: {type: integer, minimum: 1}
+        facets:
+          type: object
+          additionalProperties: false
+          required: [accountStatuses, accessStatuses, zones]
+          properties:
+            accountStatuses:
+              type: object
+              additionalProperties: {type: integer, minimum: 0}
+            accessStatuses:
+              type: object
+              additionalProperties: {type: integer, minimum: 0}
+            zones:
+              type: array
+              items:
+                type: object
+                required: [id, type, code, name, count]
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  type: {type: string, enum: [REGION, DEPARTEMENT, SAGE]}
+                  code: {type: string}
+                  name: {type: string}
+                  count: {type: integer, minimum: 0}
+    AdminAgentCreateInput:
+      type: object
+      additionalProperties: false
+      required: [email, firstName, lastName, zoneId, startDate, permissions]
+      properties:
+        email: {type: string, format: email}
+        firstName: {type: string, minLength: 1, maxLength: 80}
+        lastName: {type: string, minLength: 1, maxLength: 80}
+        phoneNumber: {type: [string, 'null'], pattern: '^\\d{10}$'}
+        jobTitle: {type: [string, 'null'], minLength: 2, maxLength: 200}
+        zoneId: {$ref: '#/components/schemas/Uuid'}
+        startDate: {type: string, format: date}
+        endDate: {type: [string, 'null'], format: date}
+        permissions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string}
+        notifyAccountCreation: {type: boolean, default: false}
+        notifyZoneAttachment: {type: boolean, default: false}
+    AdminAgentProfileInput:
+      type: object
+      additionalProperties: false
+      required: [expectedUpdatedAt]
+      properties:
+        firstName: {type: [string, 'null'], maxLength: 80}
+        lastName: {type: [string, 'null'], maxLength: 80}
+        phoneNumber: {type: [string, 'null'], pattern: '^\\d{10}$'}
+        jobTitle: {type: [string, 'null'], minLength: 2, maxLength: 200}
+        expectedUpdatedAt: {type: string, format: date-time}
+    AdminAgentEmailInput:
+      type: object
+      additionalProperties: false
+      required: [email, expectedCurrentEmail]
+      properties:
+        email: {type: string, format: email}
+        expectedCurrentEmail: {type: [string, 'null'], format: email}
+    AdminAgentDisableInput:
+      type: object
+      additionalProperties: false
+      required: [expectedUpdatedAt]
+      properties:
+        expectedUpdatedAt: {type: string, format: date-time}
+    AdminAgentRestoreInput:
+      type: object
+      additionalProperties: false
+      required: [expectedUpdatedAt]
+      properties:
+        expectedUpdatedAt: {type: string, format: date-time}
     AssociationVersion:
       type: string
       pattern: '^[a-f0-9]{64}$'
@@ -2211,6 +2936,10 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        loginEmail: {type: [string, 'null'], format: email}
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
         firstName: {type: [string, 'null']}
         lastName: {type: [string, 'null']}
         role: {type: string, const: DECLARANT}
@@ -2246,6 +2975,10 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        loginEmail: {type: [string, 'null'], format: email}
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
         civility:
           oneOf:
             - type: string
@@ -2372,6 +3105,10 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         userId: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        loginEmail: {type: [string, 'null'], format: email}
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
         firstName: {type: [string, 'null']}
         lastName: {type: [string, 'null']}
         preleveurType:
@@ -2389,14 +3126,148 @@ components:
             type: object
             additionalProperties: true
         right: {$ref: '#/components/schemas/DeclarantRight'}
-    UserSession:
+    DeclarantContactEmail:
       type: object
-      additionalProperties: true
+      additionalProperties: false
+      required: [id, email, isPrimary]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: string, format: email}
+        isPrimary: {type: boolean}
+    DeclarantContactEmailInput:
+      type: object
+      additionalProperties: false
+      required: [email, isPrimary]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Adresse métier; les adresses techniques `@import.local` sont refusées.
+        isPrimary: {type: boolean}
+    DeclarantContactEmailsResponse:
+      type: object
+      additionalProperties: false
+      required: [contactEmails]
+      properties:
+        contactEmails:
+          type: array
+          items: {$ref: '#/components/schemas/DeclarantContactEmail'}
+    UserEmailAlias:
+      type: object
+      additionalProperties: false
+      required: [id, email, createdAt, updatedAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: string, format: email}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    UserEmailVerification:
+      type: object
+      additionalProperties: false
+      required: [id, purpose, email, status, createdAt, sentAt, expiresAt, verifiedAt, cancelledAt, nextResendAt, canResend]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        purpose: {type: string, enum: [PRIMARY_CHANGE, ALIAS_ADD]}
+        email: {type: string, format: email}
+        status:
+          type: string
+          enum: [PENDING, SEND_FAILED, EXPIRED, VERIFIED, CANCELLED, SUPERSEDED, CONFLICT]
+        createdAt: {type: string, format: date-time}
+        sentAt: {type: [string, 'null'], format: date-time}
         expiresAt: {type: string, format: date-time}
-        roles:
+        verifiedAt: {type: [string, 'null'], format: date-time}
+        cancelledAt: {type: [string, 'null'], format: date-time}
+        nextResendAt: {type: [string, 'null'], format: date-time}
+        canResend: {type: boolean}
+    EmailVerificationRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: {type: string, format: email, maxLength: 320}
+    EmailVerificationConfirmation:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome: {type: string, enum: [VERIFIED, EXPIRED, CONFLICT, INVALID]}
+        verification: {$ref: '#/components/schemas/UserEmailVerification'}
+        purpose: {type: string, enum: [PRIMARY_CHANGE, ALIAS_ADD]}
+        email: {type: string, format: email}
+        requiresReauthentication: {type: boolean}
+    UserProfileChanges:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        firstName: {type: [string, 'null'], minLength: 1, maxLength: 80}
+        lastName: {type: [string, 'null'], minLength: 1, maxLength: 80}
+        civility:
+          oneOf:
+            - type: string
+              enum: [MR, MRS]
+            - type: 'null'
+        phoneNumber: {type: [string, 'null'], pattern: '^\\d{10}$'}
+        jobTitle: {type: [string, 'null'], minLength: 2, maxLength: 200}
+        socialReason: {type: [string, 'null'], minLength: 3, maxLength: 200}
+        addressLine1: {type: [string, 'null'], minLength: 3, maxLength: 200}
+        addressLine2: {type: [string, 'null'], minLength: 3, maxLength: 200}
+        poBox: {type: [string, 'null'], maxLength: 20}
+        postalCode: {type: [string, 'null'], pattern: '^\\d{5}$'}
+        city: {type: [string, 'null'], minLength: 2, maxLength: 100}
+    UserProfile:
+      type: object
+      additionalProperties: false
+      required: [id, email, emailAliases, emailVerifications, firstName, lastName, lastLoginAt]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        email: {type: [string, 'null'], format: email}
+        emailAliases:
+          type: array
+          items: {$ref: '#/components/schemas/UserEmailAlias'}
+        emailVerifications:
+          type: array
+          maxItems: 2
+          items: {$ref: '#/components/schemas/UserEmailVerification'}
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        lastLoginAt: {type: [string, 'null'], format: date-time}
+        declarantType:
+          oneOf:
+            - type: string
+              enum: [NATURAL_PERSON, LEGAL_PERSON]
+            - type: 'null'
+        declarantRole:
+          oneOf:
+            - type: string
+              enum: [PRELEVEUR, COLLECTEUR]
+            - type: 'null'
+        preleveurType:
+          oneOf:
+            - {$ref: '#/components/schemas/PreleveurType'}
+            - type: 'null'
+        socialReason: {type: [string, 'null']}
+        civility:
+          oneOf:
+            - type: string
+              enum: [MR, MRS]
+            - type: 'null'
+        addressLine1: {type: [string, 'null']}
+        addressLine2: {type: [string, 'null']}
+        poBox: {type: [string, 'null']}
+        postalCode: {type: [string, 'null']}
+        city: {type: [string, 'null']}
+        phoneNumber: {type: [string, 'null']}
+        jobTitle: {type: [string, 'null']}
+    UserSession:
+      type: object
+      additionalProperties: true
+      required: [role, user]
+      properties:
+        role: {type: string, enum: [DECLARANT, INSTRUCTOR, ADMIN]}
+        user: {$ref: '#/components/schemas/UserProfile'}
+        expiresAt: {type: string, format: date-time}
+        permissions:
           type: array
           items: {type: string}
     AuthSessionResponse:
@@ -2526,6 +3397,106 @@ components:
         isReferencePoint: {type: [boolean, 'null']}
         isWaterBodyConnectedToStream: {type: [boolean, 'null']}
         isWaterBodyConnectedToGroundwater: {type: [boolean, 'null']}
+    PointPrelevementMapSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - flowType
+        - waterBodyType
+        - nature
+        - withdrawalType
+        - canReadDetail
+        - usages
+        - searchAliases
+        - searchIdentifiers
+        - managementZones
+        - exploitationStatuses
+        - preleveurLabels
+        - preleveurSirets
+        - preleveurTypes
+        - collecteurStatus
+        - connectorStatus
+        - searchAccess
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+        codeBSS: {type: [string, 'null']}
+        usageName: {type: [string, 'null']}
+        flowType:
+          type: string
+          enum: [PRELEVEMENT, REJET]
+        waterBodyType:
+          type: string
+          enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION]
+        nature:
+          description: Origine du prélèvement ou du rejet.
+          oneOf:
+            - {type: string, enum: [NAPPE, NAPPE_ACCOMPAGNEMENT, COURS_EAU, SOURCE, PLAN_EAU]}
+            - {type: 'null'}
+        withdrawalType:
+          description: Type de prélèvement ou de rejet.
+          oneOf:
+            - {type: string, enum: [LITTORAL, CONTINENTAL, SOUTERRAIN, STOCKAGE]}
+            - {type: 'null'}
+        coordinates:
+          oneOf:
+            - {$ref: '#/components/schemas/GeoJsonPoint'}
+            - type: 'null'
+        canReadDetail: {type: boolean}
+        usages:
+          type: array
+          items: {$ref: '#/components/schemas/WaterUse'}
+        searchAliases:
+          type: array
+          items: {type: string}
+        searchIdentifiers:
+          type: array
+          items: {type: string}
+        communeName: {type: [string, 'null']}
+        managementZones:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, code, name, type]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              code: {type: [string, 'null']}
+              name: {type: string}
+              type:
+                type: string
+                enum: [REGION, DEPARTEMENT, SAGE]
+        exploitationStatuses:
+          type: array
+          items:
+            type: string
+            enum: [EN_ACTIVITE, NON_RENSEIGNE, ABANDONNEE, TERMINEE]
+        preleveurLabels:
+          type: array
+          items: {type: string}
+        preleveurSirets:
+          type: array
+          items: {type: string}
+        preleveurTypes:
+          type: array
+          items: {$ref: '#/components/schemas/PreleveurType'}
+        collecteurStatus:
+          oneOf:
+            - {type: string, enum: [WITH_COLLECTEUR, WITHOUT_COLLECTEUR]}
+            - type: 'null'
+        connectorStatus:
+          oneOf:
+            - {type: string, enum: [WITH_CONNECTOR, WITHOUT_CONNECTOR]}
+            - type: 'null'
+        searchAccess:
+          type: object
+          additionalProperties: false
+          required: [exploitations, declarants]
+          properties:
+            exploitations: {type: boolean}
+            declarants: {type: boolean}
     Exploitation:
       type: object
       additionalProperties: true
@@ -2696,7 +3667,7 @@ components:
     DashboardMap:
       type: object
       additionalProperties: false
-      required: [scope, selectedZoneCodes, unknownZoneCodes, points]
+      required: [scope, selectedZoneCodes, unknownZoneCodes, capabilities, points]
       properties:
         scope: {type: string, enum: [territory, activity]}
         selectedZoneCodes:
@@ -2705,11 +3676,70 @@ components:
         unknownZoneCodes:
           type: array
           items: {type: string}
+        capabilities: {$ref: '#/components/schemas/DashboardMapCapabilities'}
         points:
           type: array
-          items:
-            type: object
-            additionalProperties: true
+          items: {$ref: '#/components/schemas/DashboardMapPoint'}
+    DashboardMapCapabilities:
+      type: object
+      additionalProperties: false
+      required: [readPointActors, readPointDetails]
+      properties:
+        readPointActors:
+          type: boolean
+          description: >-
+            Vaut true uniquement si les acteurs sont lisibles pour tous les
+            points du périmètre sélectionné.
+        readPointDetails:
+          type: boolean
+          description: >-
+            Vaut true uniquement si les fiches sont lisibles pour tous les
+            points du périmètre sélectionné.
+    DashboardMapPoint:
+      type: object
+      additionalProperties: false
+      required: [id, name, usageName, flowType, nature, withdrawalType, coordinates, usages]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+        usageName: {type: [string, 'null']}
+        flowType:
+          type: string
+          enum: [PRELEVEMENT, REJET]
+        nature:
+          oneOf:
+            - {type: string, enum: [NAPPE, NAPPE_ACCOMPAGNEMENT, COURS_EAU, SOURCE, PLAN_EAU]}
+            - type: 'null'
+        withdrawalType:
+          oneOf:
+            - {type: string, enum: [LITTORAL, CONTINENTAL, SOUTERRAIN, STOCKAGE]}
+            - type: 'null'
+        coordinates:
+          oneOf:
+            - {$ref: '#/components/schemas/GeoJsonPoint'}
+            - type: 'null'
+        usages:
+          type: array
+          items: {$ref: '#/components/schemas/WaterUse'}
+    DashboardPointActor:
+      type: object
+      additionalProperties: false
+      required: [id, label]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        label: {type: string}
+    DashboardPointActors:
+      type: object
+      additionalProperties: false
+      required: [pointId, preleveurs, collecteurs]
+      properties:
+        pointId: {$ref: '#/components/schemas/Uuid'}
+        preleveurs:
+          type: array
+          items: {$ref: '#/components/schemas/DashboardPointActor'}
+        collecteurs:
+          type: array
+          items: {$ref: '#/components/schemas/DashboardPointActor'}
     DashboardTerritory:
       type: object
       additionalProperties: true

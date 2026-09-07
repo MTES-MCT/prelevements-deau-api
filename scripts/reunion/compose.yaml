@@ -1,0 +1,66 @@
+name: pe-reunion-migration
+
+services:
+  mongo:
+    image: mongo:4.4@sha256:4be76f674fc4b27859816811b8baa3c51830eb1dbf4ca81a51e26b79edd662ef
+    command: ["mongod", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - reunion-mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  postgres:
+    image: postgis/postgis:17-3.5@sha256:135e4d80f0a78f7580a75e6a6ee752f0a1ce3b9b161fe212f869337f24ce0a09
+    environment:
+      POSTGRES_DB: pe_reunion
+      POSTGRES_USER: pe_reunion
+      POSTGRES_PASSWORD: pe_reunion_local_only
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - reunion-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pe_reunion -d pe_reunion"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: reunion_local
+      MINIO_ROOT_PASSWORD: reunion_local_password
+    ports:
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9003:9001"
+    volumes:
+      - reunion-minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  create-documents-bucket:
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        mc alias set local http://minio:9000 reunion_local reunion_local_password
+        && mc mb --ignore-existing local/reunion-migration-documents
+        && mc version enable local/reunion-migration-documents
+
+volumes:
+  reunion-mongo:
+  reunion-postgres:
+  reunion-minio:

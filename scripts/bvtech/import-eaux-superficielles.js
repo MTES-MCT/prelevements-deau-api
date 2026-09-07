@@ -17,6 +17,7 @@ import {
 import {getWaterUseByLegacyUsage} from '../../lib/services/sandre-water-uses.js'
 import {getPreleveurTypeFromUsages} from '../../lib/services/preleveur-types.js'
 import {syncDeclarantZonesFromPoint} from '../../lib/services/zone-permissions.js'
+import {findUniqueExploitationBySourceOrPeriod} from '../../lib/services/exploitation-periods.js'
 
 const DEFAULT_INPUT = 'data/bvtech/bvtech-eaux-superficielles.xlsx'
 const DEFAULT_INPUT_FILENAME = 'bvtech-eaux-superficielles.xlsx'
@@ -923,16 +924,13 @@ async function saveExploitationAndSync(existing, data, secondaryUsageIds = []) {
 }
 
 async function upsertNormalizedExploitation({point, declarant, sourceId, legacyUsages, startDate, endDate, comment}) {
-  const existing = await prisma.declarantPointPrelevement.findFirst({
-    where: {
-      OR: [
-        {sourceId},
-        {
-          declarantUserId: declarant.userId,
-          pointPrelevementId: point.id
-        }
-      ]
-    },
+  const existing = await findUniqueExploitationBySourceOrPeriod({
+    client: prisma,
+    sourceId,
+    declarantUserId: declarant.userId,
+    pointPrelevementId: point.id,
+    start: startDate,
+    end: endDate,
     select: {id: true}
   })
 
@@ -1506,16 +1504,12 @@ async function upsertPointDeclarantLink({point, pointPayload, declarant, rawUsag
   }
 
   const sourceId = `${EXPLOITATION_SOURCE_PREFIX}:${slug(declarant.sourceId)}:${slug(pointPayload.sourceId)}`
-  const existing = await prisma.declarantPointPrelevement.findFirst({
-    where: {
-      OR: [
-        {sourceId},
-        {
-          declarantUserId: declarant.userId,
-          pointPrelevementId: point.id
-        }
-      ]
-    },
+  const existing = await findUniqueExploitationBySourceOrPeriod({
+    client: prisma,
+    sourceId,
+    declarantUserId: declarant.userId,
+    pointPrelevementId: point.id,
+    operationalOnly: true,
     select: {id: true}
   })
 

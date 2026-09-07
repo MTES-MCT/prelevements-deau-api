@@ -7,7 +7,11 @@ model ResourceDocument {
   declarantPointPrelevementId String?                    @db.Uuid
   declarantPointPrelevement   DeclarantPointPrelevement? @relation(fields: [declarantPointPrelevementId], references: [id], onDelete: SetNull)
 
-  rules ResourceRule[]
+  exploitations ResourceDocumentExploitation[]
+  rules         ResourceRule[]
+
+  sourceId      String? @db.Text
+  contentSha256 String? @db.Text
 
   title     String? @db.Text
   reference String? @db.Text
@@ -26,9 +30,26 @@ model ResourceDocument {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  @@unique([sourceId])
   @@index([declarantUserId])
   @@index([declarantPointPrelevementId])
   @@index([nature])
   @@index([signatureDate])
   @@index([deletedAt])
+}
+
+model ResourceDocumentExploitation {
+  id String @id @default(uuid()) @db.Uuid
+
+  resourceDocumentId String           @db.Uuid
+  resourceDocument   ResourceDocument @relation(fields: [resourceDocumentId], references: [id], onDelete: Cascade, map: "ResourceDocumentExploitation_documentId_fkey")
+
+  declarantPointPrelevementId String                    @db.Uuid
+  declarantPointPrelevement   DeclarantPointPrelevement @relation(fields: [declarantPointPrelevementId], references: [id], onDelete: Cascade, map: "ResourceDocumentExploitation_exploitationId_fkey")
+
+  createdAt DateTime @default(now())
+
+  @@unique([resourceDocumentId, declarantPointPrelevementId], map: "ResourceDocumentExploitation_document_exploitation_key")
+  @@index([resourceDocumentId], map: "ResourceDocumentExploitation_documentId_idx")
+  @@index([declarantPointPrelevementId], map: "ResourceDocumentExploitation_exploitationId_idx")
 }
