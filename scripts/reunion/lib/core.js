@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto'
 import path from 'node:path'
 
 import {parse as parseCsv} from 'csv-parse/sync'
+import {TESTING_DATABASE_ENDPOINT} from '../../network/testing-database-target.js'
 
 export const TERRITORY_CODE = 'DEP-974'
 export const MIGRATION_PREFIX = `reunion:${TERRITORY_CODE}`
@@ -32,11 +33,18 @@ export const TARGET_POLICIES = Object.freeze({
     database: Object.freeze({
       host: 'rw-a94bb20e-1f62-4203-9b60-234c12170876.rdb.fr-par.scw.cloud',
       port: '5826',
+      endpoints: Object.freeze([
+        Object.freeze({host: 'rw-a94bb20e-1f62-4203-9b60-234c12170876.rdb.fr-par.scw.cloud', port: '5826'}),
+        TESTING_DATABASE_ENDPOINT
+      ]),
       serverPort: '5432',
       name: 'testing-partageons-leau-api',
       user: 'testing-partageons-leau-api',
       tls: true,
-      caSha256: 'ad17b661b024ece4e73ffc38072169d92cda7f4128854b42d02cb3ce786d5948'
+      caSha256s: Object.freeze([
+        'ad17b661b024ece4e73ffc38072169d92cda7f4128854b42d02cb3ce786d5948',
+        '0df2744cc9839da8e5d42e539978b6a91decfbe8145f23c0a06f4049dfdc1dc1'
+      ])
     }),
     s3: Object.freeze({
       endpoint: 'https://s3.fr-par.scw.cloud',
@@ -181,7 +189,12 @@ function parseTargetIdentity(target, targetEnvironment) {
     throw new Error(`Cible ${target}: DATABASE_URL doit contenir le mot de passe PostgreSQL`)
   }
 
-  for (const key of ['host', 'port', 'name', 'user', 'tls']) {
+  const endpoints = policy.database.endpoints ?? [{host: policy.database.host, port: policy.database.port}]
+  if (!endpoints.some(endpoint => endpoint.host === database.host && endpoint.port === database.port)) {
+    throw new Error(`Cible ${target}: identité PostgreSQL non autorisée (endpoint)`)
+  }
+
+  for (const key of ['name', 'user', 'tls']) {
     if (database[key] !== policy.database[key]) {
       throw new Error(`Cible ${target}: identité PostgreSQL non autorisée (${key})`)
     }

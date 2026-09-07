@@ -16,6 +16,7 @@ import {PrismaPg} from '@prisma/adapter-pg'
 import prismaPkg from '@prisma/client'
 import dotenv from 'dotenv'
 import pgPkg from 'pg'
+import {getPostgresConnectionOptions} from '../../../db/connection-options.js'
 
 import {TARGET_POLICIES, sha256} from './core.js'
 
@@ -272,7 +273,7 @@ export async function assertTargetCertificate(target, certificatePath) {
     throw new Error(`Cible ${target}: certificat PostgreSQL illisible`)
   }
 
-  if (sha256(content) !== policy.database.caSha256) {
+  if (!policy.database.caSha256s.includes(sha256(content))) {
     throw new Error(`Cible ${target}: certificat PostgreSQL non autorisé`)
   }
 }
@@ -459,7 +460,7 @@ export async function copyS3Object({
 }
 
 export async function createTargetPrisma(databaseUrl) {
-  const pool = new Pool({connectionString: databaseUrl, max: 4})
+  const pool = new Pool(getPostgresConnectionOptions(databaseUrl, {max: 4}))
   const prisma = new PrismaClient({adapter: new PrismaPg(pool)})
 
   return {

@@ -1,4 +1,5 @@
 import {Buffer} from 'node:buffer'
+import {X509Certificate} from 'node:crypto'
 import {mkdtemp, readFile, readdir, rm, stat, writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import path from 'node:path'
@@ -7,6 +8,7 @@ import {Readable} from 'node:stream'
 import test from 'ava'
 import {ObjectId} from 'mongodb'
 
+import {TARGET_POLICIES} from '../lib/core.js'
 import {
   assertDistinctS3Locations,
   assertManifestOutputsAbsent,
@@ -82,6 +84,31 @@ test('refuse un certificat PostgreSQL testing qui ne correspond pas à la CA aut
     message: /certificat PostgreSQL non autorisé/
   })
   await t.notThrowsAsync(assertTargetCertificate('local'))
+})
+
+test('autorise seulement les CA testing individuelles connues, aucun bundle ambigu', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pe-reunion-ca-bundle-test-'))
+  t.teardown(() => rm(directory, {recursive: true, force: true}))
+  const certificatePath = path.join(directory, 'postgres-ca.pem')
+  const certificate = await readFile(new URL('../../../deploy/certs/testing/postgres-ca.pem', import.meta.url), 'utf8')
+  t.is(certificate.match(/-{5}BEGIN CERTIFICATE-{5}/g).length, 1)
+  const renewed = new X509Certificate(certificate)
+  t.is(renewed.fingerprint256, 'FC:9C:BD:94:CF:EB:36:9B:8A:C7:D4:91:44:46:B2:1C:39:3A:89:20:76:55:38:95:E1:5C:20:B3:63:A6:5B:4E')
+  t.is(renewed.checkIP('172.16.16.3'), '172.16.16.3')
+  t.is(renewed.checkHost(TARGET_POLICIES.testing.database.host), TARGET_POLICIES.testing.database.host)
+  t.deepEqual(TARGET_POLICIES.testing.database.caSha256s, [
+    'ad17b661b024ece4e73ffc38072169d92cda7f4128854b42d02cb3ce786d5948',
+    '0df2744cc9839da8e5d42e539978b6a91decfbe8145f23c0a06f4049dfdc1dc1'
+  ])
+  await writeFile(certificatePath, certificate)
+  await t.notThrowsAsync(assertTargetCertificate('testing', certificatePath))
+
+  for (const content of [certificate.repeat(2), certificate + '\n', certificate.replace('BEGIN CERTIFICATE', 'BEGIN INVALID')]) {
+    await writeFile(certificatePath, content)
+    await t.throwsAsync(assertTargetCertificate('testing', certificatePath), {
+      message: /certificat PostgreSQL non autorisé/
+    })
+  }
 })
 
 test('atteste l’identité PostgreSQL réellement connectée', async t => {
