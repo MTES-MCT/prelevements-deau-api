@@ -32,10 +32,10 @@ jobs:
           submodules: recursive
           ssh-key: ${{ secrets.SUBMODULES_SSH_KEY }}
 
-      - name: Use Node.js 24.x
+      - name: Use project Node.js version
         uses: actions/setup-node@v4
         with:
-          node-version: "24.x"
+          node-version-file: ".nvmrc"
           cache: "npm"
 
       - name: Install deps

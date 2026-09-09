@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS builder
+FROM node:24.20.0-bookworm-slim AS builder
 WORKDIR /app
 
 ENV NODE_ENV=development
@@ -15,7 +15,7 @@ RUN npx prisma generate --schema=./prisma/schema
 ENV NODE_ENV=production
 RUN npm prune --omit=dev
 
-FROM node:24-bookworm-slim AS runner
+FROM node:24.20.0-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
