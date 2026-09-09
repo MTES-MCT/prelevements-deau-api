@@ -18,6 +18,7 @@ model Zone {
   declarationSettings   ZoneDeclarationSettings?
   declarationOverrides  ZoneDeclarationPeriodOverride[]
   monitoringStations    ZoneMonitoringStation[]
+  campaigns Campaign[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

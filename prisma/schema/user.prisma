@@ -42,6 +42,10 @@ model User {
   emailAliases       UserEmailAlias[]
   emailVerifications UserEmailVerification[]
   dataExports        DataExport[]
+  campaignsCreated Campaign[] @relation("CampaignCreator")
+  campaignManagers CampaignManager[]
+  campaignSubmissions CampaignSubmission[] @relation("CampaignSubmissionCreator")
+  campaignExports CampaignExport[] @relation("CampaignExportCreator")
 
   passwordCredential        PasswordCredential?  @relation("PasswordCredentialOwner")
   passwordActivation        PasswordActivation?  @relation("PasswordActivationOwner")
@@ -130,6 +134,11 @@ enum Civility {
 }
 
 model Declarant {
+  campaignsOwned Campaign[] @relation("CampaignOwner")
+  campaignTargets CampaignTarget[] @relation("CampaignTargetPreleveur")
+  campaignResponses CampaignResponse[] @relation("CampaignResponsePreleveur")
+  campaignCoverages CampaignCoverage[] @relation("CampaignCoveragePreleveur")
+  campaignNotifications CampaignNotification[] @relation("CampaignNotificationPreleveur")
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 

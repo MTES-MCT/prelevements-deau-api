@@ -36,6 +36,11 @@ enum PointKind {
   FICTIF
 }
 
+enum PointCollectionMode {
+  MANUAL
+  EXTERNAL
+}
+
 model PointPrelevement {
   id String @id @default(uuid()) @db.Uuid
 
@@ -44,6 +49,7 @@ model PointPrelevement {
   waterBodyType WaterBodyType
   flowType      PointFlowType
   pointKind     PointKind     @default(PHYSIQUE)
+  collectionMode PointCollectionMode?
 
   nature         PointPrelevementNature?
   withdrawalType PrelevementType?
@@ -61,6 +67,8 @@ model PointPrelevement {
   compteurs  CompteurPointPrelevement[]
 
   chunks Chunk[]
+  campaignTargets CampaignTarget[]
+  campaignCoverages CampaignCoverage[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -129,6 +137,7 @@ model PointPrelevementZone {
 }
 
 model DeclarantPointPrelevement {
+  campaignTargets CampaignTarget[]
   id String @id @default(uuid()) @db.Uuid
 
   declarantUserId String    @db.Uuid

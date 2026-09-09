@@ -1,0 +1,241 @@
+enum CampaignStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum CampaignResponseKind {
+  INDEX
+  NEEDS
+}
+
+enum CampaignResponseStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum CampaignManagerRole {
+  MANAGER
+  READER
+}
+
+model Campaign {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  year Int
+  ownerCollecteurUserId String @db.Uuid
+  ownerCollecteur Declarant @relation("CampaignOwner", fields: [ownerCollecteurUserId], references: [userId], onDelete: Restrict)
+  zoneId String @db.Uuid
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  status CampaignStatus @default(DRAFT)
+  version Int @default(0)
+  indexDates Json
+  opensAt DateTime?
+  closesAt DateTime?
+  timezone String @default("Europe/Paris")
+  reminderDays Int[] @default([])
+  openingMessage String?
+  openedAt DateTime?
+  closedAt DateTime?
+  createdByUserId String @db.Uuid
+  createdBy User @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  periods CampaignPeriod[]
+  targets CampaignTarget[]
+  managers CampaignManager[]
+  responses CampaignResponse[]
+  notifications CampaignNotification[]
+  exports CampaignExport[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([ownerCollecteurUserId, status])
+  @@index([zoneId, status])
+}
+
+model CampaignPeriod {
+  id String @id @default(uuid()) @db.Uuid
+  campaignId String @db.Uuid
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  kind CampaignResponseKind
+  position Int
+  label String
+  startDate DateTime @db.Date
+  endDate DateTime @db.Date
+  startReadingDate DateTime? @db.Date
+  endReadingDate DateTime? @db.Date
+  needLines CampaignNeedLine[]
+  coverages CampaignCoverage[]
+  @@unique([campaignId, kind, position])
+}
+
+model CampaignTarget {
+  id String @id @default(uuid()) @db.Uuid
+  campaignId String @db.Uuid
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  exploitationId String @db.Uuid
+  exploitation DeclarantPointPrelevement @relation(fields: [exploitationId], references: [id], onDelete: Restrict)
+  pointPrelevementId String @db.Uuid
+  pointPrelevement PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Restrict)
+  preleveurUserId String @db.Uuid
+  preleveur Declarant @relation("CampaignTargetPreleveur", fields: [preleveurUserId], references: [userId], onDelete: Restrict)
+  eligibilityConfirmed Boolean @default(false)
+  meters CampaignTargetMeter[]
+  needLines CampaignNeedLine[]
+  coverages CampaignCoverage[]
+  @@unique([campaignId, exploitationId])
+  @@unique([campaignId, pointPrelevementId])
+  @@index([preleveurUserId])
+}
+
+model CampaignTargetMeter {
+  id String @id @default(uuid()) @db.Uuid
+  targetId String @db.Uuid
+  target CampaignTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  associationId String @db.Uuid
+  association CompteurPointPrelevement @relation(fields: [associationId], references: [id], onDelete: Restrict)
+  compteurId String @db.Uuid
+  compteur Compteur @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  startDate DateTime? @db.Date
+  endDate DateTime? @db.Date
+  @@unique([targetId, associationId])
+}
+
+model CampaignManager {
+  id String @id @default(uuid()) @db.Uuid
+  campaignId String @db.Uuid
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role CampaignManagerRole
+  @@unique([campaignId, userId])
+  @@index([userId])
+}
+
+model CampaignResponse {
+  id String @id @default(uuid()) @db.Uuid
+  campaignId String @db.Uuid
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  preleveurUserId String @db.Uuid
+  preleveur Declarant @relation("CampaignResponsePreleveur", fields: [preleveurUserId], references: [userId], onDelete: Restrict)
+  kind CampaignResponseKind
+  status CampaignResponseStatus @default(DRAFT)
+  version Int @default(0)
+  draft Json @default("{}")
+  latestSubmissionId String? @unique @db.Uuid
+  latestSubmission CampaignSubmission? @relation("LatestCampaignSubmission", fields: [latestSubmissionId], references: [id], onDelete: Restrict)
+  submissions CampaignSubmission[] @relation("CampaignResponseSubmissions")
+  reopenedAt DateTime?
+  reopenUntil DateTime?
+  reopenedByUserId String? @db.Uuid
+  reopenReason String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([campaignId, preleveurUserId, kind])
+}
+
+model CampaignSubmission {
+  id String @id @default(uuid()) @db.Uuid
+  responseId String @db.Uuid
+  response CampaignResponse @relation("CampaignResponseSubmissions", fields: [responseId], references: [id], onDelete: Restrict)
+  latestForResponse CampaignResponse? @relation("LatestCampaignSubmission")
+  version Int
+  idempotencyKey String @db.Uuid
+  createdByUserId String @db.Uuid
+  createdBy User @relation("CampaignSubmissionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  snapshot Json
+  publication Json?
+  submittedAt DateTime @default(now())
+  needLines CampaignNeedLine[]
+  coverages CampaignCoverage[]
+  notifications CampaignNotification[]
+  @@unique([responseId, version])
+  @@unique([responseId, idempotencyKey])
+}
+
+model CampaignNeedLine {
+  id String @id @default(uuid()) @db.Uuid
+  submissionId String @db.Uuid
+  submission CampaignSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  targetId String @db.Uuid
+  target CampaignTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
+  periodId String @db.Uuid
+  period CampaignPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  requestedFlow Decimal @db.Decimal(20, 4)
+  requestedVolume Decimal @db.Decimal(20, 4)
+  @@unique([submissionId, targetId, periodId])
+}
+
+model CampaignCoverage {
+  id String @id @default(uuid()) @db.Uuid
+  submissionId String @db.Uuid
+  submission CampaignSubmission @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  targetId String @db.Uuid
+  target CampaignTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
+  pointPrelevementId String @db.Uuid
+  pointPrelevement PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Restrict)
+  preleveurUserId String @db.Uuid
+  preleveur Declarant @relation("CampaignCoveragePreleveur", fields: [preleveurUserId], references: [userId], onDelete: Restrict)
+  periodId String @db.Uuid
+  period CampaignPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  periodStart DateTime @db.Timestamp(3)
+  periodEnd DateTime @db.Timestamp(3)
+  active Boolean @default(true)
+  sourceId String @db.Uuid
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  chunkValueId String? @db.Uuid
+  chunkValue ChunkValue? @relation(fields: [chunkValueId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  supersededAt DateTime?
+  @@unique([submissionId, targetId, periodId])
+  @@index([pointPrelevementId, preleveurUserId, active, periodStart, periodEnd], map: "CampaignCoverage_scope_idx")
+}
+
+enum CampaignNotificationKind {
+  OPENING
+  REMINDER
+  RECEIPT
+}
+
+enum CampaignNotificationStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model CampaignNotification {
+  id String @id @default(uuid()) @db.Uuid
+  campaignId String @db.Uuid
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  submissionId String? @db.Uuid
+  submission CampaignSubmission? @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  preleveurUserId String @db.Uuid
+  preleveur Declarant @relation("CampaignNotificationPreleveur", fields: [preleveurUserId], references: [userId], onDelete: Restrict)
+  kind CampaignNotificationKind
+  dedupeKey String @unique
+  status CampaignNotificationStatus @default(PENDING)
+  attempts Int @default(0)
+  error String?
+  createdAt DateTime @default(now())
+  sentAt DateTime?
+  leaseUntil DateTime?
+  @@index([status, leaseUntil])
+  @@index([campaignId, createdAt])
+}
+
+model CampaignExport {
+  id String @id @default(uuid()) @db.Uuid
+  campaignId String @db.Uuid
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  createdByUserId String @db.Uuid
+  createdBy User @relation("CampaignExportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  targetIds Json
+  status DataExportStatus @default(PENDING)
+  storageKey String?
+  error String?
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  leaseUntil DateTime?
+  @@index([campaignId, createdAt])
+  @@index([status])
+}

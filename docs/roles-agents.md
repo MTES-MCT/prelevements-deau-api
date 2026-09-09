@@ -20,6 +20,9 @@ La colonne **Dépend de** est vide lorsque le droit peut être attribué seul.
 
 | Scope | Action | Nom du droit | Nature | Dépend de |
 |---|---|---|---|---|
+| Campagnes de collecte | Consulter les campagnes et les réponses des points autorisés | `campaign.read` | Lecture explicite | `zone.detail.read` |
+| Campagnes de collecte | Configurer, ouvrir, clore et réouvrir un volet de campagne | `campaign.manage` | Écriture | `campaign.read` |
+| Campagnes de collecte | Exporter les réponses des points autorisés | `campaign.export` | Export | `campaign.read` |
 | Zone et tableau de bord | Consulter la vue d'ensemble et les informations générales d'une zone | `zone.detail.read` | Lecture | |
 | Zone et tableau de bord | Consulter le périmètre géographique d'une zone | `zone.geometry.read` | Lecture | `zone.detail.read` |
 | Zone et tableau de bord | Accéder au tableau de bord d'une zone | `zone.dashboard.read` | Lecture | |
