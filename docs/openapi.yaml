@@ -2072,8 +2072,12 @@ paths:
       operationId: listCampaigns
       summary: Lister les campagnes accessibles et leur avancement
       description: >-
-        Les éléments conservent le détail et les permissions existants. Le champ
-        progress porte uniquement sur les préleveurs du périmètre autorisé.
+        Les éléments contiennent les métadonnées, les permissions et les compteurs
+        counts.pointCount et counts.preleveurCount du seul périmètre autorisé.
+        La liste ne charge ni les fiches des points et compteurs, ni les contacts
+        ou les gestionnaires proposés. Les brouillons non gérables sont exclus
+        avant la limite ; les campagnes ouvertes et clôturées peuvent être visibles
+        via les zones de leurs points. Le champ progress porte sur ces préleveurs.
         Il vaut null sans canFollowup ou pour une campagne en brouillon.
         Les progressions des campagnes ouvertes et clôturées sont agrégées
         en une seule requête, sans lire les contenus des réponses.
@@ -2099,12 +2103,16 @@ paths:
                         type: array
                         items:
                           type: object
-                          required: [campaign, permissions, targets, managerOptions, progress]
+                          required: [campaign, permissions, counts, progress]
                           properties:
                             campaign: {type: object}
                             permissions: {type: object}
-                            targets: {type: array, items: {type: object}}
-                            managerOptions: {type: array, items: {type: object}}
+                            counts:
+                              type: object
+                              required: [pointCount, preleveurCount]
+                              properties:
+                                pointCount: {type: integer, minimum: 0}
+                                preleveurCount: {type: integer, minimum: 0}
                             progress:
                               oneOf:
                                 - {$ref: '#/components/schemas/CampaignResponseSummary'}

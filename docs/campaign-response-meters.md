@@ -44,6 +44,12 @@ Le snapshot publié contient uniquement les identifiants réels. Les anciens
 index, anciennes soumissions et affectations de l’ancien compteur ne sont pas
 réécrits. Le rejeu d’une transmission reste protégé par sa clé d’idempotence.
 
+Pour une campagne encore en préparation, les affectations sont bornées par les
+changements de compteur des dernières réponses transmises sur ses points. Un
+ancien compteur remplacé n'est donc plus demandé après sa date de remplacement.
+Un brouillon de correction ne modifie pas cet historique : seule sa transmission
+est prise en compte. Les campagnes déjà ouvertes conservent leur inventaire figé.
+
 ## Carte du contexte
 
 `targets[].pointPrelevement.coordinates` est un point GeoJSON ou `null`.

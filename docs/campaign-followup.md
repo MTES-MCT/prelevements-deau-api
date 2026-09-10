@@ -24,13 +24,20 @@ point renvoie des compteurs à zéro.
 
 ## Avancement dans la liste des campagnes
 
-`GET /campaigns` ajoute `progress` à chaque élément de `data.items`, à côté de
-`campaign`, `permissions`, `targets` et `managerOptions`. Son format est celui
+`GET /campaigns` renvoie `campaign`, `permissions`, `counts` et `progress` pour
+chaque élément de `data.items`. `counts.pointCount` et `counts.preleveurCount`
+comptent uniquement les points et préleveurs autorisés. Les fiches des points,
+compteurs, contacts et gestionnaires proposés ne sont plus chargées ni renvoyées
+dans cette liste ; le détail conserve son contrat. Le format de `progress` est celui
 du résumé ci-dessus, avec une jauge par volet. Il vaut `null` pour les campagnes
 en brouillon et pour les utilisateurs sans `canFollowup`.
 
-La liste réutilise les accès déjà calculés et ajoute une seule agrégation SQL
-pour toutes les campagnes ouvertes ou clôturées. Seuls les couples campagne /
+La liste charge les habilitations actives de l’agent en une fois, puis les
+campagnes avec seulement leurs relations légères. Les brouillons non gérables
+sont exclus avant la limite de 200 ; pour les autres campagnes, les droits sur
+les zones des points sont pris en compte même si la zone de campagne diffère.
+Une seule agrégation SQL couvre toutes les campagnes ouvertes ou clôturées.
+Seuls les couples campagne /
 préleveur autorisés sont joints ; un même préleveur visible dans une campagne
 ne donne aucun droit supplémentaire dans une autre. Les réponses sans dernière
 transmission ne sont pas comptées comme reçues, même si un brouillon existe.
@@ -91,9 +98,10 @@ déjà résolus par les droits ; il n’y a pas de requête par point ou prélev
 Une campagne est limitée à 5 000 points lors de sa configuration.
 
 Le détail lourd est chargé uniquement à l’ouverture des résultats d’un
-préleveur. Aucune nouvelle requête n’est ajoutée à `getCampaignDetail`. La liste
-des campagnes ajoute uniquement l’agrégation groupée décrite ci-dessus, sans
-requête de progression par carte. L’ancien endpoint `/responses`, les exports et les
+préleveur. La liste des campagnes ne recharge plus un détail et les droits pour
+chaque carte : son nombre de lectures groupées reste constant (au plus trois
+appels Prisma pour un agent, hors lectures relationnelles groupées par Prisma).
+L’ancien endpoint `/responses`, les exports et les
 parcours de saisie restent inchangés. Aucune migration ni variable
 d’environnement supplémentaire n’est nécessaire.
 
