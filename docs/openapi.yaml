@@ -9,6 +9,7 @@ servers:
 tags:
   - name: Administration
   - name: Compte
+  - name: Campagnes
   - name: Auth
   - name: Dashboard
   - name: Declarants
@@ -2065,6 +2066,187 @@ paths:
                 type: object
                 additionalProperties: true
         default: {$ref: '#/components/responses/Error'}
+  /campaigns:
+    get:
+      tags: [Campagnes]
+      operationId: listCampaigns
+      summary: Lister les campagnes accessibles et leur avancement
+      description: >-
+        Les éléments conservent le détail et les permissions existants. Le champ
+        progress porte uniquement sur les préleveurs du périmètre autorisé.
+        Il vaut null sans canFollowup ou pour une campagne en brouillon.
+        Les progressions des campagnes ouvertes et clôturées sont agrégées
+        en une seule requête, sans lire les contenus des réponses.
+      responses:
+        '200':
+          description: Liste des campagnes accessibles, limitée à 200 éléments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean, const: true}
+                  data:
+                    type: object
+                    required: [items, permissions]
+                    properties:
+                      permissions:
+                        type: object
+                        properties:
+                          canCreate: {type: boolean}
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [campaign, permissions, targets, managerOptions, progress]
+                          properties:
+                            campaign: {type: object}
+                            permissions: {type: object}
+                            targets: {type: array, items: {type: object}}
+                            managerOptions: {type: array, items: {type: object}}
+                            progress:
+                              oneOf:
+                                - {$ref: '#/components/schemas/CampaignResponseSummary'}
+                                - {type: 'null'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/{kind}/reopen:
+    post:
+      tags: [Campagnes]
+      operationId: reopenCampaignResponse
+      deprecated: true
+      summary: Ancienne commande de réouverture manuelle, retirée
+      description: >-
+        Route maintenue pour les anciens clients. Après authentification et
+        validation des paramètres de route, répond systématiquement 410 sans
+        lecture ni modification des réponses. Aucun rôle ne peut créer de
+        nouvelle réouverture. Les brouillons, transmissions, publications et
+        anciennes fenêtres reopenUntil sont conservés. L’édition ordinaire
+        pendant une fenêtre autorisée n’est pas supprimée par ce retrait.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+        - in: path
+          name: kind
+          required: true
+          schema: {type: string, enum: [INDEX, NEEDS]}
+      responses:
+        '410': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/summary:
+    get:
+      tags: [Campagnes]
+      operationId: getCampaignResponseSummary
+      summary: Mesurer la réception des réponses d’une campagne
+      description: >-
+        Réservé aux utilisateurs ayant le droit de suivi de la campagne.
+        Tous les nombres sont limités aux préleveurs possédant au moins un point
+        dans le périmètre actuellement autorisé. Deux réponses sont attendues
+        par préleveur, une pour chaque volet INDEX et NEEDS. Une réponse est reçue
+        lorsqu’une dernière transmission existe ; elle reste reçue pendant une
+        correction en brouillon. Les corrections sont comptées séparément, sans
+        lecture des valeurs ni des brouillons. scopeComplete indique si les
+        nombres portent sur toute la campagne ou seulement le périmètre visible.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+      responses:
+        '200':
+          description: Progression limitée au périmètre autorisé
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean, const: true}
+                  data: {$ref: '#/components/schemas/CampaignResponseSummary'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/overview:
+    get:
+      tags: [Campagnes]
+      operationId: listCampaignResponseOverview
+      summary: Lister le suivi des réponses par préleveur
+      description: >-
+        Même droit de suivi et même périmètre que le résumé. Ne charge aucun
+        brouillon, snapshot ou détail de publication. La recherche sans casse ni
+        accents porte sur le nom du préleveur et les noms de ses points visibles.
+        Les filtres sont appliqués avant pagination. missing signifie qu’au moins
+        un volet n’a jamais été reçu ; received signifie que les deux volets ont
+        été reçus ; correction signifie qu’au moins un volet reçu est à nouveau
+        en brouillon. received et correction peuvent donc se recouper. Le tri
+        porte sur le nom français du préleveur puis son UUID. Un curseur hors
+        périmètre ou ne correspondant plus aux filtres renvoie 400 : recommencer
+        alors à la première page. Aucune information n’est mise en cache HTTP.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - in: query
+          name: cursor
+          description: UUID du dernier préleveur de la page précédente, obtenu dans nextCursor.
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - in: query
+          name: q
+          schema: {type: string, maxLength: 100, default: ''}
+        - in: query
+          name: status
+          schema: {type: string, enum: [all, missing, received, correction], default: all}
+      responses:
+        '200':
+          description: Page de préleveurs et métadonnées de leurs deux volets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean, const: true}
+                  data: {$ref: '#/components/schemas/CampaignResponseOverviewPage'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/results:
+    get:
+      tags: [Campagnes]
+      operationId: getCampaignResponseResults
+      summary: Consulter les derniers résultats transmis par un préleveur
+      description: >-
+        Exige le droit de suivi et au moins un point autorisé pour ce préleveur.
+        Seules les dernières transmissions officielles sont chargées, jamais le
+        brouillon ou les anciennes versions. Une correction conserve la dernière
+        transmission comme résultat. Les valeurs et références sont filtrées par
+        point ; les commentaires et informations globales sont retirés lorsque
+        le périmètre du préleveur n’est pas entièrement visible. Les index sont
+        dans snapshot.readings, les besoins dans snapshot.needs et les volumes
+        calculés dans publication.totals. COMPLETE indique un volume calculé,
+        MISSING un volume inconnu, CONFLICT un conflit. Une valeur inconnue reste
+        null, elle n’est jamais convertie en zéro. Sans transmission, le résultat
+        du volet vaut null ou possède latestSubmission à null si un brouillon
+        existe déjà. Les résultats sont chargés à la demande, par préleveur.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CampaignId'
+        - in: query
+          name: preleveurUserId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Points visibles et dernières transmissions officielles du préleveur
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean, const: true}
+                  data: {$ref: '#/components/schemas/CampaignResponseResults'}
+        default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
     BearerAuth:
@@ -2072,6 +2254,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
   parameters:
+    CampaignId:
+      in: path
+      name: campaignId
+      required: true
+      schema: {$ref: '#/components/schemas/Uuid'}
     AdminAgentId:
       in: path
       name: agentId
@@ -2687,6 +2874,146 @@ components:
             usages: {$ref: '#/components/schemas/CollecteurExploitationFacetValues'}
             statuses: {$ref: '#/components/schemas/CollecteurExploitationFacetValues'}
             preleveurs: {$ref: '#/components/schemas/CollecteurExploitationFacetValues'}
+    CampaignResponseCounts:
+      type: object
+      additionalProperties: false
+      required: [expectedCount, receivedCount, correctionCount]
+      properties:
+        expectedCount: {type: integer, minimum: 0}
+        receivedCount: {type: integer, minimum: 0}
+        correctionCount:
+          type: integer
+          minimum: 0
+          description: Sous-ensemble des réponses reçues, actuellement en brouillon.
+    CampaignResponseSummary:
+      type: object
+      additionalProperties: false
+      required: [preleveurCount, expectedCount, receivedCount, correctionCount, scopeComplete, byKind]
+      properties:
+        preleveurCount: {type: integer, minimum: 0}
+        expectedCount: {type: integer, minimum: 0}
+        receivedCount: {type: integer, minimum: 0}
+        correctionCount: {type: integer, minimum: 0}
+        scopeComplete: {type: boolean}
+        byKind:
+          type: object
+          additionalProperties: false
+          required: [INDEX, NEEDS]
+          properties:
+            INDEX: {$ref: '#/components/schemas/CampaignResponseCounts'}
+            NEEDS: {$ref: '#/components/schemas/CampaignResponseCounts'}
+    CampaignResponseMetadata:
+      type: object
+      additionalProperties: false
+      required: [status, received, correctionPending, latestSubmissionAt]
+      properties:
+        status:
+          oneOf:
+            - {type: string, enum: [DRAFT, SUBMITTED]}
+            - {type: 'null'}
+        received: {type: boolean}
+        correctionPending: {type: boolean}
+        latestSubmissionAt: {type: [string, 'null'], format: date-time}
+    CampaignFollowupPreleveur:
+      type: object
+      additionalProperties: false
+      required: [userId, label]
+      properties:
+        userId: {$ref: '#/components/schemas/Uuid'}
+        label: {type: string}
+    CampaignResponseOverviewPage:
+      type: object
+      additionalProperties: false
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [preleveur, pointCount, responses]
+            properties:
+              preleveur: {$ref: '#/components/schemas/CampaignFollowupPreleveur'}
+              pointCount: {type: integer, minimum: 1}
+              responses:
+                type: object
+                additionalProperties: false
+                required: [INDEX, NEEDS]
+                properties:
+                  INDEX: {$ref: '#/components/schemas/CampaignResponseMetadata'}
+                  NEEDS: {$ref: '#/components/schemas/CampaignResponseMetadata'}
+        pagination:
+          type: object
+          additionalProperties: false
+          required: [totalCount, limit, hasMore, nextCursor]
+          properties:
+            totalCount: {type: integer, minimum: 0}
+            limit: {type: integer, minimum: 1, maximum: 100}
+            hasMore: {type: boolean}
+            nextCursor: {type: [string, 'null'], format: uuid}
+    CampaignOfficialResponse:
+      type: [object, 'null']
+      additionalProperties: false
+      required: [id, kind, status, latestSubmission]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        kind: {type: string, enum: [INDEX, NEEDS]}
+        status: {type: string, enum: [DRAFT, SUBMITTED]}
+        latestSubmission:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [submittedAt, snapshot, publication]
+          properties:
+            submittedAt: {type: string, format: date-time}
+            snapshot:
+              type: [object, 'null']
+              description: Derniers index, besoins et changements de compteur transmis, limités aux points autorisés.
+              additionalProperties: true
+            publication:
+              type: [object, 'null']
+              description: Derniers volumes calculés et références officielles, limités aux points autorisés.
+              additionalProperties: true
+    CampaignFollowupTarget:
+      type: object
+      required: [id, pointPrelevementId, preleveurUserId, exploitationId, pointPrelevement, preleveur, meters]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+        preleveurUserId: {$ref: '#/components/schemas/Uuid'}
+        exploitationId: {$ref: '#/components/schemas/Uuid'}
+        usage:
+          type: [object, 'null']
+          additionalProperties: true
+        pointPrelevement:
+          type: object
+          required: [id, name]
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            name: {type: [string, 'null']}
+          additionalProperties: true
+        preleveur: {$ref: '#/components/schemas/CampaignFollowupPreleveur'}
+        meters:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+    CampaignResponseResults:
+      type: object
+      additionalProperties: false
+      required: [targets, responses]
+      properties:
+        targets:
+          type: array
+          items: {$ref: '#/components/schemas/CampaignFollowupTarget'}
+        responses:
+          type: object
+          additionalProperties: false
+          required: [INDEX, NEEDS]
+          properties:
+            INDEX: {$ref: '#/components/schemas/CampaignOfficialResponse'}
+            NEEDS: {$ref: '#/components/schemas/CampaignOfficialResponse'}
     CollecteurExploitationCandidatePage:
       type: object
       additionalProperties: false

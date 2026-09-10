@@ -159,7 +159,7 @@ model CampaignNeedLine {
   target CampaignTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
   periodId String @db.Uuid
   period CampaignPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  requestedFlow Decimal @db.Decimal(20, 4)
+  requestedFlow Decimal? @db.Decimal(20, 4)
   requestedVolume Decimal @db.Decimal(20, 4)
   @@unique([submissionId, targetId, periodId])
 }
