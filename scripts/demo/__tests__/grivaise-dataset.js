@@ -1,10 +1,11 @@
 import test from 'ava'
 
 import {
-  buildGrivaiseDataset,
+  buildGrivaiseDataset as buildDatasetFromReferences,
   deterministicUuid as deterministicDatasetUuid,
   validateGrivaiseDataset
 } from '../lib/grivaise-dataset.js'
+import {buildGrivaiseDataset} from './helpers/grivaise-dataset.js'
 import {
   buildExpectedOwnedContentRecords,
   deterministicUuid as deterministicContentUuid
@@ -12,6 +13,13 @@ import {
 import {deterministicUuid as deterministicDatabaseUuid} from '../lib/seed-database.js'
 
 const UUID_V4_PATTERN = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/
+
+test('une référence géographique absente échoue sans réutiliser le cache d’une autre référence', t => {
+  t.is(buildGrivaiseDataset().points.length, 800)
+  t.throws(() => buildDatasetFromReferences({
+    historicalPointsUrl: new URL('./fixtures/missing-anchors.csv', import.meta.url)
+  }), {code: 'ENOENT'})
+})
 
 function getApplicationIds(dataset) {
   return [
