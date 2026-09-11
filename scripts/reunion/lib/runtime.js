@@ -221,10 +221,15 @@ export function createS3Context(environment, label) {
     }
   })
 
+  let endpointEnd = endpoint.length
+  while (endpoint[endpointEnd - 1] === '/') {
+    endpointEnd--
+  }
+
   return {
     client,
     bucket: `${requireEnv(environment, 'S3_BUCKET_PREFIX', label)}documents`,
-    endpoint: endpoint.replace(/\/+$/, '')
+    endpoint: endpoint.slice(0, endpointEnd)
   }
 }
 

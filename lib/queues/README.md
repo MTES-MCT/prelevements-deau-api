@@ -1,6 +1,8 @@
 # BullMQ
 
-Ce dossier contient les files d'attente et workers BullMQ.
+Ce dossier contient les files d'attente et workers BullMQ 6, avec Redis en RESP2.
+
+Avant le premier déploiement de cette version, suivre le [contrôle et la bascule coordonnée API/worker/orchestrateur](../../docs/bullmq-6-migration.md). Les anciennes planifications `repeat` doivent être converties avec BullMQ 5, sans purger les tâches.
 
 ## Services
 

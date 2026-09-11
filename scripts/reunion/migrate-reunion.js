@@ -110,7 +110,6 @@ Application locale explicite:
 
 function asPlainObject(value) {
   // JSON étendu Mongo: ObjectId.toJSON() et Date.toJSON() donnent un manifeste portable.
-  // eslint-disable-next-line unicorn/prefer-structured-clone
   return JSON.parse(JSON.stringify(value))
 }
 
@@ -557,7 +556,6 @@ function indexBySourceId(items) {
   return new Map(items.map(item => [item.sourceId, item]))
 }
 
-// eslint-disable-next-line max-params
 function appendSemanticComparison(failures, entity, sourceId, expected, actual) {
   if (!actual) {
     failures.push(semanticFailure(entity, sourceId, 'MISSING_TARGET_ENTITY'))

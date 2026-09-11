@@ -1,0 +1,132 @@
+name: Quality and security
+
+on:
+  pull_request:
+    branches: [testing, demo, prod]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: Dependency and workflow security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Use locked npm version
+        run: |
+          npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit all dependencies
+        run: |
+          set -o pipefail
+          mkdir -p .artifacts/security
+          npm audit --include=dev --audit-level=low --json | tee .artifacts/security/npm-audit-all.json
+      - name: Audit production dependencies
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          mkdir -p .artifacts/security
+          npm audit --omit=dev --audit-level=low --json | tee .artifacts/security/npm-audit-production.json
+      - name: Validate workflows and shell scripts
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/check-workflows.sh
+      - name: Retain audit reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-audits
+          path: .artifacts/security/
+          if-no-files-found: warn
+          retention-days: 30
+
+  tests:
+    name: API quality, migrations and integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: security_tests
+          POSTGRES_PASSWORD: security_tests_only
+          POSTGRES_DB: security_tests
+        ports: ['55439:5432']
+        options: >-
+          --health-cmd "pg_isready -U security_tests -d security_tests"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      NODE_ENV: test
+      TZ: Europe/Paris
+      FRONT_URL: ''
+      DATABASE_URL: postgresql://security_tests:security_tests_only@127.0.0.1:55439/security_tests
+      PUBLIC_STATS_TEST_DATABASE_URL: postgresql://security_tests:security_tests_only@127.0.0.1:55439/security_tests
+      REDIS_URL: redis://127.0.0.1:6379/0
+      SEARCH_CACHE_ENABLED: 'false'
+      CAMPAIGN_INTEGRATION_TESTS: '1'
+      CAMPAIGN_PROGRESS_SQL_TESTS: '1'
+      QUEUE_INTEGRATION_TESTS: '1'
+      CAMPAIGN_FRONT_ACTIONS_FILE: ${{ github.workspace }}/front/src/server/actions/campaigns.js
+      SENTRY_DSN: ''
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: '65534'
+      SMTP_FROM: test@example.test
+      SMTP_IGNORE_TLS: 'true'
+      SMTP_USER: ''
+      SMTP_PASSWORD: ''
+      S3_ENDPOINT: ''
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: api
+          persist-credentials: false
+      - name: Checkout compatible public front contract (no secrets)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: MTES-MCT/prelevements-deau-front
+          ref: 5af535e22e2ead27af702eb54722f1a9b5e1d8bc
+          path: front
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: api/.nvmrc
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: |
+          npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
+      - run: npm ci
+      - run: npx --no-install prisma generate
+      - name: Migrate a new database and verify idempotence
+        run: |
+          npm run migrate:prisma
+          npm run migrate:prisma
+      - run: npm run lint
+      - run: npm run lint:openapi
+      - name: Full tests including database integrations, with coverage
+        run: npm run coverage -- --concurrency=1 --timeout=180s
+      - name: Retain test coverage
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: api-coverage
+          path: api/coverage/
+          if-no-files-found: warn
+          retention-days: 14

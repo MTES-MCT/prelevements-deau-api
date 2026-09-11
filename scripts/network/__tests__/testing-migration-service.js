@@ -323,13 +323,13 @@ test('le statut utilise uniquement une transaction lecture seule, vérifie la ci
         disconnected = true
       }
     }),
-    readDirectory: async () => ['20260906_applied', '20260907_pending'].map(name => ({name, isDirectory: () => true}))
+    readDirectory: async () => ['20260906_applied', '20260907_pending', '20260309093415'].map(name => ({name, isDirectory: () => true}))
   })
   t.is(queries[0], 'SET TRANSACTION READ ONLY')
   t.is(queries[1], 'SET LOCAL statement_timeout = \'10s\'')
   t.true(queries.slice(2).every(sql => sql.trim().startsWith('SELECT')))
   t.false(queries.join('\n').includes('logs'))
-  t.deepEqual(status.pending, ['20260907_pending'])
+  t.deepEqual(status.pending, ['20260309093415', '20260907_pending'])
   t.deepEqual(status.unfinished, [])
   t.true(disconnected)
 })
@@ -344,8 +344,7 @@ test('un arrêt à vide ne déclenche ni SQL ni migration', async t => {
       t.fail('Arrêter un service à vide ne doit pas lancer de commande')
     }
   })
-  await service.stop()
-  t.pass()
+  await t.notThrowsAsync(service.stop())
 })
 
 test('un arrêt pendant une migration termine la commande sans déclarer de succès', async t => {

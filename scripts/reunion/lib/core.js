@@ -262,7 +262,7 @@ export function assertSafeTarget({
     targetEnvironment.DATABASE_URL
   ].filter(Boolean)
 
-  if (productionClues.some(value => /(^|[^a-z])prod(?:uction)?([^a-z]|$)/i.test(String(value)))) {
+  if (productionClues.some(value => /(?:^|[^a-z])prod(?:uction)?(?:[^a-z]|$)/i.test(String(value)))) {
     throw new Error('Cible production détectée: cette migration la refuse sans exception')
   }
 
@@ -286,7 +286,7 @@ export function stableSourceId(entity, legacyId, ownerId) {
 }
 
 export function rootUsageCode(value) {
-  const match = String(value ?? '').trim().toUpperCase().match(/^(\d+)/)
+  const match = /^(\d+)/.exec(String(value ?? '').trim().toUpperCase())
   if (!match) {
     throw new Error(`Code usage SANDRE invalide: ${value}`)
   }
@@ -371,7 +371,7 @@ export function normalizeEmail(value) {
   }
 
   const normalized = value.normalize('NFC').trim().toLowerCase()
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+  if (!/^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(normalized)) {
     return undefined
   }
 
@@ -719,7 +719,7 @@ export function toDateOnly(value) {
 
 export function safeFilename(value) {
   const filename = path.basename(String(value || 'document')).normalize('NFC')
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- Strip control characters from untrusted filenames.
   return filename.replaceAll(/[\u0000-\u001F\u007F]/g, '_')
 }
 

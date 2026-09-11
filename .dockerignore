@@ -7,6 +7,9 @@
 **/.env.*
 !.env.example
 node_modules
+.artifacts
+tests/browser
+playwright.config.mjs
 coverage
 .nyc_output
 **/__tests__

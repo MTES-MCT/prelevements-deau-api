@@ -101,7 +101,7 @@ test('refuse sslnegotiation=direct qui remplacerait l’objet TLS strict lors du
     connectionString: 'postgresql://demo:fake@172.16.12.2:5432/prelevements_demo?sslnegotiation=direct',
     ssl: {rejectUnauthorized: true, checkServerIdentity: () => undefined}
   })
-  t.is(bypass.connectionParameters.ssl, true)
+  t.true(bypass.connectionParameters.ssl)
 
   t.throws(() => getPostgresConnectionOptions(`${databaseUrl()}&sslnegotiation=direct`), {
     message: 'DATABASE_URL TLS : paramètre incompatible (sslnegotiation).'

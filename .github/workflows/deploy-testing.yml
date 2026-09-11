@@ -12,8 +12,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
   test_build_deploy:
-    runs-on: ubuntu-latest
+    needs: quality
+    runs-on: ubuntu-24.04
     environment: testing
     timeout-minutes: 70
 
@@ -27,32 +31,29 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           ssh-key: ${{ secrets.SUBMODULES_SSH_KEY }}
 
       - name: Use project Node.js version
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: ".nvmrc"
           cache: "npm"
 
+      - name: Use locked npm version
+        run: |
+          npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
+
       - name: Install deps
         run: npm ci
 
-      - name: Generate Prisma client and run tests
-        timeout-minutes: 10
-        run: |
-          npx prisma generate
-          # Large in-memory fixtures can exceed AVA's default 10s inactivity window on CI.
-          npm test -- --concurrency=3 --timeout=2m
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Login to Scaleway Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.SCW_REGISTRY_ENDPOINT }}
           username: nologin
@@ -60,7 +61,7 @@ jobs:
 
       - name: Build and push immutable image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: ./deploy/Dockerfile
@@ -72,6 +73,29 @@ jobs:
             GITHUB_TOKEN=${{ github.token }}
           tags: |
             ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}:testing-${{ github.sha }}
+
+
+      - name: Install image vulnerability scanner
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+          cache: true
+
+      - name: Scan exact candidate image before any deployment
+        env:
+          IMAGE_REF: ${{ env.SCW_REGISTRY_ENDPOINT }}/${{ env.SCW_IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          bash .github/scripts/scan-image.sh "$IMAGE_REF"
+          bash .github/scripts/smoke-image.sh "$IMAGE_REF"
+
+      - name: Retain image vulnerability report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-audit-${{ github.run_id }}
+          path: .artifacts/security/image-audit.json
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Check immutable image size and certificates
         env:

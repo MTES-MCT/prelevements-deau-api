@@ -60,7 +60,7 @@ function fixture(options = {}) {
     state: operation?.state ?? 'idle', operation, database: ledger()
   })
   const calls = []
-  const json = (value, status = 200) => new Response(JSON.stringify(value), {status})
+  const json = (value, status = 200) => Response.json(value, {status})
 
   const fetch = async (input, request = {}) => {
     const url = new URL(input)
@@ -81,6 +81,11 @@ function fixture(options = {}) {
         return json(namespaces[id])
       }
 
+      if (id === MIGRATION_ID && method === 'GET' && options.concurrentMigrationDrift
+        && calls.filter(call => call.method === 'GET' && call.url === url.href).length === 2) {
+        containers[id].timeout = '1250s'
+      }
+
       if (method === 'PATCH') {
         if (id === MIGRATION_ID && options.patchFailure) {
           return json({detail: INVOKE_SECRET}, 503)
@@ -93,6 +98,18 @@ function fixture(options = {}) {
 
         if (id === MIGRATION_ID && options.businessDrift) {
           containers[TESTING.apiId].environment_variables.KEEP_CONTAINER = 'modified concurrently'
+        }
+
+        if (id === MIGRATION_ID && options.migrationMemoryDrift) {
+          containers[id].memory_limit_bytes = 999_999_999
+        }
+
+        if (id === MIGRATION_ID && options.businessRuntimeDrift) {
+          containers[TESTING.workerId].mvcpu_limit = 4000
+        }
+
+        if (id === TESTING.apiId && options.apiProbeDrift) {
+          containers[id].startup_probe = {...containers[id].startup_probe, timeout: '99s'}
         }
       }
 
@@ -151,6 +168,10 @@ function fixture(options = {}) {
       }
     }
 
+    if (options.workerUnhealthy && url.pathname === '/health') {
+      return json({}, 503)
+    }
+
     return json({ok: true})
   }
 
@@ -185,6 +206,41 @@ test('migration puis API et worker utilisent le même digest sans réécrire les
   t.is(posts[0].headers['X-Auth-Token'], AUTH)
   t.is(posts[0].headers['X-Migration-Secret'], INVOKE_SECRET)
   t.is(result.migrationOperationId, OPERATION_ID)
+  t.deepEqual(patches[1].body.startup_probe, {http: {path: '/healthz'}, interval: '5s', timeout: '2s', failure_threshold: 30})
+  t.deepEqual(patches[2].body.command, ['node', 'worker.js'])
+  t.true(fake.calls.some(call => call.url.endsWith('/health')))
+})
+
+test('un changement concurrent du service de migration bloque avant toute écriture', async t => {
+  const fake = fixture({concurrentMigrationDrift: true})
+  await t.throwsAsync(deployTesting(configuration(), fake), {message: /Configuration migration modifiée/})
+  t.is(fake.calls.filter(call => call.method === 'PATCH').length, 0)
+})
+
+test('la mémoire du service de migration reste contrôlée après son changement d’image', async t => {
+  const fake = fixture({migrationMemoryDrift: true})
+  await t.throwsAsync(deployTesting(configuration(), fake), {message: /configuration du conteneur/})
+  t.is(fake.calls.filter(call => call.method === 'PATCH').length, 1)
+})
+
+test('une dérive CPU concurrente du worker bloque avant les écritures métier', async t => {
+  const fake = fixture({businessRuntimeDrift: true})
+  await t.throwsAsync(deployTesting(configuration(), fake), {message: /Configuration métier modifiée/})
+  t.is(fake.calls.filter(call => call.method === 'PATCH').length, 1)
+})
+
+test('une probe différente de la seule modification autorisée bloque le déploiement', async t => {
+  const fake = fixture({apiProbeDrift: true})
+  await t.throwsAsync(deployTesting(configuration(), fake), {message: /configuration du conteneur/})
+  t.is(fake.calls.filter(call => call.method === 'PATCH').length, 2)
+})
+
+test('un worker testing non sain empêche de confirmer le déploiement et son alias', async t => {
+  const fake = fixture({workerUnhealthy: true})
+  const logs = []
+  await t.throwsAsync(deployTesting(configuration(), {...fake, log: value => logs.push(value)}), {message: /sonde worker testing/})
+  t.is(fake.calls.filter(call => call.url.endsWith('/health')).length, 24)
+  t.deepEqual(logs, [])
 })
 
 for (const status of [502, 503, 504]) {
@@ -373,10 +429,11 @@ test('le workflow testing bloque sur le service privé et transmet le digest du 
   const workflow = await readFile(new URL('../../.github/workflows/deploy-testing.yml', import.meta.url), 'utf8')
   t.true(workflow.includes('branches: ["testing"]'))
   t.regex(workflow, /cancel-in-progress: false/)
-  t.regex(workflow, /Generate Prisma client and run tests\n\s+timeout-minutes: 10/)
-  t.regex(workflow, /npm test -- --concurrency=3 --timeout=2m/)
+  t.regex(workflow, /uses: \.\/\.github\/workflows\/quality\.yml/)
+  t.regex(workflow, /needs: quality/)
+  t.notRegex(workflow, /Generate Prisma client and run tests/)
   t.regex(workflow, /id: build/)
-  t.regex(workflow, /@\${{ steps\.build\.outputs\.digest }}/)
+  t.regex(workflow, /@\$\{\{ steps\.build\.outputs\.digest \}\}/)
   t.regex(workflow, /run: node deploy\/network\/ci-testing-deploy\.js/)
   t.notRegex(workflow, /jobs definition start|SCW_JOB_DEFINITION_ID|continue-on-error/)
   t.true(workflow.indexOf('Publish testing-latest after successful deployment') > workflow.indexOf('run: node deploy/network/ci-testing-deploy.js'))

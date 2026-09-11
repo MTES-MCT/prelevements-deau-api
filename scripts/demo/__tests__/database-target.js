@@ -31,6 +31,14 @@ function databaseUrl({
   return `${protocol}://${user}:${secret}@${host}:${port}/${database}${query}`
 }
 
+test('accepte PostgreSQL demo privé sans confondre les ports publics et privés', t => {
+  const parsed = validateDemoAdminDatabaseUrl(databaseUrl({host: '172.16.12.2', port: '5432'}))
+  t.is(parsed.hostname, '172.16.12.2')
+  t.is(parsed.port, '5432')
+  t.throws(() => validateDemoAdminDatabaseUrl(databaseUrl({host: '172.16.12.2', port: '17063'})))
+  t.throws(() => validateDemoAdminDatabaseUrl(databaseUrl({port: '5432'})))
+})
+
 test('accepte le hostname public exact de PostgreSQL demo', t => {
   const parsed = validateDemoAdminDatabaseUrl(databaseUrl())
 

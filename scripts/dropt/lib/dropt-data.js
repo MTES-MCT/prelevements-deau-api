@@ -162,8 +162,9 @@ export function slug(value) {
     .normalize('NFD')
     .replaceAll(/[\u0300-\u036F]/g, '')
     .toLocaleLowerCase('fr-FR')
-    .replaceAll(/[^a-z\d]+/g, '-')
-    .replaceAll(/^-+|-+$/g, '')
+    .replaceAll(/[^a-z\d]+/g, ' ')
+    .trim()
+    .replaceAll(' ', '-')
     .slice(0, 120)
 
   return s || 'non-renseigne'
@@ -435,7 +436,9 @@ function addCoordinateCandidate(candidates, {x, y, srid, note}) {
     }
 
     candidates.push({x, y, srid, lon, lat, note})
-  } catch {}
+  } catch {
+    // Try the other coordinate candidates when this projection is invalid.
+  }
 }
 
 function oneDigitDeletionNumbers(rawValue) {
@@ -687,7 +690,7 @@ export function getPointCodes(row) {
 
 function stripNamePrefix(value) {
   return String(clean(value) ?? '')
-    .replace(/^(m\.?|mme|madame|monsieur)\s+/i, '')
+    .replace(/^(?:m\.?|mme|madame|monsieur)\s+/i, '')
     .trim()
 }
 
@@ -711,7 +714,7 @@ function parseIndividual(fullNameRaw) {
 function isLikelyLegalPerson(name) {
   const normalized = normalizeLookup(name)
 
-  return /\b(earl|gaec|scea|sarl|sas|sa|sci|eurl|asa|asl|gfa|cuma|commune|mairie|syndicat|societe|ets|etablissement|exploitation agricole|association)\b/.test(normalized)
+  return /\b(?:earl|gaec|scea|sarl|sas|sa|sci|eurl|asa|asl|gfa|cuma|commune|mairie|syndicat|societe|ets|etablissement|exploitation agricole|association)\b/.test(normalized)
 }
 
 export function getEmails(row) {
@@ -724,7 +727,7 @@ export function getEmails(row) {
     raw
       .split(/[;,|\s]+/)
       .map(email => email.trim().toLocaleLowerCase('fr-FR'))
-      .filter(email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      .filter(email => /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email))
   )
 }
 
@@ -745,7 +748,7 @@ export function getDeclarantData(row) {
       ? row.adresseResidence
       : null,
     row.adresseLieuDit
-  ])?.replace(/\n/g, ' - ') ?? null
+  ])?.replaceAll('\n', ' - ') ?? null
 
   return {
     sourceId: row.declarantSourceId,

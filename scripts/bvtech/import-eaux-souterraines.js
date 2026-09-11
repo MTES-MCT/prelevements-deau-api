@@ -292,7 +292,7 @@ function extractEmails(value) {
     return []
   }
 
-  return [...String(normalized).matchAll(/[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+/g)]
+  return [...String(normalized).matchAll(/(?<![\w.!#$%&'*+/=?^`{|}~-])[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+/g)]
     .map(match => normalizeEmail(match[0]))
 }
 
@@ -411,7 +411,12 @@ function extractMetadataFromDescription(description) {
     return metadata
   }
 
-  for (const match of String(normalizedDescription).matchAll(/([^:;]+?)\s*[:：]\s*([^;]+)/g)) {
+  for (const section of String(normalizedDescription).split(';')) {
+    const match = /^([^:：]+)[:：]([^;]+)$/.exec(section)
+    if (!match) {
+      continue
+    }
+
     const label = normalizeName(match[1])
     const value = normalizeCellValue(match[2])
 
@@ -453,25 +458,25 @@ function extractSourceIdentifiers({internalIdentifier, codeBSS, comment}) {
   addIdentifier(identifiers, 'BSS', codeBSS)
   addIdentifier(identifiers, 'BVTECH_INTERNE', internalIdentifier)
 
-  const internalSmnpr = String(internalIdentifier ?? '').match(/^smnpr[-\s]*(\d+)$/i)
+  const internalSmnpr = /^smnpr[-\s]*(\d+)$/i.exec(String(internalIdentifier ?? ''))
   if (internalSmnpr) {
     addIdentifier(identifiers, 'SMNPR', internalSmnpr[1])
   }
 
   const commentText = String(comment ?? '')
 
-  const smnpr = commentText.match(/\bsmnpr\s+([a-z\d-]+)/i)
+  const smnpr = /\bsmnpr\s+([a-z\d-]+)/i.exec(commentText)
   if (smnpr && !identifiers.SMNPR) {
     addIdentifier(identifiers, 'SMNPR', smnpr[1])
   }
 
-  const ddtm = commentText.match(/\bddtm\s+([a-z\d-]+)/i)
+  const ddtm = /\bddtm\s+([a-z\d-]+)/i.exec(commentText)
   if (ddtm) {
     addIdentifier(identifiers, 'DDTM', ddtm[1])
   }
 
-  const aermc = commentText.match(/\baermc\s+([a-z\d-]+)/i)
-    ?? commentText.match(/\bcode ae export\s*[:：]\s*([a-z\d-]+)/i)
+  const aermc = /\baermc\s+([a-z\d-]+)/i.exec(commentText)
+    ?? /\bcode ae export\s*[:：]\s*([a-z\d-]+)/i.exec(commentText)
   if (aermc) {
     addIdentifier(identifiers, 'AERMC', aermc[1])
   }

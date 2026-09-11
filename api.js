@@ -18,7 +18,11 @@ import {createResponseCompressionMiddleware} from './lib/util/response-compressi
 import {validateAuditContextConfig} from './lib/audit/context.js'
 import {auditMiddleware} from './lib/audit/middleware.js'
 import {searchCacheInvalidationMiddleware} from './lib/services/search-corpus-cache.js'
-import {warnInvalidSearchCacheConfiguration} from './lib/services/search-cache-config.js'
+import {warnInvalidSearchCacheConfiguration, closeDedicatedSearchCacheRedis} from './lib/services/search-cache-config.js'
+import {createWorkerShutdown} from './lib/queues/shutdown.js'
+import {closeQueues} from './lib/queues/config.js'
+import {closeRedis as closeQueueRedis} from './lib/queues/redis.js'
+import {prisma} from './db/prisma.js'
 import {validateAuthConfig} from './lib/config/auth.js'
 import {validateSessionTokenConfig} from './lib/models/session-token.js'
 
@@ -88,6 +92,35 @@ Sentry.setupExpressErrorHandler(app)
 app.use(errorHandler)
 
 // Start listening
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Start listening on port ${PORT}`)
 })
+
+const shutdown = createWorkerShutdown({
+  workers: [],
+  async stopAccepting() {
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve())
+      server.closeIdleConnections()
+    })
+  },
+  closeQueues,
+  async closeRedis() {
+    closeDedicatedSearchCacheRedis()
+    await closeQueueRedis()
+  },
+  async closeDatabase() {
+    await prisma.$disconnect()
+    await globalThis.pgPool?.end()
+  },
+  flushTelemetry: () => Sentry.flush(2000)
+})
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    shutdown().catch(error => {
+      console.error('Arrêt de l’API impossible:', error)
+      process.exitCode = 1
+    })
+  })
+}
