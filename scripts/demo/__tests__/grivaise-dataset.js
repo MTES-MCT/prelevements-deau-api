@@ -5,7 +5,7 @@ import {
   deterministicUuid as deterministicDatasetUuid,
   validateGrivaiseDataset
 } from '../lib/grivaise-dataset.js'
-import {buildGrivaiseDataset} from './helpers/grivaise-dataset.js'
+import {buildGrivaiseDataset} from './__helpers__/grivaise-dataset.js'
 import {
   buildExpectedOwnedContentRecords,
   deterministicUuid as deterministicContentUuid
