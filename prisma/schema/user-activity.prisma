@@ -1,0 +1,18 @@
+// Un signal mensuel, sans historique de navigation ni adresse IP.
+model UserMonthlyActivity {
+  month     String
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      UserRole
+  createdAt DateTime @default(now())
+
+  // La clé couvre aussi les recherches par mois.
+  @@id([month, userId])
+  @@index([userId])
+}
+
+// Créé au premier signal confirmé, pas au déploiement de la migration.
+model UserActivityCollectionState {
+  id        String   @id
+  startedAt DateTime
+}

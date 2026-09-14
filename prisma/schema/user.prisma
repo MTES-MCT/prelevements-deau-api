@@ -46,6 +46,7 @@ model User {
   campaignManagers CampaignManager[]
   campaignSubmissions CampaignSubmission[] @relation("CampaignSubmissionCreator")
   campaignExports CampaignExport[] @relation("CampaignExportCreator")
+  monthlyActivities UserMonthlyActivity[]
 
   passwordCredential        PasswordCredential?  @relation("PasswordCredentialOwner")
   passwordActivation        PasswordActivation?  @relation("PasswordActivationOwner")
