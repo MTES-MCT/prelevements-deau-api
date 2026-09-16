@@ -1,6 +1,6 @@
 # Déploiement API sur les services de migration privés
 
-Les workflows demo et prod utilisent les conteneurs de migration déjà déployés,
+Les workflows testing, demo et prod utilisent des conteneurs de migration privés,
 et non des Serverless Jobs. Les commandes existantes sont conservées :
 
 | Environnement | Déploiement CI | Commande du service privé |
@@ -9,22 +9,18 @@ et non des Serverless Jobs. Les commandes existantes sont conservées :
 | demo | `deploy/network/ci-demo-deploy.js` | `node scripts/network/migration-service.js` |
 | prod | `deploy/network/ci-prod-deploy.js` | `node scripts/network/prod-migration-service.js` |
 
-Leurs implémentations et tests proviennent respectivement de `origin/demo` et
-`origin/prod`. Les identifiants, noms, réseaux et services cibles ont été
-recoupés avec les métadonnées Scaleway le 11 septembre 2026, sans écriture.
-
-Les trois points d'entrée utilisent maintenant les mêmes implémentations :
+Les trois points d'entrée utilisent les mêmes implémentations :
 `ci-environment-deploy.js`, `migration-service-core.js` et `migration-status-core.js`.
 Chaque wrapper conserve ses identifiants, validateurs de cible, noms de secrets
 et comportements historiques. En particulier, prod refuse de rejouer une
 opération échouée et vérifie le registre avant Prisma ; testing conserve ses
-probes de déploiement et sa commande worker. Les 147 tests de migration et de
-déploiement des trois environnements restent exécutés sans accès au cloud.
+probes de déploiement et sa commande worker. Les tests de migration et de
+déploiement s’exécutent sans accès au cloud.
 
 ## Configuration GitHub existante à conserver
 
-Ces noms sont repris des workflows distants correspondants ; aucun nouveau
-secret ne doit être généré ni substitué aux secrets des services :
+Les workflows utilisent notamment les clés suivantes ; ne pas générer de
+nouveaux secrets en remplacement de ceux des services :
 
 - Variables : `SCW_DEMO_MIGRATION_CONTAINER_ID`,
   `SCW_DEMO_MIGRATION_NAMESPACE_ID`, `SCW_PROD_MIGRATION_CONTAINER_ID`,
@@ -32,10 +28,9 @@ secret ne doit être généré ni substitué aux secrets des services :
 - Secrets : `DEMO_MIGRATION_INVOKE_SECRET`, `PROD_MIGRATION_INVOKE_SECRET`,
   ainsi que les identifiants API/worker et credentials Scaleway déjà utilisés.
 
-La présence effective de ces métadonnées dans GitHub n'a pas pu être contrôlée
-localement, faute d'authentification GitHub CLI. Le déploiement échoue avant
-toute écriture si une cible ou un secret requis manque. Ne pas utiliser un
-identifiant d'un autre environnement pour contourner ce contrôle.
+Le déploiement échoue avant toute écriture si une cible ou un secret requis
+manque. Ne pas utiliser un identifiant d'un autre environnement pour contourner
+ce contrôle.
 
 ## Garanties du déroulement
 

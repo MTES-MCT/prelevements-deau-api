@@ -15,11 +15,16 @@ Le parsing des déclarations déposées est réalisé par l'orchestration. Les i
 ## Installation
 
 ```bash
-npm install
+nvm use
+npm ci
 cp .env.example .env
 ```
 
 Complétez ensuite les variables obligatoires dans `.env`.
+
+Utilisez la version npm indiquée par `packageManager` dans `package.json`.
+Réexaminez les autorisations `allowScripts` lors des mises à jour ; ne contournez
+pas les conflits avec `--force` ou `--legacy-peer-deps`.
 
 ## Services locaux
 
@@ -79,7 +84,7 @@ La queue `process-declaration` est exposée pour le traitement des déclarations
 - `npm run import-bvtech` : importe les données BVTech.
 - `npm run migrate:prisma` : applique les migrations Prisma.
 - `npm run user:create` : crée un utilisateur.
-- `npm run lint` : lance XO.
+- `npm run lint` : lance ESLint.
 - `npm run lint:openapi` : valide la spec OpenAPI.
 - `npm test` : lance les tests AVA.
 - `npm run coverage` : lance les tests avec c8.
@@ -143,6 +148,23 @@ npm run lint:openapi
 npm test
 npm run coverage
 ```
+
+Les tests d’intégration utilisent uniquement PostgreSQL/PostGIS et Redis jetables,
+avec des données synthétiques. Ne leur fournissez pas de base réelle.
+
+## Maintenance et livraison
+
+```bash
+npm audit --include=dev --audit-level=low
+npm audit --omit=dev --audit-level=low
+bash .github/scripts/check-workflows.sh
+```
+
+Le contrôle des workflows nécessite Actionlint et ShellCheck. Les commandes
+et résultats CI sont décrits dans [les pipelines](docs/pipelines.md).
+Voir aussi les [exceptions de dépendances](docs/dependency-overrides.md),
+les [migrations privées](docs/ci-private-migrations.md) et la
+[bascule coordonnée BullMQ](docs/bullmq-6-migration.md).
 
 ## Licence
 

@@ -4,8 +4,9 @@ Vérification du 11 septembre 2026. Aucun paquet n'est modifié après installat
 
 ## Prisma 7.10.0 et deepmerge-ts
 
-Prisma 7.10.0 est la dernière version stable publiée ; la balise npm `latest`
-désigne une préversion de Prisma 8, non retenue. `@prisma/config@7.10.0` impose
+Au 11 septembre 2026, Prisma 7.10.0 était la dernière version stable publiée ;
+la balise npm `latest` désignait une préversion de Prisma 8, non retenue.
+`@prisma/config@7.10.0` impose
 `deepmerge-ts@7.1.5`. Toutes les versions 7 restent touchées par
 [GHSA-ggr8-5vv4-36mx](https://github.com/RebeccaStevens/deepmerge-ts/security/advisories/GHSA-ggr8-5vv4-36mx).
 Le correctif est intégré dans la
@@ -43,3 +44,6 @@ corrigée de mysql2, puis vérifier le lockfile, la génération, les migrations
 et l'audit. Il ne s'agit pas d'une prise en charge MySQL de l'application.
 
 L'override `uuid = 11.1.1`, antérieur à cette modernisation, est conservé.
+
+L’alias `bullmq-v5` est réservé aux tests de compatibilité des files 5/6 et
+n’est pas embarqué dans l’image finale.

@@ -1,6 +1,6 @@
 ## Stack
 
-Node.js 24, ESM, Express 5, Prisma/PostgreSQL/PostGIS, Redis, BullMQ v5, S3 compatible storage, AVA, XO, c8.
+Node.js 24, ESM, Express 5, Prisma/PostgreSQL/PostGIS, Redis, BullMQ v6, S3 compatible storage, AVA, ESLint, c8.
 
 ## Code Style
 
@@ -55,7 +55,7 @@ if (error) {
 
 **BullMQ**: see `lib/queues/README.md`.
 
-Current queues:
+Examples of queues (see `lib/queues/config.js` for the full catalog):
 
 - `process-declaration`
 - `process-api-import`
