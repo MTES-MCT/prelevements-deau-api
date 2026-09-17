@@ -2586,6 +2586,7 @@ components:
         fetchedAt: {type: string, format: date-time, description: Instant de récupération réutilisé à l’identique pour un retry}
         complete: {type: boolean, const: true}
         mode: {type: string, enum: [LIVE, OFFLINE], default: LIVE}
+        preserveOrdinary: {type: boolean, default: false, description: Protection supplémentaire interdisant tout remplacement de volume ordinaire par ce lot ; conservée dans son accusé durable.}
         readings:
           type: array
           maxItems: 50000
