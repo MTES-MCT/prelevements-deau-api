@@ -64,12 +64,9 @@ model PointPrelevement {
 
   zones      PointPrelevementZone[]
   declarants DeclarantPointPrelevement[]
-  compteurs  CompteurPointPrelevement[]
   externalReferences ExternalReference[]
 
   chunks Chunk[]
-  campaignTargets CampaignTarget[]
-  campaignCoverages CampaignCoverage[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -138,7 +135,6 @@ model PointPrelevementZone {
 }
 
 model DeclarantPointPrelevement {
-  campaignTargets CampaignTarget[]
   id String @id @default(uuid()) @db.Uuid
 
   declarantUserId String    @db.Uuid

@@ -35,7 +35,6 @@ model Source {
   apiImport   ApiImport? @relation(fields: [apiImportId], references: [id], onDelete: Cascade)
 
   chunks Chunk[]
-  campaignCoverages CampaignCoverage[]
   meterPublication MeterPublication?
 
   createdAt DateTime @default(now())
@@ -57,7 +56,6 @@ enum ChunkInstructionStatus {
 
 enum ChunkCalculationStrategy {
   GENERIC
-  CAMPAIGN
   METER
 }
 
@@ -131,7 +129,6 @@ enum ChunkValueKind {
 
 model ChunkValue {
   meterContributions MeterVolumeContribution[]
-  campaignCoverages CampaignCoverage[]
   id String @id @default(uuid()) @db.Uuid
 
   chunkId String @db.Uuid

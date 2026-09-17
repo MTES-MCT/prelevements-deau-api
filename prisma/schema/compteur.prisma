@@ -4,8 +4,6 @@ model Compteur {
   serialNumber String? @db.Text
   identifier   String? @db.Text
 
-  points CompteurPointPrelevement[]
-  campaignMeters CampaignTargetMeter[]
   chunks Chunk[]
   externalReferences ExternalReference[]
   meterStreams MeterStream[]
@@ -21,26 +19,4 @@ model Compteur {
   @@unique([identifier])
   @@index([serialNumber])
   @@index([identifier])
-}
-
-model CompteurPointPrelevement {
-  campaignMeters CampaignTargetMeter[]
-  id String @id @default(uuid()) @db.Uuid
-
-  compteurId         String @db.Uuid
-  pointPrelevementId String @db.Uuid
-
-  startDate DateTime?
-  endDate   DateTime?
-
-  compteur         Compteur         @relation(fields: [compteurId], references: [id], onDelete: Restrict)
-  pointPrelevement PointPrelevement @relation(fields: [pointPrelevementId], references: [id], onDelete: Restrict)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([compteurId, startDate])
-  @@index([compteurId])
-  @@index([pointPrelevementId])
-  @@index([startDate, endDate])
 }
