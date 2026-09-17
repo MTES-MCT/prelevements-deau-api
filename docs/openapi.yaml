@@ -2025,6 +2025,10 @@ paths:
         Cet historique global reste lisible avant activation de la collecte ; il
         n'est pas attribué historiquement aux exploitations. Les dates de cette
         branche désignent des jours Europe/Paris, bornes inclusives.
+        Les volumes METER sont limités aux affectations consultables par l'acteur,
+        y compris lorsqu'un point est partagé. Leurs intervalles exacts sont
+        répartis sur les jours Europe/Paris, en tenant compte des changements
+        d'heure. Les mesures calendaires hors METER conservent leur interprétation.
       parameters:
         - in: query
           name: metricTypeCode
@@ -2105,6 +2109,8 @@ paths:
         par compteur physique possédant des relevés canoniques, sans doublon lié
         aux affectations. Les autres rôles, les scopes sourceId et les clients
         sans ce paramètre conservent les options ordinaires inchangées.
+        Les options issues de volumes METER sont toujours limitées aux affectations
+        consultables par l'acteur, avec les mêmes filtres que les valeurs agrégées.
       parameters:
         - in: query
           name: includeMeterReadings
@@ -3918,6 +3924,37 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         type: {type: string}
         name: {type: string}
+        metadata:
+          type: object
+          additionalProperties: true
+          properties:
+            calculationStrategy: {type: string}
+            periodStart:
+              type: string
+              format: date-time
+              description: Pour METER, début exact des valeurs visibles non rejetées, exprimé en UTC.
+            periodEnd:
+              type: string
+              format: date-time
+              description: Pour METER, fin exacte exclusive des valeurs visibles non rejetées, exprimée en UTC.
+        chunks:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              metadata:
+                type: object
+                additionalProperties: true
+                properties:
+                  periodStart:
+                    type: string
+                    format: date-time
+                    description: Pour METER, début exact des valeurs de ce chunk autorisé.
+                  periodEnd:
+                    type: string
+                    format: date-time
+                    description: Pour METER, fin exacte exclusive des valeurs de ce chunk autorisé.
     PointPrelevement:
       type: object
       additionalProperties: true
