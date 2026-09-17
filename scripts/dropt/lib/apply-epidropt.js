@@ -1,6 +1,7 @@
 import {lockMeter, reprocessMeterStreamInTransaction} from '../../../lib/services/meter-publication.js'
 import {validateAllocationSnapshot} from '../../../lib/services/meter-core.js'
 import {digest, stableId, SCOPE, FORMAT_VERSION} from './epidropt.js'
+import {getTransactionTimeoutMs} from './import-options.js'
 
 const entityFields = {POINT: 'pointPrelevementId', DECLARANT: 'declarantUserId', METER: 'compteurId'}
 
@@ -263,8 +264,9 @@ async function lockImportMeters(client, records, pointIds) {
   for (const id of [...allPoints].sort()) await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('volumes-from-index'), hashtext(${id}))`
 }
 
-export async function applyManifest(client, manifest, {apply = false, activateAt, effectiveAt, serviceAccountId} = {}) {
+export async function applyManifest(client, manifest, {apply = false, activateAt, effectiveAt, serviceAccountId, transactionTimeoutSeconds} = {}) {
   validateManifest(manifest)
+  const timeout = getTransactionTimeoutMs(transactionTimeoutSeconds)
   const {manifestHash} = manifest
   activateAt = explicitInstant(activateAt)
   effectiveAt = explicitInstant(effectiveAt)
@@ -306,7 +308,7 @@ export async function applyManifest(client, manifest, {apply = false, activateAt
   }
 
   try {
-    return await client.$transaction(execute, {maxWait: 10_000, timeout: 180_000})
+    return await client.$transaction(execute, {maxWait: 10_000, timeout})
   } catch (error) {
     if (error.dryRunResult) return error.dryRunResult
     throw error

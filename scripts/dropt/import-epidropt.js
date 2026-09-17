@@ -4,12 +4,13 @@ import path from 'node:path'
 import process from 'node:process'
 import {createHash} from 'node:crypto'
 import {readWorkbook, EPIDROPT_SHEETS, RIVES_SHEETS, buildManifest, digest} from './lib/epidropt.js'
+import {getTransactionTimeoutMs} from './lib/import-options.js'
 
 const {positionals, values} = parseArgs({allowPositionals: true, options: {
   input: {type: 'string', default: 'data/dropt/epidropt-2026'}, target: {type: 'string'},
   manifest: {type: 'string'}, overrides: {type: 'string'}, report: {type: 'string'}, 'against-report': {type: 'string'},
   apply: {type: 'boolean', default: false}, 'activate-at': {type: 'string'}, 'effective-at': {type: 'string'}, 'service-account-id': {type: 'string'},
-  'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}
+  'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
 if (!['prepare', 'apply', 'verify'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify [--input dossier] [--target local|testing] [--apply]')
@@ -22,6 +23,7 @@ async function writePrivate(filename, value) {
 }
 
 try {
+  getTransactionTimeoutMs(values['transaction-timeout-seconds'])
   if (operation === 'prepare') {
     const files = {epidropt: path.join(base, 'raw/Prelevement_Epidropt_20_08_2026.xlsx'), rives: path.join(base, 'raw/ExportTableEpiDropt.xlsx')}
     const inputs = {}
@@ -70,7 +72,10 @@ try {
       if (digest(payload) !== manifestHash) throw new Error('Manifeste modifié ; relancer prepare.')
       const {applyManifest, verifyManifest} = await import('./lib/apply-epidropt.js')
       const report = values['against-report'] ? JSON.parse(await readFile(values['against-report'], 'utf8')) : undefined
-      const result = operation === 'verify' ? await verifyManifest(prisma, manifest, {report}) : await applyManifest(prisma, manifest, {apply: values.apply, activateAt: values['activate-at'], effectiveAt: values['effective-at'], serviceAccountId: values['service-account-id']})
+      const result = operation === 'verify' ? await verifyManifest(prisma, manifest, {report}) : await applyManifest(prisma, manifest, {
+        apply: values.apply, activateAt: values['activate-at'], effectiveAt: values['effective-at'], serviceAccountId: values['service-account-id'],
+        transactionTimeoutSeconds: values['transaction-timeout-seconds']
+      })
       const stamp = new Date().toISOString().replaceAll(':', '-')
       await writePrivate(path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`)), result)
       console.log(JSON.stringify({manifestHash: result.manifestHash, applied: result.applied ?? false, counts: result.counts, issues: result.issues?.length, complete: result.complete}))
