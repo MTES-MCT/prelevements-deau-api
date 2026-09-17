@@ -2220,6 +2220,90 @@ paths:
                     type: array
                     items: {$ref: '#/components/schemas/MeterAllocationSummary'}
         default: {$ref: '#/components/responses/Error'}
+  /meters/allocation-targets:
+    get:
+      operationId: searchMeterAllocationTargets
+      summary: Rechercher les exploitations pour une répartition de compteur
+      description: Administrateur uniquement. Retourne au plus 25 exploitations non supprimées et actives ou sans statut renseigné.
+      parameters:
+        - {in: query, name: search, required: true, schema: {type: string, minLength: 2, maxLength: 100}}
+      responses:
+        '200':
+          description: Exploitations candidates ; les dates et l’usage sont également vérifiés lors de l’enregistrement.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {$ref: '#/components/schemas/Uuid'}
+                        label: {type: string}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations/{exploitationId}/meters/{meterId}/allocation-settings:
+    parameters:
+      - {in: path, name: exploitationId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      - {in: path, name: meterId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    get:
+      operationId: getMeterAllocationSettings
+      summary: Lire la répartition complète d’un compteur
+      description: Administrateur uniquement. Le compteur doit être rattaché à l’exploitation. Les parts hors plateforme sont incluses ; les index physiques ne sont pas retournés.
+      parameters:
+        - {in: query, name: streamId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      responses:
+        '200':
+          description: Répartition et jeton de concurrence
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeterAllocationSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: updateMeterAllocationSettings
+      summary: Modifier les rattachements et pourcentages à une date d’effet
+      description: >-
+        Administrateur hors impersonation uniquement. La répartition complète doit totaliser exactement 100 %,
+        avec au moins une exploitation active. La date d’effet est un jour Europe/Paris, au plus tôt le lendemain
+        du dernier début de version ou de l’activation. Les anciennes versions et identités des rattachements
+        restent conservées ; un changement de bénéficiaire crée un nouveau rattachement. Ne modifie ni
+        l’activation du flux, ni les mesures ordinaires. Les intervalles sans répartition complète ou traversant
+        la date de changement restent bloqués. Les conflits de recalcul sont retournés sans annuler la répartition.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [streamId, expectedVersion, effectiveDate, reason, allocations]
+              properties:
+                streamId: {$ref: '#/components/schemas/Uuid'}
+                expectedVersion: {type: string, pattern: '^[a-f0-9]{64}$'}
+                effectiveDate: {type: string, format: date, description: Année comprise entre 1900 et 2100.}
+                reason: {type: string, minLength: 3, maxLength: 500}
+                allocations:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [exploitationId, percentage]
+                    properties:
+                      key: {type: string, minLength: 1, maxLength: 500, description: Clé existante ; omise pour une nouvelle part.}
+                      exploitationId: {type: [string, 'null'], format: uuid, description: null désigne explicitement une part hors plateforme.}
+                      percentage: {type: string, pattern: '^\d{1,3}(?:\.\d{1,4})?$', description: De 0 à 100 avec au plus quatre décimales.}
+                      additive: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Nouvelle répartition et bilan du recalcul
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeterAllocationSettings'}
+        '409': {description: Répartition modifiée depuis sa lecture ; rechargement obligatoire.}
+        default: {$ref: '#/components/responses/Error'}
   /exploitations/{exploitationId}/meters/{meterId}/readings:
     get:
       operationId: getExploitationMeterReadings
@@ -2453,6 +2537,42 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    MeterAllocationSettings:
+      type: object
+      required: [meter, stream, expectedVersion, minEffectiveDate, allocations]
+      properties:
+        meter:
+          type: object
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            serialNumber: {type: [string, 'null']}
+            identifier: {type: [string, 'null']}
+        stream:
+          type: object
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            provider: {type: string}
+            enabled: {type: boolean}
+        expectedVersion: {type: string, pattern: '^[a-f0-9]{64}$'}
+        minEffectiveDate: {type: string, format: date}
+        allocations:
+          type: array
+          items:
+            type: object
+            properties:
+              key: {type: string}
+              exploitationId: {type: [string, 'null'], format: uuid}
+              exploitationLabel: {type: [string, 'null']}
+              percentage: {type: string}
+              additive: {type: boolean}
+              inScope: {type: boolean}
+              unresolved: {type: boolean, description: Part locale sans exploitation résolue ; ne doit pas être assimilée à une part hors plateforme.}
+        recalculation:
+          type: object
+          properties:
+            published: {type: integer, minimum: 0}
+            conflicts: {type: integer, minimum: 0}
+            issues: {type: array, items: {type: string}}
     MeterIngestionInput:
       type: object
       additionalProperties: false
@@ -2523,12 +2643,13 @@ components:
         percentage: {type: [string, 'null']}
         startDate: {type: [string, 'null'], format: date-time}
         endDate: {type: [string, 'null'], format: date-time}
-        status: {type: string, enum: [ACTIVE, INCOMPLETE, DISABLED]}
+        status: {type: string, enum: [ACTIVE, INCOMPLETE, DISABLED, ENDED]}
         sync:
           type: object
           required: [available, state, lastSuccessAt, lastReadingAt]
           properties:
             available: {type: boolean}
+            streamId: {type: [string, 'null'], format: uuid}
             state: {type: string, enum: [DISABLED, PENDING, SUCCESS, ERROR]}
             lastSuccessAt: {type: [string, 'null'], format: date-time}
             lastReadingAt: {type: [string, 'null'], format: date-time}
@@ -2537,6 +2658,7 @@ components:
           required: [canReadGlobalReadings]
           properties:
             canReadGlobalReadings: {type: boolean}
+            canEditAllocations: {type: boolean, description: Modification réservée à un administrateur en présence d’un flux.}
     PublicStatsProfile:
       type: object
       additionalProperties: false
@@ -4072,6 +4194,12 @@ components:
               label: {type: string}
               readingSeries: {type: boolean}
               meterId: {type: string, format: uuid}
+              meter:
+                type: object
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  serialNumber: {type: [string, 'null']}
+                  identifier: {type: [string, 'null']}
               precision: {type: integer}
               temporalOperators: {type: array, items: {type: string}, description: '[raw] pour les index physiques.'}
               availableFrequencies: {type: array, items: {type: string}, description: '[instantaneous] pour les index physiques.'}
