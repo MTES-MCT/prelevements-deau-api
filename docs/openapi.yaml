@@ -2018,7 +2018,13 @@ paths:
       description: >-
         Agrège les valeurs de séries sur un périmètre UUID. Les cumuls sont répartis
         uniformément sur leur période source semi-ouverte avant l'agrégation demandée ;
-        cette transformation sert uniquement à l'affichage.
+        cette transformation sert uniquement à l'affichage. Avec meterId, retourne
+        exclusivement pour ADMIN les index physiques canoniques de ce compteur,
+        sans agrégation, répartition ni création de mesures. Le compteur doit être
+        relié aux points, préleveur et collecteur demandés via ses affectations.
+        Cet historique global reste lisible avant activation de la collecte ; il
+        n'est pas attribué historiquement aux exploitations. Les dates de cette
+        branche désignent des jours Europe/Paris, bornes inclusives.
       parameters:
         - in: query
           name: metricTypeCode
@@ -2040,11 +2046,11 @@ paths:
           schema: {type: string, format: date}
         - in: query
           name: aggregationFrequency
-          description: Résolution temporelle de la série retournée.
+          description: Résolution temporelle. Avec meterId, seule instantaneous est admise (valeur implicite).
           schema:
             type: string
             default: 1 day
-            enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year]
+            enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year, instantaneous]
         - in: query
           name: spatialOperator
           schema:
@@ -2052,9 +2058,22 @@ paths:
             enum: [sum, mean, min, max]
         - in: query
           name: temporalOperator
+          description: Avec meterId, seul raw est admis (valeur implicite). raw est interdit sans meterId.
           schema:
             type: string
-            enum: [sum, mean, min, max]
+            enum: [sum, mean, min, max, raw]
+        - in: query
+          name: meterId
+          description: Compteur physique (ADMIN uniquement). Exige metricTypeCode=index et interdit sourceId et spatialOperator.
+          schema: {type: string, format: uuid}
+        - in: query
+          name: cursor
+          description: Avec meterId uniquement, identifiant du dernier relevé de la page précédente, dans le même compteur et la même fenêtre.
+          schema: {type: string, format: uuid}
+        - in: query
+          name: limit
+          description: Taille d'une page d'index physiques ; interdit sans meterId. Le client doit suivre nextCursor pour obtenir toute la série.
+          schema: {type: integer, minimum: 1, maximum: 5000, default: 1000}
         - in: query
           name: pointIds
           schema: {type: string}
@@ -2080,8 +2099,16 @@ paths:
       tags: [Series]
       operationId: getAggregatedSeriesOptions
       summary: Options d'agrégation
-      description: Retourne les métriques et opérateurs disponibles sur un périmètre.
+      description: >-
+        Retourne les métriques et opérateurs disponibles sur un périmètre.
+        Avec includeMeterReadings=true, ADMIN reçoit aussi une option distincte
+        par compteur physique possédant des relevés canoniques, sans doublon lié
+        aux affectations. Les autres rôles, les scopes sourceId et les clients
+        sans ce paramètre conservent les options ordinaires inchangées.
       parameters:
+        - in: query
+          name: includeMeterReadings
+          schema: {type: boolean, default: false}
         - in: query
           name: pointIds
           schema: {type: string}
@@ -2100,8 +2127,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: '#/components/schemas/AggregatedSeriesOptionsResponse'
         default: {$ref: '#/components/responses/Error'}
   /service-accounts/meter-streams:
     get:
@@ -3991,7 +4017,16 @@ components:
         metricTypeCode: {type: string}
         frequency:
           type: string
-          enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year]
+          enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year, instantaneous]
+        readingSeries: {type: boolean}
+        meterId: {type: string, format: uuid}
+        scope: {type: string, const: PHYSICAL_METER}
+        timezone: {type: string, const: Europe/Paris}
+        precision: {type: integer, const: 4}
+        warning: {type: string}
+        valuesCount:
+          type: integer
+          description: Nombre de relevés de cette page pour une série physique, y compris les index inadmissibles.
         startDate: {type: [string, 'null'], format: date}
         endDate: {type: [string, 'null'], format: date}
         minDate: {type: [string, 'null']}
@@ -4003,15 +4038,67 @@ components:
       required: [metadata, values]
       properties:
         metadata: {$ref: '#/components/schemas/AggregatedSeriesMetadata'}
+        nextCursor:
+          type: [string, 'null']
+          format: uuid
+          description: Présent pour les index physiques ; null à la dernière page. Aucune troncature silencieuse.
+        values:
+          type: array
+          items:
+            oneOf:
+              - type: object
+                additionalProperties: false
+                required: [date, value]
+                properties:
+                  date: {type: string}
+                  value: {type: number}
+              - $ref: '#/components/schemas/MeterReadingSeriesDay'
+    AggregatedSeriesOptionsResponse:
+      type: object
+      additionalProperties: true
+      required: [parameters, points]
+      properties:
+        points:
+          type: array
+          items: {type: object, additionalProperties: true}
+        parameters:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              id: {type: string, description: 'Pour un index physique : index:meter:<UUID>.'}
+              name: {type: string}
+              label: {type: string}
+              readingSeries: {type: boolean}
+              meterId: {type: string, format: uuid}
+              precision: {type: integer}
+              temporalOperators: {type: array, items: {type: string}, description: '[raw] pour les index physiques.'}
+              availableFrequencies: {type: array, items: {type: string}, description: '[instantaneous] pour les index physiques.'}
+              minDate: {type: [string, 'null'], format: date}
+              maxDate: {type: [string, 'null'], format: date}
+    MeterReadingSeriesDay:
+      type: object
+      additionalProperties: false
+      required: [date, values]
+      properties:
+        date: {type: string, format: date, description: Jour du relevé en Europe/Paris.}
         values:
           type: array
           items:
             type: object
             additionalProperties: false
-            required: [date, value]
+            required: [readingId, observedAt, time, value, index, admissible, quality, origin, reason]
             properties:
-              date: {type: string}
-              value: {type: number}
+              readingId: {type: string, format: uuid}
+              observedAt: {type: string, format: date-time, description: "Instant exact canonique, référence pour l'ordre et les changements d'heure."}
+              time: {type: string, description: "Heure Europe/Paris HH:mm:ss, affichage uniquement."}
+              value: {type: [string, 'null'], description: Index décimal à quatre décimales ; null si inadmissible pour interrompre la courbe.}
+              index: {type: [string, 'null'], description: "Index exact conservé de la révision courante, même lorsqu'il est inadmissible."}
+              admissible: {type: boolean}
+              quality: {type: [string, 'null'], description: Qualité opaque fournie par le producteur.}
+              origin: {type: [string, 'null']}
+              reason: {type: [string, 'null']}
     ZoneMonitoringStationInput:
       type: object
       additionalProperties: false
