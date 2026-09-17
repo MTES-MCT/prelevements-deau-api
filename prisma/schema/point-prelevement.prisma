@@ -65,6 +65,7 @@ model PointPrelevement {
   zones      PointPrelevementZone[]
   declarants DeclarantPointPrelevement[]
   compteurs  CompteurPointPrelevement[]
+  externalReferences ExternalReference[]
 
   chunks Chunk[]
   campaignTargets CampaignTarget[]
@@ -164,6 +165,7 @@ model DeclarantPointPrelevement {
   mostRecentAvailableDate DateTime?
 
   connectors          DeclarantPointPrelevementConnector[]
+  meterAllocations    MeterAllocation[]
   collecteurs         DeclarantCollecteurExploitation[]
   secondaryUsageLinks DeclarantPointPrelevementSecondaryUsage[]
   documents           ResourceDocument[]

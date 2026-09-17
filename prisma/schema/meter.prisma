@@ -1,0 +1,185 @@
+enum MeterIngestionMode {
+  LIVE
+  OFFLINE
+}
+
+// External references resolve identities; they never grant access.
+model ExternalReference {
+  id String @id @default(uuid()) @db.Uuid
+  provider String
+  scope String
+  kind String
+  externalId String
+  pointPrelevementId String? @db.Uuid
+  pointPrelevement PointPrelevement? @relation(fields: [pointPrelevementId], references: [id], onDelete: Restrict)
+  declarantUserId String? @db.Uuid
+  declarant Declarant? @relation(fields: [declarantUserId], references: [userId], onDelete: Restrict)
+  compteurId String? @db.Uuid
+  compteur Compteur? @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  metadata Json @default("{}")
+  createdAt DateTime @default(now())
+  @@unique([provider, scope, kind, externalId])
+  @@index([pointPrelevementId])
+  @@index([declarantUserId])
+  @@index([compteurId])
+}
+
+model MeterStream {
+  id String @id @default(uuid()) @db.Uuid
+  provider String
+  scope String
+  externalId String
+  compteurId String @db.Uuid
+  compteur Compteur @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  serviceAccountId String? @db.Uuid
+  serviceAccount ServiceAccount? @relation(fields: [serviceAccountId], references: [id], onDelete: Restrict)
+  enabled Boolean @default(false)
+  supersedeSameMeter Boolean @default(false)
+  activatedAt DateTime? @db.Timestamptz(3)
+  allocationSnapshot Json @default("[]")
+  allocationSnapshotValidated Boolean @default(false)
+  lastSuccessAt DateTime? @db.Timestamptz(3)
+  lastReadingAt DateTime? @db.Timestamptz(3)
+  checkpoint DateTime? @db.Timestamptz(3)
+  lastIssue String?
+  blockedWindows Json @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  revisions MeterReadingRevision[]
+  publications MeterPublication[]
+  @@unique([provider, scope, externalId])
+  @@index([compteurId])
+  @@index([serviceAccountId, enabled])
+}
+
+model MeterAllocation {
+  id String @id @default(uuid()) @db.Uuid
+  sourceId String @unique
+  provider String
+  scope String
+  metadata Json @default("{}")
+  compteurId String @db.Uuid
+  compteur Compteur @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  exploitationId String @db.Uuid
+  exploitation DeclarantPointPrelevement @relation(fields: [exploitationId], references: [id], onDelete: Restrict)
+  versions MeterAllocationVersion[]
+  createdAt DateTime @default(now())
+  @@index([compteurId])
+  @@index([exploitationId])
+}
+
+model MeterAllocationVersion {
+  id String @id @default(uuid()) @db.Uuid
+  allocationId String @db.Uuid
+  allocation MeterAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  version Int
+  percentage Decimal? @db.Decimal(7, 4)
+  startDate DateTime? @db.Timestamptz(3)
+  endDate DateTime? @db.Timestamptz(3)
+  enabled Boolean @default(false)
+  additive Boolean @default(false)
+  metadata Json @default("{}")
+  createdAt DateTime @default(now())
+  contributions MeterVolumeContribution[]
+  @@unique([allocationId, version])
+  @@index([allocationId, startDate, endDate])
+}
+
+model MeterIngestion {
+  id String @id @default(uuid()) @db.Uuid
+  provider String
+  scope String
+  batchId String
+  serviceAccountId String? @db.Uuid
+  serviceAccount ServiceAccount? @relation(fields: [serviceAccountId], references: [id], onDelete: Restrict)
+  actorUserId String? @db.Uuid
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  mode MeterIngestionMode
+  fetchedAt DateTime @db.Timestamptz(3)
+  windowStart DateTime @db.Timestamptz(3)
+  windowEnd DateTime @db.Timestamptz(3)
+  payloadHash String
+  rawPayload Json
+  result Json @default("{}")
+  createdAt DateTime @default(now())
+  revisions MeterReadingRevision[]
+  @@unique([provider, scope, batchId])
+  @@index([createdAt])
+}
+
+model MeterReading {
+  id String @id @default(uuid()) @db.Uuid
+  compteurId String @db.Uuid
+  compteur Compteur @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  observedAt DateTime @db.Timestamptz(3)
+  currentRevisionId String? @unique @db.Uuid
+  currentRevision MeterReadingRevision? @relation("CurrentMeterReadingRevision", fields: [currentRevisionId], references: [id], onDelete: Restrict)
+  lastFetchedAt DateTime @db.Timestamptz(3)
+  currentMode MeterIngestionMode
+  revisions MeterReadingRevision[] @relation("MeterReadingRevisions")
+  createdAt DateTime @default(now())
+  @@unique([compteurId, observedAt])
+}
+
+model MeterReadingRevision {
+  id String @id @default(uuid()) @db.Uuid
+  readingId String @db.Uuid
+  reading MeterReading @relation("MeterReadingRevisions", fields: [readingId], references: [id], onDelete: Restrict)
+  currentForReading MeterReading? @relation("CurrentMeterReadingRevision")
+  streamId String @db.Uuid
+  stream MeterStream @relation(fields: [streamId], references: [id], onDelete: Restrict)
+  ingestionId String @db.Uuid
+  ingestion MeterIngestion @relation(fields: [ingestionId], references: [id], onDelete: Restrict)
+  mode MeterIngestionMode
+  index Decimal? @db.Decimal(20, 4)
+  quality String?
+  origin String?
+  admissible Boolean
+  reason String?
+  payloadHash String
+  raw Json
+  createdAt DateTime @default(now())
+  publicationsAsStart MeterPublication[] @relation("MeterPublicationStart")
+  publicationsAsEnd MeterPublication[] @relation("MeterPublicationEnd")
+  @@unique([readingId, streamId, mode, payloadHash])
+  @@index([ingestionId])
+}
+
+model MeterPublication {
+  id String @id @default(uuid()) @db.Uuid
+  publicationKey String @unique
+  streamId String @db.Uuid
+  stream MeterStream @relation(fields: [streamId], references: [id], onDelete: Restrict)
+  compteurId String @db.Uuid
+  compteur Compteur @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  startRevisionId String @db.Uuid
+  startRevision MeterReadingRevision @relation("MeterPublicationStart", fields: [startRevisionId], references: [id], onDelete: Restrict)
+  endRevisionId String @db.Uuid
+  endRevision MeterReadingRevision @relation("MeterPublicationEnd", fields: [endRevisionId], references: [id], onDelete: Restrict)
+  periodStart DateTime @db.Timestamptz(3)
+  periodEnd DateTime @db.Timestamptz(3)
+  physicalVolume Decimal @db.Decimal(20, 4)
+  inScopeVolume Decimal @db.Decimal(20, 4)
+  outOfScopeVolume Decimal @db.Decimal(20, 4)
+  allocationSnapshot Json
+  sourceId String @unique @db.Uuid
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  active Boolean @default(true)
+  supersededAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now())
+  contributions MeterVolumeContribution[]
+  @@index([compteurId, active, periodStart, periodEnd])
+}
+
+model MeterVolumeContribution {
+  id String @id @default(uuid()) @db.Uuid
+  publicationId String @db.Uuid
+  publication MeterPublication @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+  allocationVersionId String @db.Uuid
+  allocationVersion MeterAllocationVersion @relation(fields: [allocationVersionId], references: [id], onDelete: Restrict)
+  chunkValueId String @db.Uuid
+  chunkValue ChunkValue @relation(fields: [chunkValueId], references: [id], onDelete: Restrict)
+  volume Decimal @db.Decimal(20, 4)
+  @@unique([publicationId, allocationVersionId])
+  @@index([chunkValueId])
+}

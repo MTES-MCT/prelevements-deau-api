@@ -35,7 +35,7 @@ Les chiffres des SAGE sont donc 261 et 331, avec **261 + 331 − 259 = 333** poi
 Le libellé public désigne **un préleveur ayant au moins une donnée de prélèvement pour le mois sélectionné**. L’unité de compte est donc le couple préleveur/mois dans chaque territoire, et non un dossier `Declaration`, un fichier, un envoi ou un point.
 
 - Plusieurs transmissions ou plusieurs points d’un même préleveur comptent une seule fois par territoire et par mois.
-- La télérelève (`Source.API`) et les campagnes (`Source.BATCH`) participent au comptage même sans dossier `Declaration`.
+- La télérelève (`Source.API`) et les imports (`Source.BATCH`) participent au comptage même sans dossier `Declaration`.
 - Le mois concerne la mesure, pas la date de réception. Une déclaration couvrant une année peut contribuer à plusieurs mois.
 - La source doit être `COMPLETED` et le bloc de données `PENDING`, `VALIDATED` ou `AUTOMATICALLY_VALIDATED`. Les sources incomplètes/échouées et les blocs rejetés sont exclus. Un bloc sans type de flux explicite reste admissible si son point est un prélèvement ; les flux explicitement `REJET` sont exclus.
 - Sont retenus les volumes prélevés, index et débits compatibles avec les codes actuels et historiques. Pour un volume, la période doit chevaucher le mois (`periodStart < début du mois suivant` et `periodEnd > début du mois`). Pour un index ou débit, la date `periodEnd` doit appartenir au mois. Une valeur nulle en quantité (zéro) reste une donnée valide ; l’absence de mesure ne l’est pas.
@@ -53,7 +53,7 @@ Chaque préleveur remontant des données est classé une seule fois selon les **
 - `MIXED` : même nombre de points directs et tiers, sans point de provenance inconnue ;
 - `UNKNOWN` : provenance inconnue ou majorité impossible à garantir.
 
-Un canal est majoritaire uniquement si son nombre de points dépasse celui de l’autre canal additionné aux points inconnus. Un même point transmis via plusieurs canaux participe aux comptes de ces canaux ; la classification finale reste unique pour le préleveur. Les campagnes et imports sans provenance directe/API prouvée peuvent ainsi être classés dans le canal non renseigné. Les pourcentages ont pour dénominateur tous les préleveurs classés ; ils sont `null` quand aucun préleveur ne remonte de donnée.
+Un canal est majoritaire uniquement si son nombre de points dépasse celui de l’autre canal additionné aux points inconnus. Un même point transmis via plusieurs canaux participe aux comptes de ces canaux ; la classification finale reste unique pour le préleveur. Les imports sans provenance directe/API prouvée peuvent ainsi être classés dans le canal non renseigné. Les pourcentages ont pour dénominateur tous les préleveurs classés ; ils sont `null` quand aucun préleveur ne remonte de donnée.
 
 ## Utilisateurs actifs par mois
 
@@ -84,7 +84,7 @@ L’ancien champ `connections` est conservé sans changement de calcul pour les 
 - Cache API en mémoire par client de base et par mois, TTL d’une heure, maximum 24 entrées, mutualisation des calculs concurrents ; une erreur n’est pas conservée dans le cache.
 - Réponse HTTP publique cachable cinq minutes. Les erreurs sont `no-store`. Le front revalide sa lecture chaque minute et refuse un instantané trop ancien (plus de 65 minutes).
 - Aucun accès public ne requiert de compte privilégié : la requête ne retourne que les agrégats prévus. Les erreurs de calcul doivent rester des indisponibilités explicites, pas des statistiques nulles fabriquées.
-- Les tests unitaires couvrent les périodes, les statuts historiques, le cache et la sérialisation. Les intégrations PostgreSQL/PostGIS vérifient les exclusions, sources API/campagne, chevauchements territoriaux, déduplications et transition vers les marqueurs d’activité.
+- Les tests unitaires couvrent les périodes, les statuts historiques, le cache et la sérialisation. Les intégrations PostgreSQL/PostGIS vérifient les exclusions, sources API/batch, chevauchements territoriaux, déduplications et transition vers les marqueurs d’activité.
 - Les tests d’intégration exigent une base jetable explicitement autorisée (`PUBLIC_STATS_TEST_DATABASE_URL`, `NODE_ENV=test`) et annulent leurs fixtures par transaction. Ne jamais les exécuter sur une copie de données réelles.
 
 Le déploiement exige la migration additive des tables d’activité avant l’API, puis le front. Les secrets et variables d’environnement existants ne sont pas modifiés.

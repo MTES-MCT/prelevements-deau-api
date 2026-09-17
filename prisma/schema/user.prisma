@@ -43,6 +43,7 @@ model User {
   emailVerifications UserEmailVerification[]
   dataExports        DataExport[]
   campaignsCreated Campaign[] @relation("CampaignCreator")
+  meterIngestions MeterIngestion[]
   campaignManagers CampaignManager[]
   campaignSubmissions CampaignSubmission[] @relation("CampaignSubmissionCreator")
   campaignExports CampaignExport[] @relation("CampaignExportCreator")
@@ -159,6 +160,7 @@ model Declarant {
   resourceDocuments ResourceDocument[]
   resourceRules     ResourceRule[]
   contactEmails     DeclarantContactEmail[]
+  externalReferences ExternalReference[]
 
   lastDeclarationAt DateTime?
 

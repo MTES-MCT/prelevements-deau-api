@@ -36,6 +36,7 @@ model Source {
 
   chunks Chunk[]
   campaignCoverages CampaignCoverage[]
+  meterPublication MeterPublication?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -57,6 +58,7 @@ enum ChunkInstructionStatus {
 enum ChunkCalculationStrategy {
   GENERIC
   CAMPAIGN
+  METER
 }
 
 model Chunk {
@@ -128,7 +130,7 @@ enum ChunkValueKind {
 }
 
 model ChunkValue {
-  readingDate DateTime? @db.Date
+  meterContributions MeterVolumeContribution[]
   campaignCoverages CampaignCoverage[]
   id String @id @default(uuid()) @db.Uuid
 

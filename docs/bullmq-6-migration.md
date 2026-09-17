@@ -26,7 +26,7 @@ node scripts/queue-migration-preflight.js --apply \
   --bullmq-v5-module /chemin/ancienne-image/node_modules/bullmq
 ```
 
-L’identifiant doit être celui utilisé au démarrage : le nom de la file pour les crons API déclarés dans `lib/queues/config.js` (par exemple `campaign-delivery`), ou `pull-updated-data-daily` pour l’orchestrateur. Ce dernier contrat externe est centralisé dans `getCanonicalSchedulerId` ; aucune fréquence de l’orchestrateur n’est recopiée dans l’API.
+L’identifiant doit être celui utilisé au démarrage : le nom de la file pour les crons API déclarés dans `lib/queues/config.js` (par exemple `sync-monitoring-stations-daily`), ou `pull-updated-data-daily` pour l’orchestrateur. Ce dernier contrat externe est centralisé dans `getCanonicalSchedulerId` ; aucune fréquence de l’orchestrateur n’est recopiée dans l’API.
 
 Le script ne convertit automatiquement qu’une définition unique sur une file possédant une planification applicative connue. Plusieurs définitions, un identifiant non canonique ou une file sans cron applicatif imposent une revue manuelle ; ces cas sont refusés avant même la construction de la Queue BullMQ, qui écrit des métadonnées. Ne pas créer un nouvel identifiant arbitraire : le démarrage ajouterait sinon une seconde planification.
 

@@ -8,7 +8,7 @@ import globals from 'globals'
 export default [
   {
     // Generated reports and standalone CI tools have their own validation.
-    ignores: ['coverage/**', '.artifacts/**', '.pnp.*', '.github/scripts/**']
+    ignores: ['coverage/**', '.artifacts/**', '.pnp.*', '.github/scripts/**', 'data/dropt/epidropt-2026/**']
   },
   js.configs.recommended,
   {

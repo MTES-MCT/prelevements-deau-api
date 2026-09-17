@@ -81,10 +81,9 @@ jobs:
       PUBLIC_STATS_TEST_DATABASE_URL: postgresql://security_tests:security_tests_only@127.0.0.1:55439/security_tests
       REDIS_URL: redis://127.0.0.1:6379/0
       SEARCH_CACHE_ENABLED: 'false'
-      CAMPAIGN_INTEGRATION_TESTS: '1'
-      CAMPAIGN_PROGRESS_SQL_TESTS: '1'
+      METER_INTEGRATION_TESTS: '1'
+      DROPT_INTEGRATION_TESTS: '1'
       QUEUE_INTEGRATION_TESTS: '1'
-      CAMPAIGN_FRONT_ACTIONS_FILE: ${{ github.workspace }}/front/src/server/actions/campaigns.js
       SENTRY_DSN: ''
       SMTP_HOST: 127.0.0.1
       SMTP_PORT: '65534'
@@ -97,13 +96,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: api
-          persist-credentials: false
-      - name: Checkout compatible public front contract (no secrets)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: MTES-MCT/prelevements-deau-front
-          ref: 5af535e22e2ead27af702eb54722f1a9b5e1d8bc
-          path: front
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
