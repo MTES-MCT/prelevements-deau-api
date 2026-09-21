@@ -5,7 +5,7 @@ Cette documentation interne décrit les indicateurs de `/stats`. Les explication
 ## Périodes et périmètre
 
 - `month` est un mois terminé au format `AAAA-MM`, entre janvier 1900 et le dernier mois terminé. Par défaut, ce dernier mois est retenu. Le mois courant est déterminé dans le fuseau `Europe/Paris`.
-- La page utilise son sélecteur uniquement pour les déclarations mensuelles par territoire. Les canaux restent sur le dernier mois terminé et l’activité présente les six derniers mois terminés. L’API conserve sa réponse complète par mois, pour compatibilité et réutilisation du cache.
+- Le sélecteur pilote ensemble les déclarations mensuelles par territoire et les canaux de transmission. L’activité et les visiteurs du site vitrine présentent les six derniers mois terminés, indépendamment de ce sélecteur. L’API conserve sa réponse complète par mois, pour compatibilité et réutilisation du cache.
 - Les mois proposés commencent au premier mois de mesure connu ; les mois sans données intermédiaires restent sélectionnables. Le mois demandé reste présent même s’il précède la première mesure.
 - Le référentiel des points, préleveurs et rattachements est le référentiel actuel, pas une photographie historique reconstruite pour chaque mois.
 
@@ -17,9 +17,11 @@ Un préleveur est un utilisateur non supprimé de rôle `DECLARANT`, avec `decla
 
 Les profils sont `IRRIGANT` (agriculteurs), `ICPE` (industriels), `GESTIONNAIRE_AEP` (eau potable), `AUTRE` et non renseigné. Les nombres de points et de préleveurs des totaux sont dédupliqués sur l’ensemble du périmètre. Chaque territoire déduplique aussi ses propres points et préleveurs, mais les territoires peuvent se chevaucher : leurs nombres ne sont pas additionnables.
 
+Pour chaque profil, `count` reste le nombre total de préleveurs et `reportingCount` compte uniquement ceux avec une donnée admissible sur le mois. La barre publique utilise ces derniers effectifs rapportés à l’ensemble des préleveurs du territoire ; le reste représente ceux sans donnée. Les dates métier de déploiement sont renseignées explicitement dans la configuration des statistiques : `deploymentMonth` reste `null` et n’est pas affiché tant que la date n’est pas confirmée. Ni la création du territoire ni sa première mesure ne constituent une date de déploiement.
+
 ### Cas des Pyrénées-Orientales
 
-Vérification de la copie locale le 14 septembre 2026 :
+Vérification de la copie locale le 14 septembre 2026, puis confirmation en lecture seule sur testing le 21 septembre 2026 :
 
 | Rattachement | Points |
 | --- | ---: |
@@ -30,6 +32,8 @@ Vérification de la copie locale le 14 septembre 2026 :
 
 Les chiffres des SAGE sont donc 261 et 331, avec **261 + 331 − 259 = 333** points distincts. Les associations correspondent aux intersections géographiques (`ST_Intersects`). Elles ne constituent pas une attribution exclusive selon le type de ressource ou l’organisme gestionnaire. Ne pas modifier ces associations pour forcer une addition : elles servent aussi aux autorisations. Ces nombres sont une observation datée, pas des constantes métier.
 
+La vérification testing du 21 septembre confirme également que les préleveurs ayant déclaré ne sont pas figés d’un mois à l’autre : Nappes compte 7, 3, 15 et 4 préleveurs de mai à août 2026, contre 7, 3, 18 et 4 pour Tech. Les effectifs communs sont respectivement 7, 3, 15 et 4 ; seuls trois préleveurs de juillet sont exclusifs au Tech. Les égalités entre SAGE résultent ici des mêmes préleveurs présents dans les deux périmètres, et non d’un cache ignorant le mois.
+
 ## Nombre de déclarations mensuelles par territoire
 
 Le libellé public désigne **un préleveur ayant au moins une donnée de prélèvement pour le mois sélectionné**. L’unité de compte est donc le couple préleveur/mois dans chaque territoire, et non un dossier `Declaration`, un fichier, un envoi ou un point.
@@ -39,10 +43,11 @@ Le libellé public désigne **un préleveur ayant au moins une donnée de prél�
 - Le mois concerne la mesure, pas la date de réception. Une déclaration couvrant une année peut contribuer à plusieurs mois.
 - La source doit être `COMPLETED` et le bloc de données `PENDING`, `VALIDATED` ou `AUTOMATICALLY_VALIDATED`. Les sources incomplètes/échouées et les blocs rejetés sont exclus. Un bloc sans type de flux explicite reste admissible si son point est un prélèvement ; les flux explicitement `REJET` sont exclus.
 - Sont retenus les volumes prélevés, index et débits compatibles avec les codes actuels et historiques. Pour un volume, la période doit chevaucher le mois (`periodStart < début du mois suivant` et `periodEnd > début du mois`). Pour un index ou débit, la date `periodEnd` doit appartenir au mois. Une valeur nulle en quantité (zéro) reste une donnée valide ; l’absence de mesure ne l’est pas.
-- Les dates de mesure sont les dates métier stockées dans `ChunkValue` ; elles ne sont pas décalées selon le fuseau du navigateur. Le fuseau Europe/Paris s’applique aux mois d’activité utilisateur et à la détermination du dernier mois terminé.
+- Les dates génériques de mesure sont les dates métier stockées dans `ChunkValue` ; elles ne sont pas décalées selon le fuseau du navigateur. Seules les publications `METER`, dont les dates stockées représentent des instants UTC, sont converties en Europe/Paris pour correspondre aux séries des compteurs. Le fuseau Europe/Paris s’applique aussi aux mois d’activité utilisateur et à la détermination du dernier mois terminé.
+- Les volumes de compteurs publiés participent au comptage, y compris lorsqu’un compteur est partagé entre des bénéficiaires validés. Les anciennes publications rejetées et les index physiques sans publication attribuable n’y participent pas.
 - L’attribution utilise, par priorité, le préleveur du bloc, le préleveur du dossier, puis l’unique préleveur lié au point sur les dates du bloc. Un rattachement ambigu n’est pas arbitrairement attribué.
 
-Le champ API reste `reportingPreleveursCount` pour compatibilité. `preleveursCount` et `reportingRate` restent disponibles dans le contrat, même si la page privilégie le nombre de déclarations plutôt que le taux. Le taux est `null`, pas zéro, lorsque le dénominateur est nul.
+Le champ API reste `reportingPreleveursCount` pour compatibilité. La page met en avant `reportingRate` et affiche le rapport `reportingPreleveursCount` sur `preleveursCount`. Le taux est `null`, pas zéro, lorsque le dénominateur est nul. Des déclarations annuelles peuvent produire un même effectif plusieurs mois consécutifs : ce n’est pas un indicateur du nombre d’envois reçus pendant chaque mois.
 
 ## Canaux de transmission
 
@@ -79,6 +84,18 @@ Le champ public `activeUsers` contient six mois (`administration`, `declarants`,
 
 L’ancien champ `connections` est conservé sans changement de calcul pour les consommateurs existants : connexions réussies, rôle de la dernière connexion du mois, premier mois d’audit partiel. Il ne doit pas être présenté comme une mesure complète d’usage réel.
 
+## Visiteurs uniques du site vitrine
+
+`publicVisitors` est indépendant des comptes et de l’activité authentifiée : il mesure les visiteurs uniques mensuels du site `https://partageonsleau.beta.gouv.fr/`, sur les six derniers mois terminés. Le site vitrine et l’application partageant un identifiant Matomo, la requête est segmentée sur le préfixe exact du domaine vitrine (HTTP ou HTTPS, avec le `/` final) ; une visite limitée au domaine de l’application n’est pas retenue. Une personne ayant consulté les deux domaines peut être comptée comme visiteur du site vitrine.
+
+Le service serveur appelle `VisitsSummary.getUniqueVisitors` avec `period=month`, en regroupant les six requêtes dans un POST `API.getBulkRequest`. Il ne somme ni visiteurs uniques journaliers ni visiteurs uniques par page, et ne substitue pas le nombre de visites. Les mois suivent le fuseau du site configuré dans Matomo. Les statistiques reflètent le suivi reçu par Matomo, pas un décompte certain de personnes physiques.
+
+Configuration serveur : `MATOMO_REPORTING_URL` (base HTTPS), `MATOMO_REPORTING_SITE_ID`, `MATOMO_REPORTING_TOKEN` (secret runtime, jamais une variable `NEXT_PUBLIC_*`). Le jeton est envoyé uniquement dans le corps POST ; les redirections sont refusées. Aucun changement du suivi navigateur ni du consentement n’est nécessaire.
+
+La réponse contient `website`, `months: [{month, uniqueVisitors, status}]` et `fetchedAt`. `status` vaut `complete` ou `unavailable`. Une valeur zéro reçue est conservée ; une métrique absente, un refus d’accès, une réponse invalide ou un dépassement du délai de cinq secondes produit `null`/`unavailable`, sans masquer les statistiques métier. Seuls les agrégats explicitement attendus sont exposés, jamais les erreurs Matomo ni les paramètres d’authentification.
+
+Le cache est limité à une fenêtre de six mois pendant une heure et mutualise les requêtes concurrentes. Une erreur est réessayée après une minute ; le changement de mois ou de configuration invalide ce cache. Il reste indépendant du cache des statistiques métier.
+
 ## Cache, disponibilité et validation
 
 - Cache API en mémoire par client de base et par mois, TTL d’une heure, maximum 24 entrées, mutualisation des calculs concurrents ; une erreur n’est pas conservée dans le cache.
@@ -87,4 +104,4 @@ L’ancien champ `connections` est conservé sans changement de calcul pour les 
 - Les tests unitaires couvrent les périodes, les statuts historiques, le cache et la sérialisation. Les intégrations PostgreSQL/PostGIS vérifient les exclusions, sources API/batch, chevauchements territoriaux, déduplications et transition vers les marqueurs d’activité.
 - Les tests d’intégration exigent une base jetable explicitement autorisée (`PUBLIC_STATS_TEST_DATABASE_URL`, `NODE_ENV=test`) et annulent leurs fixtures par transaction. Ne jamais les exécuter sur une copie de données réelles.
 
-Le déploiement exige la migration additive des tables d’activité avant l’API, puis le front. Les secrets et variables d’environnement existants ne sont pas modifiés.
+Les tables d’activité doivent être migrées avant l’API, puis le front. Les ajouts de présentation et de visiteurs Matomo n’exigent aucune nouvelle migration. La configuration Matomo s’ajoute sans remplacer les secrets ou variables d’environnement existants.
