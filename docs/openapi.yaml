@@ -1575,7 +1575,10 @@ paths:
         actuel. activeUsers compte les utilisateurs réels ayant consulté le service, même avec une
         session persistante. L'historique antérieur à cette collecte est une borne basse incomplète
         issue des connexions réussies ; le mois de démarrage reste partiel. connections conserve
-        l'ancien indicateur de connexions réussies pour compatibilité. Les deux découpages
+        l'ancien indicateur de connexions réussies pour compatibilité. publicVisitors expose séparément
+        les visiteurs uniques mensuels du seul site vitrine ; son indisponibilité ne bloque pas les données métier.
+        Le mois sélectionné s'applique aux territoires et aux canaux, pas aux séries des six derniers mois terminés.
+        Les deux découpages
         géographiques ne s'additionnent pas. La méthodologie interne est documentée dans docs/public-stats.md.
         Les calculs sont conservés une heure en cache. Limite de 60 requêtes par minute et par adresse IP.
       security: []
@@ -1589,7 +1592,7 @@ paths:
             example: '2026-08'
       responses:
         '200':
-          description: Statistiques agrégées du mois et six mois d'activité et de connexions
+          description: Statistiques agrégées du mois et six mois d'activité, de connexions et de visiteurs du site vitrine
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicStatsResponse'}
@@ -2669,20 +2672,28 @@ components:
     PublicStatsProfile:
       type: object
       additionalProperties: false
-      required: [key, label, count]
+      required: [key, label, count, reportingCount]
       properties:
         key:
           type: string
           enum: [AGRICULTURE, INDUSTRY, DRINKING_WATER, OTHER, UNKNOWN]
         label: {type: string}
         count: {type: integer, minimum: 0}
+        reportingCount:
+          type: integer
+          minimum: 0
+          description: Préleveurs de ce profil ayant au moins une donnée admissible sur le mois, dédupliqués.
     PublicStatsTerritory:
       type: object
       additionalProperties: false
-      required: [id, name, pointsCount, preleveursCount, reportingPreleveursCount, reportingRate, profiles]
+      required: [id, name, deploymentMonth, pointsCount, preleveursCount, reportingPreleveursCount, reportingRate, profiles]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         name: {type: string}
+        deploymentMonth:
+          type: [string, 'null']
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          description: Mois métier de déploiement confirmé, null tant qu'il n'est pas renseigné.
         pointsCount: {type: integer, minimum: 0}
         preleveursCount: {type: integer, minimum: 0}
         reportingPreleveursCount: {type: integer, minimum: 0}
@@ -2721,7 +2732,7 @@ components:
     PublicStatsResponse:
       type: object
       additionalProperties: false
-      required: [month, generatedAt, availableMonths, totals, territories, channels, connections, activeUsers]
+      required: [month, generatedAt, availableMonths, totals, territories, channels, connections, activeUsers, publicVisitors]
       properties:
         month: {type: string, example: '2026-08'}
         generatedAt: {type: string, format: date-time}
@@ -2751,6 +2762,28 @@ components:
         channels:
           type: array
           items: {$ref: '#/components/schemas/PublicStatsChannel'}
+        publicVisitors:
+          type: object
+          additionalProperties: false
+          required: [website, months, fetchedAt]
+          properties:
+            website: {type: string, format: uri, example: 'https://partageonsleau.beta.gouv.fr/'}
+            fetchedAt: {type: [string, 'null'], format: date-time}
+            months:
+              type: array
+              minItems: 6
+              maxItems: 6
+              items:
+                type: object
+                additionalProperties: false
+                required: [month, uniqueVisitors, status]
+                properties:
+                  month: {type: string, example: '2026-08'}
+                  uniqueVisitors: {type: [integer, 'null'], minimum: 0}
+                  status:
+                    type: string
+                    enum: [complete, unavailable]
+                    description: Indisponible implique un compteur null, jamais un zéro fabriqué.
         connections:
           type: object
           additionalProperties: false
