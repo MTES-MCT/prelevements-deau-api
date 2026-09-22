@@ -27,6 +27,7 @@
     "coverage": "c8 ava",
     "coverage:report": "c8 --reporter=html --reporter=text ava",
     "backfill:chunk-actors": "node scripts/backfill-chunk-actors.js",
+    "backfill:chunk-exploitations": "node scripts/backfill-chunk-exploitations.js",
     "backfill:declarant-activity": "node scripts/backfill-declarant-activity.js",
     "backfill:point-flow-types": "node scripts/backfill-point-flow-types.js",
     "sync:declaration-files": "node scripts/sync-declaration-files.js",

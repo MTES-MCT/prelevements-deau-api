@@ -5,6 +5,7 @@ import {prisma} from '../../../../db/prisma.js'
 import {ingestMeterBatch} from '../../../../lib/services/meter-ingestion.js'
 import {applyManifest, verifyManifest} from '../apply-epidropt.js'
 import {digest, stableId} from '../epidropt.js'
+import {requireDisposableDatabase} from '../../../../lib/util/test-helpers/disposable-database.js'
 
 const integration = process.env.DROPT_INTEGRATION_TESTS === '1' ? test.serial : test.skip
 function fixtureRegistry() {
@@ -14,13 +15,7 @@ const owned = fixtureRegistry()
 let databaseValidated = false
 test.before(() => {
   if (process.env.DROPT_INTEGRATION_TESTS !== '1') return
-  const url = new URL(process.env.DATABASE_URL)
-  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) && url.port === '55439' && url.pathname === '/dropt_tests'
-  const ci = process.env.CI === 'true' && url.pathname === '/security_tests'
-    && ((['localhost', '127.0.0.1'].includes(url.hostname) && url.port === '55439')
-      || (url.hostname === 'postgres' && ['', '5432'].includes(url.port)))
-  if (process.env.NODE_ENV !== 'test' || !['postgres:', 'postgresql:'].includes(url.protocol)
-    || (!local && !ci) || url.search || url.hash) throw new Error('Base jetable locale dropt_tests:55439 ou CI dédiée requise.')
+  requireDisposableDatabase()
   databaseValidated = true
 })
 async function cleanupFixtures(ids) {
@@ -180,7 +175,49 @@ integration('référence stable rapproche un ID existant sans changer son source
   collision.points[0].data.name = manifest.points[0].data.name
   const rejected = await applyManifest(prisma, sign(collision), {apply: true})
   t.true(rejected.issues.some(issue => issue.code === 'NOM_POINT_EXISTANT_A_RAPPROCHER'))
+  t.false(rejected.applied)
+  t.false(rejected.complete)
   t.is(await prisma.pointPrelevement.count({where: {id: collision.points[0].id}}), 0)
+  t.is(await prisma.user.count({where: {id: collision.declarants[0].id}}), 0)
+  t.is(await prisma.compteur.count({where: {id: collision.meters[0].id}}), 0)
+})
+
+integration('code comptage enrichi sans changement d’identité et correction manuelle conservée au rejeu', async t => {
+  const original = fixture()
+  await applyManifest(prisma, original, {apply: true})
+  const coded = structuredClone(original)
+  coded.exploitations[0].countingCode = '001'
+  const manifest = sign(coded)
+  const preview = await applyManifest(prisma, manifest)
+  t.true(preview.complete)
+  t.true(preview.changes.some(change => change.field === 'countingCode' && change.after === '001'))
+  const applied = await applyManifest(prisma, manifest, {apply: true, expectedReport: preview})
+  t.true(applied.applied)
+  t.deepEqual(applied.objectIds.exploitations, [original.exploitations[0].id])
+  const replay = await applyManifest(prisma, manifest, {apply: true})
+  t.true(replay.complete)
+  t.deepEqual(replay.changes, [])
+  await prisma.declarantPointPrelevement.update({where: {id: original.exploitations[0].id}, data: {countingCode: '002'}})
+  const manual = await applyManifest(prisma, manifest, {apply: true})
+  t.true(manual.complete)
+  t.true(manual.changes.some(change => change.action === 'PRESERVED_MANUAL_VALUE'))
+  t.is((await prisma.declarantPointPrelevement.findUnique({where: {id: original.exploitations[0].id}})).countingCode, '002')
+})
+
+integration('une différence entre simulation et application annule le lot au lieu d’ignorer la dérive', async t => {
+  const original = fixture()
+  await applyManifest(prisma, original, {apply: true})
+  const incoming = structuredClone(original)
+  incoming.points[0].data.locationDescription = 'Correction importée'
+  const manifest = sign(incoming)
+  const preview = await applyManifest(prisma, manifest)
+  t.true(preview.complete)
+  await prisma.pointPrelevement.update({where: {id: original.points[0].id}, data: {locationDescription: 'Correction manuelle concurrente'}})
+  const rejected = await applyManifest(prisma, manifest, {apply: true, expectedReport: preview})
+  t.false(rejected.applied)
+  t.false(rejected.complete)
+  t.true(rejected.executionIssues.some(issue => issue.code === 'DRY_RUN_STATE_CHANGED'))
+  t.is((await prisma.pointPrelevement.findUnique({where: {id: original.points[0].id}})).locationDescription, 'Correction manuelle concurrente')
 })
 
 integration('compteur non Rives et répartition incohérente restent importés mais désactivés', async t => {

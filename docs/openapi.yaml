@@ -759,7 +759,11 @@ paths:
       tags: [Declarations]
       operationId: createDeclaration
       summary: Créer une déclaration avec fichiers
-      description: Crée une déclaration déposée par un déclarant et stocke les fichiers associés.
+      description: >-
+        Crée une déclaration déposée par un déclarant et stocke les fichiers associés.
+        Le modèle PE accepte une colonne facultative code_comptage (ou « Code comptage »).
+        Les anciens formats restent acceptés ; les lignes ambiguës sont conservées
+        pour rapprochement, sans attribution arbitraire à une exploitation.
       requestBody:
         required: true
         content:
@@ -784,14 +788,16 @@ paths:
       tags: [Declarations]
       operationId: createQuickDeclaration
       summary: Créer une saisie rapide
-      description: Crée une déclaration rapide depuis des index ou volumes saisis dans le formulaire.
+      description: >-
+        Crée une déclaration rapide depuis des index ou volumes. Chaque entrée
+        désigne une exploitation par son UUID, ou par le PP et son code comptage.
+        Un ancien payload sans identité est accepté seulement si l'exploitation
+        correspondante est unique. Une ambiguïté renvoie 409, sans sélection arbitraire.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              additionalProperties: true
+            schema: {$ref: '#/components/schemas/QuickDeclarationInput'}
       responses:
         '201':
           description: Déclaration créée
@@ -799,12 +805,33 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Declaration'}
         default: {$ref: '#/components/responses/Error'}
+  /declarations/quick/conflicts:
+    post:
+      tags: [Declarations]
+      operationId: previewQuickDeclarationConflicts
+      summary: Prévisualiser les conflits d'une saisie rapide
+      description: Applique les mêmes règles d'identité et de droits que l'écriture ; les conflits sont limités à l'exploitation choisie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuickDeclarationInput'}
+      responses:
+        '200':
+          description: Conflits de volumes existants sur la période ; les index sont traités par le calculateur.
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        default: {$ref: '#/components/responses/Error'}
   /declarations/quick/context:
     get:
       tags: [Declarations]
       operationId: getQuickDeclarationContext
       summary: Contexte de saisie rapide
-      description: Retourne les points, usages et périodes utiles à la saisie rapide.
+      description: >-
+        Retourne les points, usages et périodes utiles à la saisie rapide. Deux
+        exploitations d'un même PP sont deux choix distincts, portant exploitationId,
+        countingCode et leur propre dernier index.
       responses:
         '200':
           description: Contexte disponible
@@ -953,6 +980,10 @@ paths:
                     - type: string
                       format: uuid
                     - type: 'null'
+                exploitationId:
+                  description: Exploitation cible autorisée ; nécessaire si plusieurs exploitations correspondent au PP et à la période. Null lors du retrait de l'association.
+                  type: [string, 'null']
+                  format: uuid
       responses:
         '200': {description: Rapprochement enregistré}
         '409':
@@ -1041,6 +1072,10 @@ paths:
                   enum: [PENDING, REJECTED, VALIDATED]
                 instructionComment:
                   type: [string, 'null']
+                exploitationId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Identité cible vérifiée avec le préleveur, le PP, le code déclaré et la période. Omission acceptée si la correspondance est unique ; ne déverrouille pas une association automatique.
                 pointPrelevementId:
                   description: Identifiant du point cible, ou `null` pour retirer une association manuelle.
                   oneOf:
@@ -1962,6 +1997,7 @@ paths:
       summary: Rechercher des séries
       description: Liste les métadonnées de séries accessibles à l'instructeur.
       parameters:
+        - $ref: '#/components/parameters/ExploitationFilter'
         - in: query
           name: pointIds
           schema: {type: string}
@@ -2033,6 +2069,7 @@ paths:
         répartis sur les jours Europe/Paris, en tenant compte des changements
         d'heure. Les mesures calendaires hors METER conservent leur interprétation.
       parameters:
+        - $ref: '#/components/parameters/ExploitationFilter'
         - in: query
           name: metricTypeCode
           required: true
@@ -2115,6 +2152,11 @@ paths:
         Les options issues de volumes METER sont toujours limitées aux affectations
         consultables par l'acteur, avec les mêmes filtres que les valeurs agrégées.
       parameters:
+        - $ref: '#/components/parameters/ExploitationFilter'
+        - in: query
+          name: includeExploitationIndexes
+          description: Distingue les index ordinaires par exploitation et code comptage ; les options de volumes restent regroupées. Ne modifie pas les droits d'accès.
+          schema: {type: boolean, default: false}
         - in: query
           name: includeMeterReadings
           schema: {type: boolean, default: false}
@@ -2137,6 +2179,115 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AggregatedSeriesOptionsResponse'
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/declarants/{declarantId}/context:
+    get:
+      operationId: getServiceAccountDeclarantContext
+      summary: Lire le contexte des connecteurs d'un déclarant
+      description: Chaque exploitation conserve son UUID id, son countingCode facultatif et ses propres connecteurs, même si plusieurs exploitations concernent le même PP.
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: path, name: declarantId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      responses:
+        '200':
+          description: Contexte autorisé du compte de service.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: {type: boolean}
+                  exploitations:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                      properties:
+                        id: {$ref: '#/components/schemas/Uuid'}
+                        countingCode: {$ref: '#/components/schemas/CountingCode'}
+                        point: {type: object, additionalProperties: true}
+                        connectors: {type: array, items: {type: object, additionalProperties: true}}
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/connectors/ingest:
+    post:
+      operationId: ingestServiceAccountConnectorOutput
+      summary: Ingérer les séries normalisées d'un connecteur classique
+      description: >-
+        L'identité fournie reste subordonnée au connecteur, au préleveur et au PP
+        autorisés. Les champs exploitationId et countingCode facultatifs des
+        métriques doivent correspondre à la même exploitation ; ils ne permettent
+        pas de rediriger un connecteur vers un autre bénéficiaire.
+        Les compteurs physiques utilisent le transport meter-readings distinct.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connector, metadata, data]
+              additionalProperties: true
+              properties:
+                connector: {type: string}
+                metadata:
+                  type: object
+                  required: [point_id, declarant_id, context_id]
+                  additionalProperties: true
+                  properties:
+                    point_id: {$ref: '#/components/schemas/Uuid'}
+                    declarant_id: {$ref: '#/components/schemas/Uuid'}
+                    context_id: {type: string}
+                    connector_id: {$ref: '#/components/schemas/Uuid'}
+                    exploitation_id: {$ref: '#/components/schemas/Uuid'}
+                    counting_code: {$ref: '#/components/schemas/CountingCode'}
+                data:
+                  type: object
+                  additionalProperties: true
+                  properties:
+                    exploitationId: {$ref: '#/components/schemas/Uuid'}
+                    countingCode: {$ref: '#/components/schemas/CountingCode'}
+                    metrics:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: true
+                        properties:
+                          exploitationId: {$ref: '#/components/schemas/Uuid'}
+                          countingCode: {$ref: '#/components/schemas/CountingCode'}
+      responses:
+        '200': {description: "Résultat d'ingestion, pouvant signaler des données ignorées selon la politique de conflit."}
+        '409': {description: Identité contradictoire ou conflit métier.}
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/declarations/{declarationId}/ingest:
+    post:
+      operationId: ingestServiceAccountDeclarationSeries
+      summary: Ingérer les séries normalisées d'un fichier de déclaration
+      description: >-
+        Chaque série porte son identité facultative. Les observations ambiguës
+        restent non rapprochées avec le code déclaré et leur diagnostic ; les
+        autres lignes du fichier peuvent être importées.
+      security: [{BearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/DeclarationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                errors: {type: array, items: {}}
+                data:
+                  type: object
+                  required: [conflictPolicy, series]
+                  properties:
+                    conflictPolicy: {type: string}
+                    series:
+                      type: array
+                      items: {$ref: '#/components/schemas/NormalizedDeclarationSeries'}
+      responses:
+        '200': {description: Résultat du traitement ; consulter imported et les diagnostics de rapprochement.}
         default: {$ref: '#/components/responses/Error'}
   /service-accounts/meter-streams:
     get:
@@ -2207,6 +2358,73 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MeterIngestionResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations:
+    post:
+      tags: [Declarants]
+      operationId: createExploitation
+      summary: Créer une exploitation
+      description: >-
+        Lie un préleveur à un PP, avec au plus un code comptage textuel. Deux codes
+        distincts peuvent distinguer des exploitations du même couple lorsque la
+        capacité est activée. Un code absent ne contourne pas les contrôles de
+        chevauchement ; les permissions territoriales restent requises.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ExploitationWriteInput'
+                - required: [declarantUserId, pointPrelevementId, usageId, status]
+      responses:
+        '200':
+          description: Exploitation créée.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Exploitation'}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations/{exploitationId}:
+    parameters:
+      - {in: path, name: exploitationId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    get:
+      tags: [Declarants]
+      operationId: getExploitation
+      summary: Lire une exploitation
+      description: Retourne l'exploitation et son code comptage, sous les contrôles d'accès existants.
+      responses:
+        '200':
+          description: Exploitation autorisée.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Exploitation'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      tags: [Declarants]
+      operationId: updateExploitation
+      summary: Modifier une exploitation
+      description: Une correction de code conserve l'UUID et l'historique ; expectedCountingCode est requis pour un changement effectif et protège des modifications concurrentes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExploitationWriteInput'}
+      responses:
+        '200':
+          description: Exploitation modifiée.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Exploitation'}
+        '409': {description: "Modification concurrente, chevauchement de comptage ou déplacement interdit d'un historique."}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Declarants]
+      operationId: deleteExploitation
+      summary: Supprimer une exploitation sans historique
+      description: Une exploitation portant des déclarations ou des affectations de compteurs ne peut pas être supprimée ; elle doit être clôturée.
+      responses:
+        '200': {description: Exploitation supprimée.}
+        '409': {description: Historique à préserver ; suppression refusée.}
         default: {$ref: '#/components/responses/Error'}
   /exploitations/{exploitationId}/meter-allocations:
     get:
@@ -2354,6 +2572,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
   parameters:
+    ExploitationFilter:
+      in: query
+      name: exploitationId
+      description: Filtre les données de cette exploitation sans élargir les droits sur les points ou les compteurs partagés.
+      schema: {$ref: '#/components/schemas/Uuid'}
     AdminAgentId:
       in: path
       name: agentId
@@ -2596,6 +2819,13 @@ components:
         complete: {type: boolean, const: true}
         mode: {type: string, enum: [LIVE, OFFLINE], default: LIVE}
         preserveOrdinary: {type: boolean, default: false, description: Protection supplémentaire interdisant tout remplacement de volume ordinaire par ce lot ; conservée dans son accusé durable.}
+        streamIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items: {type: string, format: uuid}
+          description: Périmètre facultatif de rejeu. Tous les flux doivent appartenir au fournisseur, au périmètre et au compte autorisés. Les autres flux et leurs checkpoints ne sont pas modifiés.
         readings:
           type: array
           maxItems: 50000
@@ -4136,12 +4366,100 @@ components:
           properties:
             exploitations: {type: boolean}
             declarants: {type: boolean}
+    CountingCode:
+      type: [string, 'null']
+      maxLength: 255
+      description: Code comptage textuel facultatif, zéros initiaux conservés. Distinct du numéro de série du compteur ; non unique globalement. Une chaîne vide est normalisée en absence de code.
+    ExploitationWriteInput:
+      type: object
+      additionalProperties: true
+      properties:
+        declarantUserId: {$ref: '#/components/schemas/Uuid'}
+        pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+        status: {type: string, enum: [EN_ACTIVITE, NON_RENSEIGNE, ABANDONNEE, TERMINEE]}
+        usageId: {$ref: '#/components/schemas/Uuid'}
+        startDate: {type: [string, 'null'], format: date}
+        endDate: {type: [string, 'null'], format: date}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
+        expectedCountingCode:
+          allOf: [{$ref: '#/components/schemas/CountingCode'}]
+          description: Valeur observée avant correction ; null si aucun code n'était renseigné. À fournir en édition lorsqu'on change effectivement le code.
+    QuickDeclarationInput:
+      type: object
+      additionalProperties: false
+      required: [entries]
+      properties:
+        type: {type: string, maxLength: 120}
+        declarantUserId: {$ref: '#/components/schemas/Uuid'}
+        preleveurUserId: {$ref: '#/components/schemas/Uuid'}
+        targetDeclarantUserId: {$ref: '#/components/schemas/Uuid'}
+        measurementType: {type: string, enum: [INDEX, VOLUME, VOLUME_PRELEVE, VOLUME_REJETE], default: INDEX}
+        readingDate: {type: string, format: date, description: Date requise pour une saisie d'index.}
+        periodStartDate: {type: string, format: date}
+        periodEndDate: {type: string, format: date, description: Dernier jour inclus pour les volumes.}
+        comment: {type: string, maxLength: 20000}
+        aotDecreeNumber: {type: string, maxLength: 255}
+        pointUsageNames:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [pointPrelevementId, usageName]
+            properties:
+              pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+              usageName: {type: [string, 'null'], maxLength: 200}
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            additionalProperties: false
+            required: [pointPrelevementId]
+            allOf:
+              - anyOf: [{required: [index]}, {required: [value]}]
+              - anyOf: [{required: [usageId]}, {required: [usage]}]
+            properties:
+              pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+              exploitationId: {$ref: '#/components/schemas/Uuid'}
+              countingCode: {$ref: '#/components/schemas/CountingCode'}
+              index: {type: number, minimum: 0}
+              value: {type: number, minimum: 0}
+              usageId: {$ref: '#/components/schemas/Uuid'}
+              usage: {type: string}
+    NormalizedDeclarationSeries:
+      type: object
+      additionalProperties: true
+      properties:
+        pointPrelevement: {type: string}
+        exploitationId: {$ref: '#/components/schemas/Uuid'}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
+        parameter: {type: string}
+        frequency: {type: string}
+        unit: {type: string}
+        metadata: {type: object, additionalProperties: true}
+        minDate: {type: string}
+        maxDate: {type: string}
+        data:
+          type: array
+          items:
+            type: object
+            required: [date, value]
+            properties:
+              date: {type: string}
+              periodStart: {type: string, format: date-time}
+              periodEnd: {type: string, format: date-time}
+              value: {type: number}
     Exploitation:
       type: object
       additionalProperties: true
       required: [id, status, usageId, usage, secondaryUsages]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
+        expectedCountingCode:
+          allOf: [{$ref: '#/components/schemas/CountingCode'}]
+          description: Précondition d'édition du code, non nécessaire pour une lecture.
         status: {type: string}
         usageId: {$ref: '#/components/schemas/Uuid'}
         usage: {$ref: '#/components/schemas/WaterUse'}
@@ -4196,6 +4514,8 @@ components:
         id: {type: string}
         metricTypeCode: {type: string}
         pointId: {$ref: '#/components/schemas/Uuid'}
+        exploitationId: {type: [string, 'null'], format: uuid}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
         unit: {type: string}
     SeriesValue:
       type: object
@@ -4275,7 +4595,9 @@ components:
             type: object
             additionalProperties: true
             properties:
-              id: {type: string, description: 'Pour un index physique : index:meter:<UUID>.'}
+              id: {type: string, description: 'Index physique : index:meter:<UUID>. Avec includeExploitationIndexes, les index ordinaires portent une identité par exploitation.'}
+              exploitationId: {$ref: '#/components/schemas/Uuid'}
+              countingCode: {$ref: '#/components/schemas/CountingCode'}
               name: {type: string}
               label: {type: string}
               readingSeries: {type: boolean}

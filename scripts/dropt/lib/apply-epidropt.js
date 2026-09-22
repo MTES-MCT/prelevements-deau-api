@@ -2,6 +2,7 @@ import {lockMeter, reprocessMeterStreamInTransaction} from '../../../lib/service
 import {validateAllocationSnapshot} from '../../../lib/services/meter-core.js'
 import {digest, stableId, SCOPE, FORMAT_VERSION} from './epidropt.js'
 import {getTransactionTimeoutMs} from './import-options.js'
+import {assertExploitationMultiplicity, normalizeCountingCode} from '../../../lib/services/exploitation-periods.js'
 
 const entityFields = {POINT: 'pointPrelevementId', DECLARANT: 'declarantUserId', METER: 'compteurId'}
 
@@ -43,7 +44,7 @@ function sameCoordinates(left, right) {
     && left.every((value, index) => Number.isFinite(value) && Number.isFinite(right[index]) && Math.abs(value - right[index]) < 1e-10)
 }
 
-async function putPoint(client, record) {
+async function putPoint(client, record, changes) {
   const identity = await referenceIdentity(client, record, 'POINT')
   const existing = await client.pointPrelevement.findUnique({where: {id: identity.id}})
   const sameName = await client.pointPrelevement.findUnique({where: {name: record.data.name}, select: {id: true}})
@@ -52,9 +53,11 @@ async function putPoint(client, record) {
   const data = managedChanges(existing, identity.imported, record.data)
   if (!existing) await client.pointPrelevement.create({data: {id: identity.id, sourceId: record.sourceId, ...record.data}})
   else if (Object.keys(data).length) await client.pointPrelevement.update({where: {id: identity.id}, data})
+  if (!existing || Object.keys(data).length) changes.push({kind: 'points', id: identity.id, action: existing ? 'UPDATED' : 'CREATED', fields: data})
   const stored = await client.$queryRaw`SELECT ST_X(coordinates) AS x, ST_Y(coordinates) AS y FROM "PointPrelevement" WHERE id = ${identity.id}::uuid`
   const previousCoordinates = stored[0]?.x == null || stored[0]?.y == null ? null : [stored[0].x, stored[0].y]
   if (!existing || (sameCoordinates(previousCoordinates, identity.imported?.coordinates) && !sameCoordinates(previousCoordinates, record.coordinates))) {
+    changes.push({kind: 'points', id: identity.id, action: 'COORDINATES_UPDATED', before: previousCoordinates, after: record.coordinates})
     const [longitude, latitude] = record.coordinates
     await client.$executeRaw`UPDATE "PointPrelevement" SET coordinates = ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326) WHERE id = ${identity.id}::uuid`
     const zones = await client.$queryRaw`SELECT z.id FROM "Zone" z JOIN "PointPrelevement" p ON p.id = ${identity.id}::uuid WHERE ST_Intersects(z.coordinates, p.coordinates)`
@@ -66,7 +69,7 @@ async function putPoint(client, record) {
   return identity.id
 }
 
-async function putDeclarant(client, record) {
+async function putDeclarant(client, record, recordedChanges) {
   const identity = await referenceIdentity(client, record, 'DECLARANT')
   const existing = await client.declarant.findUnique({where: {userId: identity.id}, include: {user: true}})
   if (existing?.user.deletedAt) throw new Error('PRELEVEUR_SUPPRIME')
@@ -77,9 +80,11 @@ async function putDeclarant(client, record) {
 
   if (!existing) {
     await client.user.create({data: {id: identity.id, ...record.user, declarant: {create: {sourceId: record.sourceId, ...record.data}}}})
+    recordedChanges.push({kind: 'declarants', id: identity.id, action: 'CREATED', fields: record.data})
   } else {
     const changes = managedChanges(existing, identity.imported, record.data)
     if (Object.keys(changes).length) await client.declarant.update({where: {userId: identity.id}, data: changes})
+    if (Object.keys(changes).length) recordedChanges.push({kind: 'declarants', id: identity.id, action: 'UPDATED', fields: changes})
   }
 
   for (const email of record.emails) {
@@ -91,7 +96,7 @@ async function putDeclarant(client, record) {
   return identity.id
 }
 
-async function putExploitation(client, record, pointId, declarantUserId) {
+async function putExploitation(client, record, pointId, declarantUserId, changes) {
   if (!pointId || !declarantUserId) throw new Error('DEPENDANCE_NON_IMPORTEE')
   const matches = await client.declarantPointPrelevement.findMany({where: {OR: [{id: record.id}, {sourceId: record.sourceId}]}})
   if (matches.length > 1) throw new Error('REFERENCES_INCOMPATIBLES')
@@ -100,13 +105,25 @@ async function putExploitation(client, record, pointId, declarantUserId) {
   if (!usage) throw new Error('USAGE_ABSENT')
   if (existing) {
     if (existing.pointPrelevementId !== pointId || existing.declarantUserId !== declarantUserId) throw new Error('EXPLOITATION_EXISTANTE_DIFFERENTE')
+    const code = normalizeCountingCode(record.countingCode)
+    const previousCode = normalizeCountingCode(record.previousCountingCode)
+    if (code && code !== existing.countingCode) {
+      if (existing.countingCode && existing.countingCode !== previousCode) {
+        changes.push({id: existing.id, field: 'countingCode', action: 'PRESERVED_MANUAL_VALUE', incoming: code, current: existing.countingCode})
+      } else {
+        await assertExploitationMultiplicity(client, {...existing, countingCode: code}, {existing})
+        await client.declarantPointPrelevement.update({where: {id: existing.id}, data: {countingCode: code}})
+        changes.push({id: existing.id, field: 'countingCode', action: 'UPDATED', before: existing.countingCode ?? null, after: code})
+      }
+    }
     return existing.id
   }
 
-  const candidates = await client.declarantPointPrelevement.findMany({where: {pointPrelevementId: pointId, declarantUserId, status: {in: ['EN_ACTIVITE', 'NON_RENSEIGNE']}}})
-  if (candidates.length) throw new Error('PERIODE_EXPLOITATION_EXISTANTE_A_RAPPROCHER')
-  await client.declarantPointPrelevement.create({data: {id: record.id, sourceId: record.sourceId, pointPrelevementId: pointId, declarantUserId, usageId: usage.id,
-    status: 'NON_RENSEIGNE', pointPrelevementNameAliases: record.aliases}})
+  const data = {id: record.id, sourceId: record.sourceId, pointPrelevementId: pointId, declarantUserId, usageId: usage.id,
+    countingCode: normalizeCountingCode(record.countingCode), status: 'NON_RENSEIGNE', pointPrelevementNameAliases: record.aliases}
+  await assertExploitationMultiplicity(client, data)
+  await client.declarantPointPrelevement.create({data})
+  changes.push({id: record.id, action: 'CREATED', countingCode: data.countingCode})
   const zones = await client.pointPrelevementZone.findMany({where: {pointPrelevementId: pointId}, select: {zoneId: true}})
   await client.declarantZone.createMany({data: zones.map(zone => ({declarantUserId, zoneId: zone.zoneId, source: 'MIGRATION'})), skipDuplicates: true})
   return record.id
@@ -166,13 +183,15 @@ async function putMeter(client, record, allocations, exploitationIds, options) {
   if (existing?.deletedAt) throw new Error('COMPTEUR_SUPPRIME')
   if (existing && existing.serialNumber !== record.serial) throw new Error('NUMERO_COMPTEUR_EXISTANT_DIFFERENT')
   if (!existing) await client.compteur.create({data: {id: identity.id, serialNumber: record.serial}})
+  if (!existing) options.changes.push({kind: 'meters', id: identity.id, action: 'CREATED'})
   await recordReferences(client, record, 'METER', identity.id, {serialNumber: record.serial})
   const available = allocations.filter(item => exploitationIds.has(item.exploitationId))
   if (record.provider === 'epidropt') {
     for (const item of available) {
       const allocation = await putAllocation(client, item, record, identity.id, exploitationIds)
-      await appendAllocationVersion(client, allocation, {percentage: null, enabled: false, additive: false, startDate: null},
+      const changed = await appendAllocationVersion(client, allocation, {percentage: null, enabled: false, additive: false, startDate: null},
         {manifestHash: options.manifestHash}, {preserveExisting: true})
+      if (changed) options.changes.push({kind: 'allocations', id: allocation.id, action: 'CREATED_DISABLED'})
     }
     return identity.id
   }
@@ -229,6 +248,8 @@ async function putMeter(client, record, allocations, exploitationIds, options) {
     const recalculation = await reprocessMeterStreamInTransaction(client, stream.id)
     await client.meterStream.update({where: {id: stream.id}, data: {lastIssue: recalculation.issues.join(',') || null}})
   }
+  if (changed || !oldStream) options.changes.push({kind: 'streams', id: stream.id, action: oldStream ? 'UPDATED' : 'CREATED',
+    activatedAt: activatedAt?.toISOString() ?? null, validated, snapshot: record.allocationSnapshot})
   return identity.id
 }
 
@@ -264,28 +285,30 @@ async function lockImportMeters(client, records, pointIds) {
   for (const id of [...allPoints].sort()) await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('volumes-from-index'), hashtext(${id}))`
 }
 
-export async function applyManifest(client, manifest, {apply = false, activateAt, effectiveAt, serviceAccountId, transactionTimeoutSeconds} = {}) {
+export async function applyManifest(client, manifest, {apply = false, activateAt, effectiveAt, serviceAccountId, transactionTimeoutSeconds, expectedReport} = {}) {
   validateManifest(manifest)
   const timeout = getTransactionTimeoutMs(transactionTimeoutSeconds)
   const {manifestHash} = manifest
   activateAt = explicitInstant(activateAt)
   effectiveAt = explicitInstant(effectiveAt)
   if (serviceAccountId && !await client.serviceAccount.findUnique({where: {id: serviceAccountId}})) throw new Error('Compte de service absent.')
-  const result = {manifestHash, applied: apply, counts: {}, issues: [...manifest.issues], objectIds: {points: [], declarants: [], exploitations: [], meters: []}, mappings: {points: [], declarants: [], exploitations: [], meters: []}}
+  if (expectedReport && (expectedReport.manifestHash !== manifestHash || !expectedReport.complete || !expectedReport.planHash)) throw new Error('Simulation de référence incompatible ou incomplète.')
+  const result = {manifestHash, applied: apply, complete: false, counts: {}, changes: [], issues: [...manifest.issues], executionIssues: [], objectIds: {points: [], declarants: [], exploitations: [], meters: []}, mappings: {points: [], declarants: [], exploitations: [], meters: []}}
   const pointIds = new Map()
   const declarantIds = new Map()
   const exploitationIds = new Map()
   const execute = async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('dropt-referential'), hashtext(${SCOPE}))`
     for (const [kind, rows, fn, idMap] of [
-      ['points', manifest.points, (db, r) => putPoint(db, r), pointIds],
-      ['declarants', manifest.declarants, (db, r) => putDeclarant(db, r), declarantIds],
-      ['exploitations', manifest.exploitations, (db, r) => putExploitation(db, r, pointIds.get(r.pointId), declarantIds.get(r.declarantId)), exploitationIds],
-      ['meters', manifest.meters, (db, r) => putMeter(db, r, manifest.allocations.filter(a => a.compteurId === r.id), exploitationIds, {activateAt, effectiveAt, serviceAccountId, manifestHash}), new Map()]
+      ['points', manifest.points, (db, r) => putPoint(db, r, result.changes), pointIds],
+      ['declarants', manifest.declarants, (db, r) => putDeclarant(db, r, result.changes), declarantIds],
+      ['exploitations', manifest.exploitations, (db, r) => putExploitation(db, r, pointIds.get(r.pointId), declarantIds.get(r.declarantId), result.changes), exploitationIds],
+      ['meters', manifest.meters, (db, r) => putMeter(db, r, manifest.allocations.filter(a => a.compteurId === r.id), exploitationIds, {activateAt, effectiveAt, serviceAccountId, manifestHash, changes: result.changes}), new Map()]
     ]) {
       if (kind === 'meters') await lockImportMeters(tx, rows, pointIds.values())
       result.counts[kind] = 0
       for (const row of rows) {
+        const changesBefore = result.changes.length
         await tx.$executeRawUnsafe('SAVEPOINT dropt_object')
         try {
           const id = await fn(tx, row)
@@ -297,13 +320,27 @@ export async function applyManifest(client, manifest, {apply = false, activateAt
         } catch (error) {
           await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT dropt_object')
           await tx.$executeRawUnsafe('RELEASE SAVEPOINT dropt_object')
+          result.changes.splice(changesBefore)
           const code = /^[A-Z_]+$/.test(error.message) ? error.message : `DATABASE_${error.code ?? 'ERROR'}`
           result.issues.push({code, source: {kind, id: row.id}})
+          result.executionIssues.push({code, source: {kind, id: row.id}})
         }
       }
     }
 
-    if (!apply) throw Object.assign(new Error('DRY_RUN_ROLLBACK'), {dryRunResult: result})
+    result.planHash = digest({manifestHash, mappings: result.mappings, changes: result.changes,
+      executionIssues: result.executionIssues, activateAt: activateAt?.toISOString() ?? null, effectiveAt: effectiveAt?.toISOString() ?? null,
+      serviceAccountId: serviceAccountId ?? null})
+    if (expectedReport && result.planHash !== expectedReport.planHash) {
+      const issue = {code: 'DRY_RUN_STATE_CHANGED', source: {manifestHash}}
+      result.issues.push(issue)
+      result.executionIssues.push(issue)
+    }
+    result.complete = result.executionIssues.length === 0
+    if (!apply || !result.complete) {
+      result.applied = false
+      throw Object.assign(new Error('DRY_RUN_ROLLBACK'), {dryRunResult: result})
+    }
     return result
   }
 

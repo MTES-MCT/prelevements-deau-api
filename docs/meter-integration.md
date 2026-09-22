@@ -68,4 +68,16 @@ Une série ordinaire est remplacée seulement si le flux possède `supersedeSame
 
 Les tests PostgreSQL requièrent `METER_INTEGRATION_TESTS=1`, `NODE_ENV=test` et une base jetable reconnue par `requireDisposableDatabase`. Ils utilisent deux fournisseurs synthétiques, sans accès au fournisseur ni aux bases applicatives. Exemple local autorisé : base `security_tests`, hôte `127.0.0.1`, port `55439`.
 
-Le recalcul s’arrête explicitement au-delà de 20 000 observations par compteur : ce cas exige une évolution paginée avant de reprendre l’ingestion, sans troncature silencieuse. Les erreurs réseau du fournisseur ne créent aucun lot API ; elles restent visibles dans l’orchestration.
+Le recalcul parcourt les observations par pages en conservant l’observation précédente entre deux pages : les longues séries ne sont ni tronquées ni chargées intégralement en mémoire. Les erreurs réseau du fournisseur ne créent aucun lot API ; elles restent visibles dans l’orchestration.
+
+## Identité des exploitations et reprise de l’historique
+
+Le code comptage est une chaîne facultative portée par l’exploitation, pas l’identifiant du compteur physique. Un compteur peut toujours être partagé entre plusieurs exploitations ; deux exploitations du même préleveur sur le même PP restent distinctes grâce à leur UUID et leur code. Les contributions publiées portent aussi cet UUID. Les index ordinaires sont calculés séparément par exploitation ; le calcul `METER` reste indépendant.
+
+Avant d’activer `MULTIPLE_EXPLOITATIONS_ENABLED=true`, déployer les consommateurs compatibles et rattacher l’historique sans ambiguïté :
+
+```sh
+npm run backfill:chunk-exploitations -- --target testing --target-env .env.testing --tunnel-port PORT_LOCAL --report data/dropt/epidropt-2026/reports/chunk-exploitations-dry-run.json
+```
+
+Sans `--apply`, la transaction est annulée après contrôle. Relancer avec `--apply` et un nouveau chemin de rapport après examen du résultat. Le script accepte uniquement local/testing, vérifie la cible et TLS, préserve les valeurs et produit un rapport privé. Les séries `METER` sont résolues par leurs contributions ; les autres par unicité du préleveur, du PP et de la période. Les cas sans candidat ou ambigus restent non rattachés. Le rejeu ne modifie que les identités encore absentes. La base interdit une nouvelle coexistence si l’historique correspondant reste non résolu.

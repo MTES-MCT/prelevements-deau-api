@@ -9,6 +9,7 @@ import {getTransactionTimeoutMs} from './lib/import-options.js'
 const {positionals, values} = parseArgs({allowPositionals: true, options: {
   input: {type: 'string', default: 'data/dropt/epidropt-2026'}, target: {type: 'string'},
   manifest: {type: 'string'}, overrides: {type: 'string'}, report: {type: 'string'}, 'against-report': {type: 'string'},
+  'epidropt-file': {type: 'string'}, snapshot: {type: 'string'}, 'previous-manifest': {type: 'string'},
   apply: {type: 'boolean', default: false}, 'activate-at': {type: 'string'}, 'effective-at': {type: 'string'}, 'service-account-id': {type: 'string'},
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
@@ -25,11 +26,18 @@ async function writePrivate(filename, value) {
 try {
   getTransactionTimeoutMs(values['transaction-timeout-seconds'])
   if (operation === 'prepare') {
-    const files = {epidropt: path.join(base, 'raw/Prelevement_Epidropt_20_08_2026.xlsx'), rives: path.join(base, 'raw/ExportTableEpiDropt.xlsx')}
+    const files = {epidropt: path.resolve(values['epidropt-file'] ?? path.join(base, 'raw/Prelevement_Epidropt_20_08_2026.xlsx')), rives: path.join(base, 'raw/ExportTableEpiDropt.xlsx')}
     const inputs = {}
     for (const [key, filename] of Object.entries(files)) inputs[key] = {name: path.basename(filename), sha256: createHash('sha256').update(await readFile(filename)).digest('hex')}
     const overrides = values.overrides ? JSON.parse(await readFile(values.overrides, 'utf8')) : {}
-    const manifest = buildManifest({epidropt: await readWorkbook(files.epidropt, EPIDROPT_SHEETS), rives: await readWorkbook(files.rives, RIVES_SHEETS), overrides, inputs})
+    const previousPath = path.resolve(values['previous-manifest'] ?? manifestPath)
+    let previousManifest
+    try { previousManifest = JSON.parse(await readFile(previousPath, 'utf8')) } catch (error) { if (error.code !== 'ENOENT' || values['previous-manifest']) throw error }
+    const snapshot = values.snapshot ? JSON.parse(await readFile(values.snapshot, 'utf8')) : undefined
+    if (snapshot && (!snapshot.readOnly || !snapshot.completed || !snapshot.tables || snapshot.target !== 'testing')) throw new Error('Export testing complet et en lecture seule requis.')
+    if (previousManifest) inputs.previousManifestHash = previousManifest.manifestHash
+    if (snapshot) inputs.snapshot = {startedAt: snapshot.startedAt, sha256: createHash('sha256').update(await readFile(values.snapshot)).digest('hex')}
+    const manifest = buildManifest({epidropt: await readWorkbook(files.epidropt, EPIDROPT_SHEETS), rives: await readWorkbook(files.rives, RIVES_SHEETS), overrides, inputs, previousManifest, snapshot})
     // Keep every reviewed mapping even when refreshing the convenient latest file.
     await writePrivate(path.join(base, `mapping/manifests/${manifest.manifestHash}.json`), manifest)
     await writePrivate(manifestPath, manifest)
@@ -40,6 +48,8 @@ try {
       const configuration = parseEnv(await readFile(values['target-env'], 'utf8'))
       if (!configuration.DATABASE_URL) throw new Error('DATABASE_URL absente du fichier cible.')
       process.env.DATABASE_URL = configuration.DATABASE_URL
+      // Do not inherit a permissive local flag when explicitly targeting testing.
+      process.env.MULTIPLE_EXPLOITATIONS_ENABLED = configuration.MULTIPLE_EXPLOITATIONS_ENABLED === 'true' ? 'true' : 'false'
     }
     if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL doit être chargée explicitement, sans argument de commande.')
     const url = new URL(process.env.DATABASE_URL)
@@ -57,7 +67,7 @@ try {
       globalThis.pgPool = new InstrumentedPool({host: '127.0.0.1', port, user: decodeURIComponent(url.username), password: decodeURIComponent(url.password), database: decodeURIComponent(url.pathname.slice(1)), ssl, max: 2, connectionTimeoutMillis: 10_000})
       process.env.DATABASE_URL = url.toString()
     }
-    if (values.target === 'local' && (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || !['prelevements-deau', 'security_tests', 'dropt_tests'].includes(decodeURIComponent(url.pathname.slice(1))))) throw new Error('La cible locale ne correspond pas à une base autorisée.')
+    if (values.target === 'local' && (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || !['prelevements-deau', 'security_tests', 'integration_tests'].includes(decodeURIComponent(url.pathname.slice(1))))) throw new Error('La cible locale ne correspond pas à une base autorisée.')
     if (values.target === 'testing') {
       const {TESTING_DATABASE_ENDPOINT} = await import('../network/testing-database-target.js')
       if (decodeURIComponent(url.pathname.slice(1)) !== 'testing-partageons-leau-api' || decodeURIComponent(url.username) !== 'testing-partageons-leau-api' || url.hostname !== TESTING_DATABASE_ENDPOINT.host || url.port !== TESTING_DATABASE_ENDPOINT.port || url.searchParams.get('sslmode') !== 'verify-full') throw new Error('La cible ne correspond pas au PostgreSQL privé testing avec TLS vérifié.')
@@ -74,11 +84,12 @@ try {
       const report = values['against-report'] ? JSON.parse(await readFile(values['against-report'], 'utf8')) : undefined
       const result = operation === 'verify' ? await verifyManifest(prisma, manifest, {report}) : await applyManifest(prisma, manifest, {
         apply: values.apply, activateAt: values['activate-at'], effectiveAt: values['effective-at'], serviceAccountId: values['service-account-id'],
-        transactionTimeoutSeconds: values['transaction-timeout-seconds']
+        transactionTimeoutSeconds: values['transaction-timeout-seconds'], expectedReport: report
       })
       const stamp = new Date().toISOString().replaceAll(':', '-')
       await writePrivate(path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`)), result)
       console.log(JSON.stringify({manifestHash: result.manifestHash, applied: result.applied ?? false, counts: result.counts, issues: result.issues?.length, complete: result.complete}))
+      if (result.complete === false) process.exitCode = 1
     } finally {
       await prisma.$disconnect()
       await globalThis.pgPool?.end()

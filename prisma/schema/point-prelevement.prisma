@@ -151,6 +151,7 @@ model DeclarantPointPrelevement {
   usageId                     String                          @db.Uuid
   usage                       SandreWaterUse                  @relation(fields: [usageId], references: [id], onDelete: Restrict)
   pointPrelevementNameAliases String[]                        @default([])
+  countingCode                String?                         @db.Text
 
   abandonReason String? @db.Text
   comment       String? @db.Text
@@ -169,6 +170,7 @@ model DeclarantPointPrelevement {
   documents           ResourceDocument[]
   documentLinks       ResourceDocumentExploitation[]
   rules               ResourceRuleExploitation[]
+  chunks              Chunk[]
 
   @@unique([sourceId])
   @@index([declarantUserId, pointPrelevementId], map: "DPP_declarant_point_idx")
@@ -179,6 +181,16 @@ model DeclarantPointPrelevement {
   @@index([endDate])
   @@index([usageId])
   @@index([pointPrelevementNameAliases], type: Gin)
+}
+
+// Serializes changes to the identity/period of a declarant-point pair, including
+// concurrent inserts when that pair has no exploitation yet.
+model ExploitationIdentityLock {
+  declarantUserId    String @db.Uuid
+  pointPrelevementId String @db.Uuid
+  revision          BigInt @default(0)
+
+  @@id([declarantUserId, pointPrelevementId])
 }
 
 model DeclarantPointPrelevementSecondaryUsage {
