@@ -4021,6 +4021,21 @@ components:
         isReferencePoint: {type: [boolean, 'null']}
         isWaterBodyConnectedToStream: {type: [boolean, 'null']}
         isWaterBodyConnectedToGroundwater: {type: [boolean, 'null']}
+        reservoirNominalVolume:
+          type: [number, 'null']
+          exclusiveMinimum: 0
+          description: >-
+            Volume nominal de la retenue en m³, décimales admises. Facultatif et
+            descriptif, sans effet sur les volumes prélevés. Conservé uniquement
+            pour une origine PLAN_EAU ; remis à null si l’origine n’est plus PLAN_EAU.
+        waterBodyIdentifier:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 100
+          description: >-
+            Référence libre et non unique du plan d’eau. Les zéros initiaux sont
+            conservés. Facultatif, conservé uniquement pour une origine PLAN_EAU ;
+            remis à null si l’origine n’est plus PLAN_EAU.
     PointPrelevementMapSummary:
       type: object
       additionalProperties: false

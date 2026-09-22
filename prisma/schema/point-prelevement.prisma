@@ -59,6 +59,8 @@ model PointPrelevement {
   isReferencePoint                  Boolean?
   isWaterBodyConnectedToStream      Boolean?
   isWaterBodyConnectedToGroundwater Boolean?
+  reservoirNominalVolume           Float?
+  waterBodyIdentifier              String?   @db.Text
 
   coordinates Unsupported("geometry(Point,4326)")?
 
