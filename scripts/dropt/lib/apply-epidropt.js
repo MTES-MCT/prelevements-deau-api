@@ -244,7 +244,7 @@ async function putMeter(client, record, allocations, exploitationIds, options) {
       changed ||= updated
     }
   }
-  if (changed && stream.activatedAt) {
+  if (changed && stream.activatedAt && !options.deferReprocessing) {
     const recalculation = await reprocessMeterStreamInTransaction(client, stream.id)
     await client.meterStream.update({where: {id: stream.id}, data: {lastIssue: recalculation.issues.join(',') || null}})
   }
@@ -285,7 +285,7 @@ async function lockImportMeters(client, records, pointIds) {
   for (const id of [...allPoints].sort()) await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('volumes-from-index'), hashtext(${id}))`
 }
 
-export async function applyManifest(client, manifest, {apply = false, activateAt, effectiveAt, serviceAccountId, transactionTimeoutSeconds, expectedReport} = {}) {
+async function applyManifestWithOptions(client, manifest, {apply = false, activateAt, effectiveAt, serviceAccountId, transactionTimeoutSeconds, expectedReport, deferReprocessing = false} = {}) {
   validateManifest(manifest)
   const timeout = getTransactionTimeoutMs(transactionTimeoutSeconds)
   const {manifestHash} = manifest
@@ -303,7 +303,7 @@ export async function applyManifest(client, manifest, {apply = false, activateAt
       ['points', manifest.points, (db, r) => putPoint(db, r, result.changes), pointIds],
       ['declarants', manifest.declarants, (db, r) => putDeclarant(db, r, result.changes), declarantIds],
       ['exploitations', manifest.exploitations, (db, r) => putExploitation(db, r, pointIds.get(r.pointId), declarantIds.get(r.declarantId), result.changes), exploitationIds],
-      ['meters', manifest.meters, (db, r) => putMeter(db, r, manifest.allocations.filter(a => a.compteurId === r.id), exploitationIds, {activateAt, effectiveAt, serviceAccountId, manifestHash, changes: result.changes}), new Map()]
+      ['meters', manifest.meters, (db, r) => putMeter(db, r, manifest.allocations.filter(a => a.compteurId === r.id), exploitationIds, {activateAt, effectiveAt, serviceAccountId, manifestHash, changes: result.changes, deferReprocessing}), new Map()]
     ]) {
       if (kind === 'meters') await lockImportMeters(tx, rows, pointIds.values())
       result.counts[kind] = 0
@@ -350,6 +350,18 @@ export async function applyManifest(client, manifest, {apply = false, activateAt
     if (error.dryRunResult) return error.dryRunResult
     throw error
   }
+}
+
+export async function applyManifest(client, manifest, options = {}) {
+  // Ordinary imports always retain the dated-allocation and recalculation guards.
+  return applyManifestWithOptions(client, manifest, {...options, deferReprocessing: false})
+}
+
+// Only the testing rebuild calls this after its scoped preflight and deletion,
+// inside the same transaction. Historical readings are republished separately.
+export async function applyRebuiltManifestInTransaction(transaction, manifest, options = {}) {
+  const adapter = {serviceAccount: transaction.serviceAccount, $transaction: execute => execute(transaction)}
+  return applyManifestWithOptions(adapter, manifest, {...options, apply: true, expectedReport: undefined, deferReprocessing: true})
 }
 
 export async function verifyManifest(client, manifest, {report} = {}) {

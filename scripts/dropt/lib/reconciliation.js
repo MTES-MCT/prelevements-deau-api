@@ -1,38 +1,115 @@
-import {clean, digest} from './epidropt.js'
+import {clean, coordinates, digest} from './epidropt.js'
 
 const referenceKey = reference => `${reference.provider}:${reference.externalId}`
 const unique = values => [...new Set(values.filter(Boolean))]
 
-export function proposePointMatches({points, pointRows, lieux, assignments, snapshot}) {
-  const claimed = new Map((snapshot?.tables?.externalReferences ?? [])
-    .filter(ref => ref.provider === 'rives-et-eaux' && ref.pointPrelevementId)
-    .map(ref => [ref.externalId, ref.pointPrelevementId]))
-  const candidates = []
-  for (const point of points.filter(point => !point.references.some(ref => ref.provider === 'rives-et-eaux'))) {
-    const rows = pointRows.filter(row => point.names.includes(clean(row.values[1])))
-    const codes = unique([...point.names.map(name => name.split('CACG')[0]), ...rows.map(row => clean(row.values[11]))])
+export const isCacgPoint = name => /CACG/i.test(clean(name))
+
+// Only the numeric part before CACG is transformed. The complete CACG suffix
+// remains part of every key: a client number on its own is not a point identity.
+export function cacgNameVariants(value) {
+  const name = clean(value)
+  const match = /^(\d+)(CACG_.+)$/i.exec(name)
+  if (!match) return [name]
+  const [, code, suffix] = match
+  const unpadded = value => value.replace(/^0+(?=\d)/, '')
+  const variants = [name, `${unpadded(code)}${suffix}`]
+  if (/^(24|33|47)\d+$/.test(code)) variants.push(`${unpadded(code.slice(2))}${suffix}`)
+  return unique(variants)
+}
+
+function distanceMeters(left, right) {
+  const radians = value => value * Math.PI / 180
+  const latitude = radians((left[1] + right[1]) / 2)
+  return 6_371_000 * Math.hypot(radians(left[0] - right[0]) * Math.cos(latitude), radians(left[1] - right[1]))
+}
+
+export function resolvePointMatches({pointRows, lieux, assignments, previousManifest, snapshot, overrides = {}}) {
+  const grouped = new Map()
+  for (const row of pointRows) {
+    const name = clean(row.values[1])
+    if (name) grouped.set(name, [...(grouped.get(name) ?? []), row])
+  }
+  const rivesNames = unique(assignments.map(row => row.pointName))
+  const results = new Map()
+  for (const [name, rows] of grouped) {
+    const base = {kind: 'POINT', names: [name], sources: rows.map(row => ({sheet: 'Points prélèvement', row: row.row})),
+      supplyCategory: isCacgPoint(name) ? 'REALIMENTE' : 'NON_REALIMENTE'}
+    if (!isCacgPoint(name)) {
+      results.set(name, {...base, status: 'EXCLUDED', method: 'NON_REALIMENTE', candidates: [], reason: 'NOT_ELIGIBLE_FOR_RIVES'})
+      continue
+    }
+    const variants = cacgNameVariants(name)
     const serials = unique(rows.flatMap(row => clean(row.values[24]).split(';').map(clean)))
     const serialPlaces = unique(assignments.filter(row => serials.includes(row.serial)).map(row => row.lieuId))
-    const placesByCode = lieux.filter(place => codes.includes(place.codeOU))
-    const byCoordinates = placesByCode.filter(place => place.coordinates
-      && place.coordinates.every((coordinate, index) => coordinate.toFixed(5) === point.coordinates[index].toFixed(5)))
-    const bySerial = placesByCode.filter(place => serialPlaces.includes(place.id))
-    const proposed = unique([...byCoordinates, ...bySerial].map(place => place.id))
-    if (!proposed.length) continue
-    const contradictorySerial = proposed.length === 1 && serialPlaces.length && !serialPlaces.includes(proposed[0])
-    candidates.push({kind: 'POINT', pointId: point.id, names: point.names, sources: rows.map(row => ({sheet: 'Points prélèvement', row: row.row})),
-      method: 'EXACT_CODE_WITH_COORDINATES_OR_SERIAL', candidates: proposed,
-      evidence: {codePlaces: placesByCode.map(place => place.id), serialPlaces, coordinatePlaces: byCoordinates.map(place => place.id)},
-      status: 'REVIEW', reason: proposed.length !== 1 || contradictorySerial ? 'CONTRADICTORY_REFERENCES'
-        : claimed.has(proposed[0]) && claimed.get(proposed[0]) !== point.id ? 'PLACE_ALREADY_ASSIGNED' : 'REVERSE_CARDINALITY_TO_CHECK'})
+    const sourceCoordinates = rows.map(row => coordinates(row.values[3], row.values[4])).filter(Boolean)
+    const coordinatePlaces = lieux.filter(place => place.coordinates && sourceCoordinates.some(position => distanceMeters(position, place.coordinates) <= 5)).map(place => place.id)
+    const codes = unique([name.split(/CACG/i)[0], ...rows.map(row => clean(row.values[11]))])
+    const codePlaces = lieux.filter(place => codes.includes(place.codeOU) || codes.includes(place.id)).map(place => place.id)
+    const evidence = {variants, serials, serialPlaces, coordinatePlaces, codePlaces}
+    const tiers = [
+      ['EXACT_NAME', assignments.filter(row => row.pointName === name)],
+      ['CACG_SOURCE_VARIANT', assignments.filter(row => variants.includes(row.pointName))],
+      ['CACG_BOTH_VARIANTS', assignments.filter(row => cacgNameVariants(row.pointName).some(key => variants.includes(key)))]
+    ]
+    let method = 'NO_MATCH'
+    let candidates = []
+    let matchedNames = []
+    if (overrides.points?.[name]?.lieuId) {
+      method = 'EXPLICIT_MAPPING'
+      candidates = [String(overrides.points[name].lieuId)]
+    } else {
+      for (const [tier, matches] of tiers) {
+        candidates = unique(matches.map(row => row.lieuId))
+        if (candidates.length) {
+          method = tier
+          matchedNames = unique(matches.map(row => row.pointName))
+          break
+        }
+      }
+      if (!candidates.length && codePlaces.length) {
+        method = 'CODE_OR_PLACE_WITH_EVIDENCE'
+        candidates = unique(codePlaces)
+      }
+    }
+    const knownPlace = candidates.length === 1 && lieux.some(place => place.id === candidates[0])
+    const corroborated = candidates.length === 1 && (serialPlaces.includes(candidates[0]) || coordinatePlaces.includes(candidates[0]))
+    const trustedName = ['EXACT_NAME', 'EXPLICIT_MAPPING'].includes(method)
+    const contradictorySerial = !trustedName && candidates.length === 1 && serialPlaces.length > 0 && !serialPlaces.includes(candidates[0])
+    const accepted = knownPlace && !contradictorySerial && (trustedName || corroborated)
+    if (!matchedNames.length) matchedNames = rivesNames.filter(rivesName => assignments.some(row => row.pointName === rivesName && candidates.includes(row.lieuId)))
+    results.set(name, {...base, method, candidates, evidence, matchedNames,
+      status: accepted ? 'ACCEPTED' : candidates.length ? 'REVIEW' : 'UNMATCHED',
+      reason: accepted ? null : candidates.length > 1 ? 'MULTIPLE_RIVES_PLACES'
+        : contradictorySerial ? 'CONTRADICTORY_SERIAL_REFERENCE'
+          : candidates.length && !knownPlace ? 'PLACE_MISSING_OR_CONFLICTING' : candidates.length ? 'CORROBORATION_MISSING' : 'NO_RIVES_MATCH'})
   }
-  for (const candidate of candidates) {
-    if (candidate.reason === 'REVERSE_CARDINALITY_TO_CHECK') {
-      const count = candidates.filter(other => other.candidates.includes(candidate.candidates[0])).length
-      candidate.reason = count === 1 ? 'UNIQUE_CANDIDATE_REQUIRES_REVIEW' : 'MULTIPLE_POINTS_FOR_PLACE'
+
+  // A newly discovered alias must not make an already imported point disappear
+  // by grouping two existing UUIDs before the identity ledger can check them.
+  const refs = snapshot?.tables?.externalReferences ?? []
+  const sourceAnchors = name => unique([
+    ...refs.filter(ref => ref.kind === 'POINT' && ref.provider === 'epidropt' && ref.externalId === name).map(ref => ref.pointPrelevementId),
+    ...(previousManifest?.points ?? []).filter(point => point.references.some(ref => ref.provider === 'epidropt' && ref.externalId === name)).map(point => point.id)
+  ])
+  const placeAnchors = lieuId => unique([
+    ...refs.filter(ref => ref.kind === 'POINT' && ref.provider === 'rives-et-eaux' && ref.externalId === lieuId).map(ref => ref.pointPrelevementId),
+    ...(previousManifest?.points ?? []).filter(point => point.references.some(ref => ref.provider === 'rives-et-eaux' && ref.externalId === lieuId)).map(point => point.id)
+  ])
+  for (const lieuId of unique([...results.values()].filter(item => item.status === 'ACCEPTED').flatMap(item => item.candidates))) {
+    const aliases = [...results.values()].filter(item => item.status === 'ACCEPTED' && item.candidates[0] === lieuId)
+    const claimed = placeAnchors(lieuId)
+    const ids = unique([...claimed, ...aliases.flatMap(item => sourceAnchors(item.names[0]))])
+    if (ids.length <= 1) continue
+    for (const item of aliases) {
+      const anchors = sourceAnchors(item.names[0])
+      if (claimed.length === 1 && (!anchors.length || (anchors.length === 1 && anchors[0] === claimed[0]))) continue
+      item.status = 'REVIEW'
+      item.reason = 'EXISTING_POINT_IDENTITIES_COLLIDE'
+      item.evidence.existingPointIds = ids
     }
   }
-  return candidates
+  return results
 }
 
 // Existing UUIDs are anchors, never regenerated from a newly discovered provider

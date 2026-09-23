@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto'
 import ExcelJS from 'exceljs'
 import proj4 from 'proj4'
-import {preserveManifestIdentities, proposePointMatches} from './reconciliation.js'
+import {preserveManifestIdentities, resolvePointMatches, isCacgPoint} from './reconciliation.js'
 
 export const FORMAT_VERSION = 1
 export const SCOPE = 'epidropt'
@@ -178,17 +178,22 @@ function pointData(values, conflictedColumns, source, issue) {
   return data
 }
 
-export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, previousManifest, snapshot}) {
+export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, previousManifest, snapshot, resetExistingPointAndExploitationIdentities = false}) {
+  if (resetExistingPointAndExploitationIdentities) {
+    previousManifest = previousManifest ? {...previousManifest, points: [], exploitations: []} : undefined
+    snapshot = snapshot ? {...snapshot, tables: {...snapshot.tables, points: [], exploitations: [],
+      externalReferences: (snapshot.tables?.externalReferences ?? []).filter(reference => reference.kind !== 'POINT')}} : undefined
+  }
   const issues = []
   const reconciliation = []
   const issue = (code, source, details = {}) => issues.push({code, source, ...details})
   const points = new Map()
   const pointsByName = new Map()
+  const pointAttributeSources = new Map()
   const declarants = new Map()
   const declarantsByEmail = new Map()
   const exploitations = new Map()
   const assignments = rives.Affectation.map(({row, values: v}) => ({row, contractId: clean(v[0]), lieuId: clean(v[1]), pointName: clean(v[2]), serial: clean(v[3]), percentage: clean(v[4])}))
-  const byName = group(assignments, a => a.pointName)
   const {entries: lieux, conflicts: conflictingPlaces} = referenceMap(rives.Lieu,
     v => ({id: clean(v[0]), codeOU: clean(v[1]), label: clean(v[2]), coordinates: coordinates(v[3], v[4])}), 'Lieu', 'RIVES_PLACE_IDENTITY_CONFLICT', issue)
   const {entries: contracts} = referenceMap(rives.Contrat,
@@ -196,6 +201,13 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   const knownMeters = new Set(rives.Compteur.map(({values}) => clean(values[0])))
   const realPointRows = epidropt['Points prélèvement'].filter(({values}) =>
     !(normalized(values[1]) === 'forage 1' && values.every((value, column) => [0, 1].includes(column) || !clean(value))))
+  const pointMatches = resolvePointMatches({pointRows: realPointRows, lieux: [...lieux.values()], assignments, previousManifest, snapshot, overrides})
+  reconciliation.push(...pointMatches.values())
+  const assignmentsForName = name => {
+    const match = pointMatches.get(name)
+    return match?.status === 'ACCEPTED' ? assignments.filter(assignment => assignment.lieuId === match.candidates[0]
+      && match.matchedNames.includes(assignment.pointName)) : []
+  }
 
   for (const [name, rows] of group(realPointRows.filter(r => clean(r.values[1])), r => clean(r.values[1]))) {
     rows.sort((a, b) => digest(a.values).localeCompare(digest(b.values)))
@@ -207,11 +219,16 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
       continue
     }
 
-    const placeIds = [...new Set((byName.get(name) ?? []).map(a => a.lieuId))]
-    const lieuId = override.lieuId ? String(override.lieuId) : (placeIds.length === 1 ? placeIds[0] : null)
+    const match = pointMatches.get(name)
+    const lieuId = match?.status === 'ACCEPTED' ? match.candidates[0] : null
     const place = lieuId ? lieux.get(lieuId) : null
-    if (placeIds.length > 1 && !override.lieuId) {
+    if (match?.reason === 'MULTIPLE_RIVES_PLACES') {
       issue('POINT_MULTIPLE_RIVES_PLACES', rowsSource)
+      continue
+    }
+
+    if (match?.reason === 'PLACE_MISSING_OR_CONFLICTING' && match.candidates.some(id => conflictingPlaces.has(id))) {
+      issue('POINT_RIVES_PLACE_CONFLICT', rowsSource)
       continue
     }
 
@@ -255,10 +272,12 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     }
 
     const key = override.key ?? (lieuId ? `rives:lieu:${lieuId}` : `epidropt:point:${name}`)
+    const incomingData = pointData(v, conflictedColumns, rowsSource, issue)
     const point = points.get(key) ?? {
       key, id: override.id ?? stableId(key), names: [], references: [], coordinates: geometry, countingCodes: [],
+      supplyCategory: isCacgPoint(name) ? 'REALIMENTE' : 'NON_REALIMENTE',
       data: {name, flowType: 'PRELEVEMENT', waterBodyType, pointKind: 'PHYSIQUE',
-        ...pointData(v, conflictedColumns, rowsSource, issue), locationDescription: place?.label || null},
+        ...incomingData, locationDescription: place?.label || null},
       sourceId: `dropt-epidropt:point:${digest(key).slice(0, 32)}`, source: []
     }
     if (point.data.waterBodyType !== waterBodyType) {
@@ -273,24 +292,47 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     point.references.push({provider: 'epidropt', externalId: name})
     if (lieuId && !point.references.some(ref => ref.provider === 'rives-et-eaux')) point.references.push({provider: 'rives-et-eaux', externalId: lieuId})
     point.source.push(rowsSource)
+    const conflictedFields = []
     for (const [column, field] of [[8, 'nature'], [9, 'withdrawalType'], [17, 'managementUnit'], [18, 'managementSubUnit'],
       ...identifierFields, ...booleanFields]) {
-      if (conflictedColumns.has(column)) delete point.data[field]
+      if (conflictedColumns.has(column)) {
+        delete point.data[field]
+        conflictedFields.push(field)
+      }
     }
     point.countingCodes = [...new Set([...point.countingCodes, ...rows.map(row => row.countingCode).filter(Boolean)])].sort()
     for (const field of ['reservoirNominalVolume', 'waterBodyIdentifier']) {
       const distinct = [...new Set(rows.map(row => row[field]).filter(value => !missing(value)))]
       if (distinct.length === 1) {
         const value = field === 'reservoirNominalVolume' ? Number(clean(distinct[0]).replace(',', '.')) : clean(distinct[0])
-        if (field === 'reservoirNominalVolume' ? (Number.isFinite(value) && value >= 0) : booleanValue(value) === undefined) point.data[field] = value
+        if (field === 'reservoirNominalVolume' ? (Number.isFinite(value) && value >= 0) : booleanValue(value) === undefined) {
+          point.data[field] = value
+          incomingData[field] = value
+        }
         else issue('POINT_FIELD_INVALID', rowsSource, {field})
-      } else if (distinct.length > 1) issue('POINT_FIELD_CONFLICT', rowsSource, {field})
+      } else if (distinct.length > 1) {
+        conflictedFields.push(field)
+        issue('POINT_FIELD_CONFLICT', rowsSource, {field})
+      }
     }
     points.set(key, point)
     pointsByName.set(name, point)
+    pointAttributeSources.set(key, [...(pointAttributeSources.get(key) ?? []), {data: incomingData, source: rowsSource, conflictedFields}])
+    if (match) match.pointId = point.id
   }
 
-  reconciliation.push(...proposePointMatches({points: [...points.values()], pointRows: realPointRows, lieux: [...lieux.values()], assignments, snapshot}))
+  for (const [key, sources] of pointAttributeSources) {
+    if (sources.length < 2) continue
+    const point = points.get(key)
+    for (const field of new Set(sources.flatMap(source => [...Object.keys(source.data), ...source.conflictedFields]))) {
+      const values = [...new Map(sources.filter(source => Object.hasOwn(source.data, field)).map(source => [digest(source.data[field]), source.data[field]])).values()]
+      if (values.length === 1 && !sources.some(source => source.conflictedFields.includes(field))) point.data[field] = values[0]
+      else {
+        delete point.data[field]
+        issue('POINT_ALIAS_FIELD_CONFLICT', {names: point.names, sources: sources.map(source => source.source)}, {field})
+      }
+    }
+  }
 
   const candidates = []
   for (const {row, values: v} of epidropt.Préleveurs) {
@@ -337,8 +379,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   const storedBySiret = group(storedDeclarants.filter(owner => owner.siret), owner => owner.siret)
   const storedOwnerIds = new Set(storedDeclarants.filter(owner => !owner.deletedAt).map(owner => owner.userId))
   const resolvedRows = []
-
-  const exploitationRowsByName = new Map()
+  const readyExploitationRows = []
   for (const {row, values: v, countingCode: rowCountingCode} of epidropt.Exploitations) {
     if (!clean(v[1])) continue
     const source = {sheet: 'Exploitations', row}
@@ -349,7 +390,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     const override = overrides.exploitations?.[digest(v)] ?? {}
     let ownerKey = override.declarantKey ?? (owners.size === 1 ? [...owners][0] : null)
     if (!ownerKey) {
-      const contractNames = new Set((byName.get(clean(v[1])) ?? []).map(a => normalized(contracts.get(a.contractId)?.name)).filter(Boolean))
+      const contractNames = new Set(assignmentsForName(clean(v[1])).map(a => normalized(contracts.get(a.contractId)?.name)).filter(Boolean))
       const options = [...declarants.values()].filter(owner => contractNames.has(owner.fullName) && (!owners.size || owners.has(owner.key)))
       const candidate = options.length === 1 ? options[0] : null
       const sameSiret = candidate?.data.siret ? (storedBySiret.get(candidate.data.siret) ?? []) : []
@@ -376,37 +417,94 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
       continue
     }
 
-    const countingCode = nullable(override.countingCode ?? rowCountingCode)
-    const key = `exploitation:${point.key}:${owner.key}${countingCode ? `:counting:${countingCode}` : ''}`
-    const previous = exploitations.get(key)
-    if (previous && previous.usageCode !== usageCode) {
-      previous.blocked = true
-      issue('EXPLOITATION_USAGE_CONFLICT', source)
-      continue
-    }
-
-    const exploitation = previous ?? {key, id: override.id ?? stableId(key), sourceId: `dropt-epidropt:exploitation:${digest(key).slice(0, 32)}`, pointId: point.id, declarantId: owner.id, countingCode, usageCode, aliases: [], source: []}
-    exploitation.aliases = [...new Set([...exploitation.aliases, clean(v[1])])].sort()
-    exploitation.source.push(source)
-    exploitations.set(key, exploitation)
-    const groupForName = exploitationRowsByName.get(clean(v[1])) ?? new Set()
-    groupForName.add(key)
-    exploitationRowsByName.set(clean(v[1]), groupForName)
+    readyExploitationRows.push({point, owner, usageCode, source, override, pointName: clean(v[1]), countingCode: nullable(override.countingCode ?? rowCountingCode)})
   }
 
-  for (const exploitation of exploitations.values()) {
-    if (exploitation.countingCode) continue
-    const point = [...points.values()].find(point => point.id === exploitation.pointId)
-    const rows = resolvedRows.filter(row => row.pointId === exploitation.pointId)
-    const owners = new Set(rows.map(row => row.ownerId))
-    if (point.countingCodes.length === 1 && owners.size === 1 && owners.has(exploitation.declarantId)) {
-      exploitation.countingCode = point.countingCodes[0]
-      reconciliation.push({kind: 'COUNTING_CODE', exploitationId: exploitation.id, countingCode: exploitation.countingCode,
-        status: 'ACCEPTED', method: 'UNIQUE_CODE_UNIQUE_SOURCE_OWNER', sources: rows.map(row => row.source)})
-    } else if (point.countingCodes.length) {
-      reconciliation.push({kind: 'COUNTING_CODE', exploitationId: exploitation.id, candidates: point.countingCodes,
-        status: 'REVIEW', reason: point.countingCodes.length > 1 ? 'MULTIPLE_CODES' : 'MULTIPLE_OR_UNRESOLVED_OWNERS'})
+  for (const input of readyExploitationRows) {
+    const {point, owner, usageCode, source, override, pointName} = input
+    // Resolve each original alias before physical points are merged. Two aliases
+    // of one Rives place can legitimately carry different counting codes.
+    const sourceRows = realPointRows.filter(row => clean(row.values[1]) === pointName)
+    const sourceCodes = [...new Set(sourceRows.map(row => nullable(row.countingCode)).filter(Boolean))].sort()
+    const owners = new Set(resolvedRows.filter(row => row.pointName === pointName).map(row => row.ownerId))
+    const serialCodes = new Map()
+    for (const row of sourceRows) {
+      if (!nullable(row.countingCode)) continue
+      for (const serial of clean(row.values[24]).split(';').map(clean).filter(Boolean)) {
+        serialCodes.set(serial, new Set([...(serialCodes.get(serial) ?? []), row.countingCode]))
+      }
     }
+    const distinctSerialEvidence = sourceCodes.length > 1 && sourceCodes.every(code => [...serialCodes.values()].some(codes => codes.has(code)))
+      && [...serialCodes.values()].every(codes => codes.size === 1)
+    const infer = !input.countingCode && owners.size === 1 && owners.has(owner.id)
+      && (sourceCodes.length === 1 || distinctSerialEvidence)
+    const countingCodes = input.countingCode ? [input.countingCode] : infer ? sourceCodes : [null]
+    for (const countingCode of countingCodes) {
+      const key = `exploitation:${point.key}:${owner.key}${countingCode ? `:counting:${countingCode}` : ''}`
+      const previous = exploitations.get(key)
+      if (previous && previous.usageCode !== usageCode) {
+        previous.blocked = true
+        issue('EXPLOITATION_USAGE_CONFLICT', source)
+        continue
+      }
+      if (override.id && countingCodes.length > 1) {
+        issue('EXPLOITATION_LEGACY_CODE_AMBIGUOUS', source)
+        continue
+      }
+      const exploitation = previous ?? {key, id: override.id ?? stableId(key), sourceId: `dropt-epidropt:exploitation:${digest(key).slice(0, 32)}`, pointId: point.id, declarantId: owner.id, countingCode, usageCode, aliases: [], source: []}
+      exploitation.aliases = [...new Set([...exploitation.aliases, pointName])].sort()
+      if (!exploitation.source.some(item => item.row === source.row)) exploitation.source.push(source)
+      exploitations.set(key, exploitation)
+      if (infer) reconciliation.push({kind: 'COUNTING_CODE', exploitationId: exploitation.id, countingCode,
+        status: 'ACCEPTED', method: distinctSerialEvidence ? 'SOURCE_ALIAS_DISTINCT_CODE_SERIALS' : 'UNIQUE_CODE_UNIQUE_SOURCE_OWNER',
+        names: [pointName], sources: sourceRows.filter(row => row.countingCode === countingCode).map(row => ({sheet: 'Points prélèvement', row: row.row}))})
+      else if (!countingCode && sourceCodes.length) reconciliation.push({kind: 'COUNTING_CODE', exploitationId: exploitation.id, candidates: sourceCodes,
+        status: 'REVIEW', reason: sourceCodes.length > 1 ? 'MULTIPLE_CODES' : 'MULTIPLE_OR_UNRESOLVED_OWNERS', names: [pointName]})
+    }
+  }
+
+  for (const exploitation of [...exploitations.values()].filter(item => !item.blocked && !item.countingCode)) {
+    const siblings = [...exploitations.values()].filter(item => !item.blocked && item.countingCode
+      && item.pointId === exploitation.pointId && item.declarantId === exploitation.declarantId)
+    if (!siblings.length) continue
+    const hasUnresolvedSourceCode = realPointRows.some(row => exploitation.aliases.includes(clean(row.values[1])) && nullable(row.countingCode))
+    if (siblings.length === 1 && !hasUnresolvedSourceCode && siblings[0].usageCode === exploitation.usageCode) {
+      const target = siblings[0]
+      target.aliases = [...new Set([...target.aliases, ...exploitation.aliases])].sort()
+      target.source = [...new Map([...target.source, ...exploitation.source].map(source => [`${source.sheet}:${source.row}`, source])).values()]
+      exploitations.delete(exploitation.key)
+      reconciliation.push({kind: 'COUNTING_CODE', exploitationId: target.id, countingCode: target.countingCode,
+        status: 'ACCEPTED', method: 'UNCODED_ALIAS_UNIQUE_CODE_SAME_POINT_OWNER', names: exploitation.aliases, sources: exploitation.source})
+    } else {
+      exploitation.blocked = true
+      issue('EXPLOITATION_UNCODED_ALIAS_AMBIGUOUS', {names: exploitation.aliases, sources: exploitation.source},
+        {candidates: siblings.map(item => item.countingCode)})
+    }
+  }
+
+  const assignmentDestinations = (assignment, ownerId) => {
+    const point = [...points.values()].find(point => point.references.some(ref => ref.provider === 'rives-et-eaux' && ref.externalId === assignment.lieuId))
+    let destinations = [...exploitations.values()].filter(exploitation => !exploitation.blocked && exploitation.pointId === point?.id
+      && (!ownerId || exploitation.declarantId === ownerId))
+    // A historical/renamed alias at the same physical place must not override
+    // the beneficiary explicitly named by the current Rives assignment.
+    const exact = point?.names.filter(name => name === assignment.pointName) ?? []
+    const named = exact.length ? exact : point?.names.filter(name => {
+      const match = pointMatches.get(name)
+      return match?.status === 'ACCEPTED' && ['EXACT_NAME', 'CACG_SOURCE_VARIANT', 'CACG_BOTH_VARIANTS'].includes(match.method)
+        && match.matchedNames.includes(assignment.pointName)
+    }) ?? []
+    if (named.length) destinations = destinations.filter(exploitation => exploitation.aliases.some(name => named.includes(name)))
+    if (destinations.length <= 1) return destinations
+    const sourceAliases = new Set(destinations.flatMap(exploitation => exploitation.aliases))
+    const matchingRows = realPointRows.filter(row => sourceAliases.has(clean(row.values[1]))
+      && clean(row.values[24]).split(';').map(clean).includes(assignment.serial))
+    const matchingCodes = new Set(matchingRows.map(row => nullable(row.countingCode)).filter(Boolean))
+    if (matchingCodes.size) destinations = destinations.filter(exploitation => matchingCodes.has(exploitation.countingCode))
+    if (destinations.length <= 1) return destinations
+    const aliases = matchingRows.length ? matchingRows.map(row => clean(row.values[1])) : point?.names.filter(name => assignmentsForName(name).some(row => row.contractId === assignment.contractId && row.serial === assignment.serial)) ?? []
+    if (aliases.length) destinations = destinations.filter(exploitation => exploitation.aliases.some(name => aliases.includes(name)))
+    return destinations
   }
 
   const clients = new Map()
@@ -414,12 +512,18 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   const declarantsById = new Map([...declarants.values()].map(person => [person.id, person]))
   for (const assignment of assignments) {
     const contract = contracts.get(assignment.contractId)
-    const destinations = [...(exploitationRowsByName.get(assignment.pointName) ?? [])].map(key => exploitations.get(key)).filter(e => !e.blocked)
-    if (contract?.clientId && destinations.length === 1) {
-      const owner = declarantsById.get(destinations[0].declarantId)
+    const destinations = assignmentDestinations(assignment)
+    const destinationOwners = [...new Set(destinations.map(exploitation => exploitation.declarantId))]
+    if (contract?.clientId && destinationOwners.length === 1) {
+      const owner = declarantsById.get(destinationOwners[0])
       const owners = clients.get(contract.clientId) ?? new Set()
       if (owner.fullName === normalized(contract.name)) owners.add(owner.id)
-      else clientIdentityConflicts.add(contract.clientId)
+      else {
+        clientIdentityConflicts.add(contract.clientId)
+        reconciliation.push({kind: 'ALLOCATION', source: {sheet: 'Affectation', row: assignment.row},
+          contractId: assignment.contractId, lieuId: assignment.lieuId, serial: assignment.serial,
+          status: 'REVIEW', reason: 'SOURCE_BENEFICIARY_DIFFERS_FROM_RIVES'})
+      }
       clients.set(contract.clientId, owners)
     }
   }
@@ -430,7 +534,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
       const owner = declarants.get(override.declarantKey)
       clients.set(clientId, new Set(owner ? [owner.id] : []))
       if (!owner) issue('RIVES_CLIENT_OVERRIDE_UNRESOLVED', {clientId})
-    } else if (clientIdentityConflicts.has(clientId)) {
+    } else if (clientIdentityConflicts.has(clientId) && !clients.get(clientId)?.size) {
       clients.set(clientId, new Set())
       issue('RIVES_CLIENT_IDENTITY_UNRESOLVED', {clientId})
     }
@@ -452,7 +556,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
       const ownerIds = clients.get(contract?.clientId) ?? new Set()
       const point = [...points.values()].find(p => p.key === `rives:lieu:${assignment.lieuId}` || p.references.some(ref => ref.provider === 'rives-et-eaux' && ref.externalId === assignment.lieuId))
       const ownerId = ownerIds.size === 1 ? [...ownerIds][0] : null
-      const destinations = [...exploitations.values()].filter(e => !e.blocked && e.pointId === point?.id && e.declarantId === ownerId)
+      const destinations = ownerId ? assignmentDestinations(assignment, ownerId) : []
       const inScope = Boolean(point)
       const key = `dropt-rives:allocation:${digest([serial, assignment.contractId, assignment.lieuId]).slice(0, 32)}`
       snapshot.push({key, contractId: assignment.contractId, lieuId: assignment.lieuId, percentage: assignment.percentage, inScope})

@@ -43,6 +43,47 @@ test('archive preparation rejects changed frozen input and unsafe filenames', as
   await t.throwsAsync(prepareMeterArchiveReplay(input), {message: 'ARCHIVE_WINDOW_OUTSIDE_2026'})
 })
 
+test('explicit rebuild selection covers all validated streams without reusing pre-rebuild receipts', async t => {
+  const input = fixture()
+  const previous = await prepareMeterArchiveReplay(input)
+  const rebuilt = await prepareMeterArchiveReplay({...input, selection: 'all-validated'})
+  t.is(rebuilt.summary.streams, 2)
+  t.is(rebuilt.summary.readings, 3)
+  t.is(rebuilt.selection, 'all-validated')
+  t.not(rebuilt.batches[0].batch.batchId, previous.batches[0].batch.batchId)
+  t.deepEqual(rebuilt, await prepareMeterArchiveReplay({...input, selection: 'all-validated'}))
+  const changed = {...input.manifest, change: 'new-reconciliation'}
+  delete changed.manifestHash
+  changed.manifestHash = digest(changed)
+  const next = await prepareMeterArchiveReplay({...input, manifest: changed, selection: 'all-validated'})
+  t.not(next.batches[0].batch.batchId, rebuilt.batches[0].batch.batchId)
+  await t.throwsAsync(prepareMeterArchiveReplay({...input, selection: 'arbitrary'}), {message: 'INVALID_ARCHIVE_STREAM_SELECTION'})
+})
+
+test('rebuild selection excludes unvalidated meters and refuses a missing stored identity', async t => {
+  const input = fixture()
+  input.manifest.meters[1].allocationSnapshotValidated = false
+  delete input.manifest.manifestHash
+  input.manifest.manifestHash = digest(input.manifest)
+  const rebuilt = await prepareMeterArchiveReplay({...input, selection: 'all-validated'})
+  t.is(rebuilt.summary.streams, 1)
+  t.true(rebuilt.batches[0].batch.readings.every(reading => reading.externalId === 'NEW'))
+  input.snapshot.tables.streams = []
+  await t.throwsAsync(prepareMeterArchiveReplay({...input, selection: 'all-validated'}), {message: 'NEW_VALIDATED_STREAM_IDENTITIES_REQUIRED'})
+})
+
+test('rebuild selection respects the ingestion limit of 200 streams', async t => {
+  const input = fixture()
+  const streams = Array.from({length: 201}, (_, index) => ({...input.snapshot.tables.streams[0],
+    id: randomUUID(), compteurId: randomUUID(), externalId: `METER-${index}`}))
+  input.snapshot.tables.streams = streams
+  input.manifest.meters = streams.map(stream => ({id: stream.compteurId, serial: stream.externalId,
+    provider: stream.provider, allocationSnapshotValidated: true}))
+  delete input.manifest.manifestHash
+  input.manifest.manifestHash = digest(input.manifest)
+  await t.throwsAsync(prepareMeterArchiveReplay({...input, selection: 'all-validated'}), {message: 'NEW_VALIDATED_STREAM_IDENTITIES_REQUIRED'})
+})
+
 test('replay persists receipts, skips acknowledged batches and rejects incomplete acknowledgements', async t => {
   const plan = await prepareMeterArchiveReplay(fixture())
   const receipts = new Map()

@@ -30,8 +30,21 @@ Pour testing, utiliser `--target testing --target-env .env.testing --tunnel-port
 
 L’import utilise une transaction unique, limitée à 15 minutes par défaut pour couvrir les allers-retours du tunnel. `--transaction-timeout-seconds 900` permet de modifier cette limite (entier de 1 à 1800 secondes). Un dépassement annule toute la transaction, sans import partiel ; le rollback de simulation reste inchangé.
 
+## Reconstruction exceptionnelle sur testing
+
+Préparer un manifeste distinct avec `prepare --rebuild-identities --previous-manifest ancien-manifeste.json --snapshot export-testing.json --manifest nouveau-manifeste.json` et le classeur sélectionné. Cela renouvelle les identités PP/exploitations à regrouper, tout en conservant les ancres des préleveurs et compteurs.
+
+`rebuild --target testing` est une simulation par défaut. Cette opération remplace les PP et exploitations de l’import identifié, jamais un périmètre choisi par sa seule géographie. Elle conserve les comptes, préleveurs, compteurs, flux et index bruts ; seules leurs publications calculées et affectations sont reconstruites. Toute donnée manuelle, document, règle ou dépendance extérieure bloque l’opération.
+
+Avant `--apply`, suspendre les ingestions concernées et disposer d’une sauvegarde privée dont la restauration a été vérifiée. Fournir `--against-report simulation.json --backup-evidence preuve.json` avec le même manifeste, `--activate-at DATE_ISO` historiquement validée et le compte de service. La preuve JSON contient `target: "testing"`, `completed: true`, `restored: true`, `backupSha256`, `restoredAt` et le `scopeStateHash` mesuré sur la restauration via `inspectRebuildScope`. Ce dernier doit correspondre exactement à la simulation et à l’état courant : toute dérive arrête l’opération. Les anciens/nouveaux identifiants figurent dans le rapport privé.
+
+Après application, lancer `recompute-rebuild --target testing --against-report application.json --report recalcul.json --apply` avec le même manifeste et les options de connexion habituelles. Le recalcul est explicite et transactionnel par compteur, sans écraser les données ordinaires. `--resume recalcul.json` reprend les compteurs non terminés ; un compteur commis juste avant une interruption peut être rejoué sans doublon. Vérifier les motifs de blocage et les volumes avant de reprendre les ingestions. Les rapports sont écrits atomiquement et restent privés. Aucune commande de reconstruction ne cible demo ou prod.
+
+Pour compléter l’historique depuis des archives vérifiées, `prepare-meter-archive-replay.js --selection all-validated` prépare tous les flux validés du nouveau manifeste, y compris ceux déjà actifs. Les identifiants de lots intègrent le manifeste reconstruit ; le rejeu reste reprenable sans réutiliser les acquittements d’avant reconstruction. Sans cette option, la sélection reste limitée aux nouveaux flux validés.
+
 ## Règles
 
+- Seuls les noms source contenant `CACG` sont rapprochés de Rives (réalimentés). Les autres restent non réalimentés. Après le nom exact, les variantes département/zéros conservent le suffixe complet et exigent une preuve par compteur ou coordonnées ; les références contradictoires restent à vérifier. Un lieu présent chez Rives ne prouve pas, à lui seul, la disponibilité d’une télérelève.
 - Identités stables par référence métier, jamais par numéro de ligne ou adresse email. Les doublons ambigus et coordonnées incohérentes sont isolés dans les rapports.
 - Les emails importés sont des contacts, pas des identifiants de connexion. Aucune invitation ni notification n’est envoyée.
 - Le rejeu conserve les changements manuels. Les corrections ambiguës exigent un mapping explicite, sans fusion automatique.

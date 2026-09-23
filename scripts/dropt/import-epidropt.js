@@ -1,26 +1,30 @@
 import {parseArgs, parseEnv} from 'node:util'
-import {readFile, writeFile, mkdir} from 'node:fs/promises'
+import {readFile, writeFile, mkdir, rename} from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import {createHash} from 'node:crypto'
+import {createHash, randomUUID} from 'node:crypto'
 import {readWorkbook, EPIDROPT_SHEETS, RIVES_SHEETS, buildManifest, digest} from './lib/epidropt.js'
 import {getTransactionTimeoutMs} from './lib/import-options.js'
 
 const {positionals, values} = parseArgs({allowPositionals: true, options: {
   input: {type: 'string', default: 'data/dropt/epidropt-2026'}, target: {type: 'string'},
   manifest: {type: 'string'}, overrides: {type: 'string'}, report: {type: 'string'}, 'against-report': {type: 'string'},
+  'backup-evidence': {type: 'string'}, resume: {type: 'string'},
+  'rebuild-identities': {type: 'boolean', default: false},
   'epidropt-file': {type: 'string'}, snapshot: {type: 'string'}, 'previous-manifest': {type: 'string'},
   apply: {type: 'boolean', default: false}, 'activate-at': {type: 'string'}, 'effective-at': {type: 'string'}, 'service-account-id': {type: 'string'},
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
-if (!['prepare', 'apply', 'verify'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify [--input dossier] [--target local|testing] [--apply]')
+if (!['prepare', 'apply', 'verify', 'rebuild', 'recompute-rebuild'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify|rebuild|recompute-rebuild [--input dossier] [--target local|testing] [--apply]')
 const base = path.resolve(values.input)
 const manifestPath = path.resolve(values.manifest ?? path.join(base, 'mapping/manifest.json'))
 
 async function writePrivate(filename, value) {
   await mkdir(path.dirname(filename), {recursive: true, mode: 0o700})
-  await writeFile(filename, `${JSON.stringify(value, null, 2)}\n`, {mode: 0o600})
+  const temporary = `${filename}.${randomUUID()}.partial`
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {mode: 0o600, flag: 'wx'})
+  await rename(temporary, filename)
 }
 
 try {
@@ -37,13 +41,15 @@ try {
     if (snapshot && (!snapshot.readOnly || !snapshot.completed || !snapshot.tables || snapshot.target !== 'testing')) throw new Error('Export testing complet et en lecture seule requis.')
     if (previousManifest) inputs.previousManifestHash = previousManifest.manifestHash
     if (snapshot) inputs.snapshot = {startedAt: snapshot.startedAt, sha256: createHash('sha256').update(await readFile(values.snapshot)).digest('hex')}
-    const manifest = buildManifest({epidropt: await readWorkbook(files.epidropt, EPIDROPT_SHEETS), rives: await readWorkbook(files.rives, RIVES_SHEETS), overrides, inputs, previousManifest, snapshot})
+    const manifest = buildManifest({epidropt: await readWorkbook(files.epidropt, EPIDROPT_SHEETS), rives: await readWorkbook(files.rives, RIVES_SHEETS),
+      overrides, inputs, previousManifest, snapshot, resetExistingPointAndExploitationIdentities: values['rebuild-identities']})
     // Keep every reviewed mapping even when refreshing the convenient latest file.
     await writePrivate(path.join(base, `mapping/manifests/${manifest.manifestHash}.json`), manifest)
     await writePrivate(manifestPath, manifest)
     console.log(JSON.stringify({manifestHash: manifest.manifestHash, counts: Object.fromEntries(['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].map(key => [key, manifest[key].length]))}))
   } else {
     if (!['local', 'testing'].includes(values.target)) throw new Error('Cible explicite local ou testing obligatoire ; production interdite.')
+    if (['rebuild', 'recompute-rebuild'].includes(operation) && values.target !== 'testing') throw new Error('La reconstruction en ligne est réservée à testing.')
     if (values['target-env']) {
       const configuration = parseEnv(await readFile(values['target-env'], 'utf8'))
       if (!configuration.DATABASE_URL) throw new Error('DATABASE_URL absente du fichier cible.')
@@ -82,12 +88,25 @@ try {
       if (digest(payload) !== manifestHash) throw new Error('Manifeste modifié ; relancer prepare.')
       const {applyManifest, verifyManifest} = await import('./lib/apply-epidropt.js')
       const report = values['against-report'] ? JSON.parse(await readFile(values['against-report'], 'utf8')) : undefined
-      const result = operation === 'verify' ? await verifyManifest(prisma, manifest, {report}) : await applyManifest(prisma, manifest, {
+      const stamp = new Date().toISOString().replaceAll(':', '-')
+      const reportPath = path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`))
+      const options = {
         apply: values.apply, activateAt: values['activate-at'], effectiveAt: values['effective-at'], serviceAccountId: values['service-account-id'],
         transactionTimeoutSeconds: values['transaction-timeout-seconds'], expectedReport: report
-      })
-      const stamp = new Date().toISOString().replaceAll(':', '-')
-      await writePrivate(path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`)), result)
+      }
+      let result
+      if (operation === 'verify') result = await verifyManifest(prisma, manifest, {report})
+      else if (operation === 'rebuild') {
+        const {rebuildManifest} = await import('./lib/rebuild-epidropt.js')
+        const backupEvidence = values['backup-evidence'] ? JSON.parse(await readFile(values['backup-evidence'], 'utf8')) : undefined
+        result = await rebuildManifest(prisma, manifest, {...options, target: values.target, backupEvidence})
+      } else if (operation === 'recompute-rebuild') {
+        const {recomputeRebuiltManifest} = await import('./lib/rebuild-epidropt.js')
+        const resume = values.resume ? JSON.parse(await readFile(values.resume, 'utf8')) : undefined
+        result = await recomputeRebuiltManifest(prisma, manifest, {...options, target: values.target, report, resume,
+          onProgress: progress => writePrivate(reportPath, progress)})
+      } else result = await applyManifest(prisma, manifest, options)
+      await writePrivate(reportPath, result)
       console.log(JSON.stringify({manifestHash: result.manifestHash, applied: result.applied ?? false, counts: result.counts, issues: result.issues?.length, complete: result.complete}))
       if (result.complete === false) process.exitCode = 1
     } finally {

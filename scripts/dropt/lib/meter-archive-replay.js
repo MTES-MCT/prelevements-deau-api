@@ -5,7 +5,8 @@ const sha256 = value => createHash('sha256').update(value).digest('hex')
 const assert = (condition, message) => { if (!condition) throw new Error(message) }
 const sorted = values => [...values].sort()
 
-export async function prepareMeterArchiveReplay({manifest, snapshot, archiveManifest, readArchiveFile}) {
+export async function prepareMeterArchiveReplay({manifest, snapshot, archiveManifest, readArchiveFile, selection = 'newly-validated'}) {
+  assert(['newly-validated', 'all-validated'].includes(selection), 'INVALID_ARCHIVE_STREAM_SELECTION')
   const {manifestHash, ...manifestPayload} = manifest
   assert(manifestHash === digest(manifestPayload), 'IMPORT_MANIFEST_HASH_MISMATCH')
   assert(snapshot.target === 'testing' && snapshot.readOnly && snapshot.completed, 'COMPLETE_TESTING_SNAPSHOT_REQUIRED')
@@ -13,8 +14,9 @@ export async function prepareMeterArchiveReplay({manifest, snapshot, archiveMani
   const prior = snapshot.tables.streams.filter(stream => stream.provider === 'rives-et-eaux' && stream.scope === manifest.scope)
   const selected = manifest.meters.filter(meter => meter.provider === 'rives-et-eaux' && meter.allocationSnapshotValidated)
     .map(meter => ({meter, stream: prior.find(stream => stream.externalId === meter.serial)}))
-    .filter(({stream}) => !stream?.enabled)
-  assert(selected.length > 0 && selected.length <= 200 && selected.every(({meter, stream}) => stream && stream.compteurId === meter.id), 'NEW_VALIDATED_STREAM_IDENTITIES_REQUIRED')
+    .filter(({stream}) => selection === 'all-validated' || !stream?.enabled)
+  assert(selected.length > 0 && selected.length <= 200
+    && selected.every(({meter, stream}) => stream && stream.compteurId === meter.id), 'NEW_VALIDATED_STREAM_IDENTITIES_REQUIRED')
   const selectedStreams = selected.map(({stream}) => ({id: stream.id, compteurId: stream.compteurId, externalId: stream.externalId})).sort((a, b) => a.id.localeCompare(b.id))
   const streamIds = selectedStreams.map(stream => stream.id)
   const externalIds = new Set(selectedStreams.map(stream => stream.externalId))
@@ -42,11 +44,13 @@ export async function prepareMeterArchiveReplay({manifest, snapshot, archiveMani
       if (reading.observedAt) observationKeys.add(`${reading.externalId}:${reading.observedAt}`)
     }
     const batch = {...original, streamIds, readings,
-      batchId: `archive-replay:v1:${digest({archiveHash: entry.sha256, streamIds})}`}
+      batchId: selection === 'all-validated'
+        ? `archive-rebuild:v1:${digest({archiveHash: entry.sha256, streamIds, manifestHash})}`
+        : `archive-replay:v1:${digest({archiveHash: entry.sha256, streamIds})}`}
     batches.push({filename: entry.filename, sha256: digest(batch), batch})
   }
   const plan = {format: 1, target: 'testing', provider: 'rives-et-eaux', scope: manifest.scope,
-    manifestHash, snapshotStartedAt: snapshot.startedAt, archiveManifestHash: digest(archiveManifest), selectedStreams, batches,
+    manifestHash, ...(selection === 'all-validated' ? {selection} : {}), snapshotStartedAt: snapshot.startedAt, archiveManifestHash: digest(archiveManifest), selectedStreams, batches,
     summary: {streams: selectedStreams.length, archivedWindows: windows, batches: batches.length,
       readings: batches.reduce((sum, item) => sum + item.batch.readings.length, 0), invalidReadings, uniqueObservations: observationKeys.size}}
   return {...plan, planHash: digest(plan)}
