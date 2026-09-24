@@ -27,6 +27,7 @@ model SandreWaterUse {
   exploitations              DeclarantPointPrelevement[]
   secondaryExploitationLinks DeclarantPointPrelevementSecondaryUsage[]
   chunks                     Chunk[]
+  meterAllocationVersions    MeterAllocationVersion[]
 
   @@index([kind])
   @@index([parentId])

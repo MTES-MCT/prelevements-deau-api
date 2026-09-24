@@ -1,4 +1,5 @@
 model Declaration {
+  collectionResponse CollectionResponse?
   id   String @id @default(uuid()) @db.Uuid
   code String @unique @db.VarChar(6)
 

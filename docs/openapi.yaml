@@ -7,6 +7,7 @@ servers:
   - url: http://localhost:5000/api
     description: Local
 tags:
+  - name: Campagnes
   - name: Administration
   - name: Compte
   - name: Auth
@@ -20,6 +21,369 @@ tags:
   - name: Stats
   - name: Zones
 paths:
+  /campaigns:
+    get:
+      tags: [Campagnes]
+      operationId: listCollectionCampaigns
+      summary: Lister les campagnes accessibles
+      description: Session humaine. Administrateur, collecteur désigné ou préleveur ciblé. Pagination page et pageSize, limitée à 200.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Campagnes]
+      operationId: createCollectionCampaign
+      summary: Créer une campagne en brouillon
+      description: Administrateur hors impersonation. Les exploitations sélectionnées doivent déjà être accessibles au collecteur.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionCampaignInput'}
+      responses:
+        '201':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/summary:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionCampaignSummary
+      summary: Résumer les campagnes pour la navigation
+      description: Résumé limité aux campagnes accessibles à la session humaine.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/candidates:
+    get:
+      tags: [Campagnes]
+      operationId: listCollectionCampaignCandidates
+      summary: Sélectionner les exploitations ciblées
+      description: Administrateur. Filtres q, collecteurUserId, usageId, page et pageSize. selectAll=true retourne selectedIds, dans la limite de 5000.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionCampaign
+      summary: Consulter une campagne
+      description: Retourne campaign, progress et permissions. Les exploitationIds sont réservés aux administrateurs.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Campagnes]
+      operationId: updateCollectionCampaign
+      summary: Modifier une campagne
+      description: Administrateur hors impersonation. Type immuable, population et collecteur figés après lancement, campagne archivée en lecture seule.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionCampaignPatch'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Campagnes]
+      operationId: deleteCollectionCampaign
+      summary: Supprimer un brouillon inutilisé
+      description: Administrateur hors impersonation. Suppression refusée dès qu’une réponse a commencé ou que la campagne a été lancée.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/open:
+    post:
+      tags: [Campagnes]
+      operationId: openCollectionCampaign
+      summary: Ouvrir ou rouvrir une campagne
+      description: Administrateur hors impersonation. Dates obligatoires, fermeture au plus tôt le 31 octobre 2026.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/close:
+    post:
+      tags: [Campagnes]
+      operationId: closeCollectionCampaign
+      summary: Fermer immédiatement la saisie
+      description: Administrateur hors impersonation. Les déclarations et réponses soumises restent consultables.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/archive:
+    post:
+      tags: [Campagnes]
+      operationId: archiveCollectionCampaign
+      summary: Archiver une campagne
+      description: Administrateur hors impersonation. Ne supprime ni réponses, ni déclarations, ni volumes.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses:
+    get:
+      tags: [Campagnes]
+      operationId: listCollectionResponses
+      summary: Suivre les réponses accessibles
+      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le collecteur ne reçoit que submittedData.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/results:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionResults
+      summary: Consulter les résultats soumis
+      description: Administrateur ou collecteur désigné disposant des délégations. Les volumes demandés ne sont pas des consommations.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/export:
+    get:
+      tags: [Campagnes]
+      operationId: exportCollectionResults
+      summary: Exporter les résultats soumis
+      description: CSV complet indépendamment de la page affichée. Administrateur ou collecteur désigné. Cellules protégées contre les formules.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Résultats exportés
+          content:
+            text/csv:
+              schema: {type: string}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/{responseId}:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionResponse
+      summary: Consulter le contexte du formulaire
+      description: Retourne campagne, réponse, exploitation, compteurs documentaires, sous-usages et permissions. Aucun accès aux index physiques globaux.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: responseId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      tags: [Campagnes]
+      operationId: saveCollectionResponseDraft
+      summary: Enregistrer le brouillon
+      description: Préleveur propriétaire hors impersonation et campagne ouverte. Conflit 409 si revision obsolète. Aucun effet sur les déclarations publiées.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: responseId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionResponseWrite'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/{responseId}/submit:
+    post:
+      tags: [Campagnes]
+      operationId: submitCollectionResponse
+      summary: Soumettre ou corriger une réponse
+      description: Préleveur propriétaire hors impersonation. Tous les champs sont requis sauf commentaire. Envoi à partir du 31 octobre 2026. Déclaration stable et publication atomique ou en attente de validation.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: responseId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionResponseWrite'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/meters/{compteurId}/review:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionMeterReview
+      summary: Préparer la validation d’un compteur
+      description: Administrateur uniquement. Retourne bénéficiaires, périodes, contradictions et expectedHash pour la validation.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: compteurId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/meters/{compteurId}/approve:
+    post:
+      tags: [Campagnes]
+      operationId: approveCollectionMeter
+      summary: Valider la publication des volumes
+      description: Administrateur hors impersonation. Répartition historique explicitement confirmée, 100 % par saison et aucun écrasement de flux fournisseur.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: compteurId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionMeterApproval'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
   /healthz:
     get:
       operationId: getHealth
@@ -2769,6 +3133,111 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    CollectionCampaignInput:
+      type: object
+      additionalProperties: false
+      required: [name, collecteurUserId, exploitationIds]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        type: {type: string, const: DROPT_INDEX_NEEDS_2026_2027}
+        opensOn: {type: [string, 'null'], format: date}
+        closesOn: {type: [string, 'null'], format: date}
+        collecteurUserId: {$ref: '#/components/schemas/Uuid'}
+        exploitationIds:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Uuid'}
+        sourceId: {type: string, maxLength: 250}
+    CollectionCampaignPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        type: {type: string, const: DROPT_INDEX_NEEDS_2026_2027}
+        opensOn: {type: [string, 'null'], format: date}
+        closesOn: {type: [string, 'null'], format: date}
+        collecteurUserId: {$ref: '#/components/schemas/Uuid'}
+        exploitationIds:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Uuid'}
+    CollectionPeriod:
+      type: object
+      additionalProperties: false
+      description: Champs agricoles et mesures. Tous sont obligatoires à la soumission selon la section, mais peuvent manquer dans un brouillon. Les nombres positifs ou nuls acceptent quatre décimales.
+      properties:
+        usageId: {$ref: '#/components/schemas/Uuid'}
+        surface: {type: [string, number, 'null']}
+        crops: {type: [string, 'null'], maxLength: 3000}
+        indexStart: {type: [string, number, 'null']}
+        indexEnd: {type: [string, number, 'null']}
+        flow: {type: [string, number, 'null']}
+        volume: {type: [string, number, 'null']}
+    CollectionForm:
+      type: object
+      additionalProperties: false
+      properties:
+        meters:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              compteurId: {type: [string, 'null'], format: uuid}
+              serialNumber: {type: [string, 'null'], maxLength: 100}
+              offSeason: {$ref: '#/components/schemas/CollectionPeriod'}
+              season: {$ref: '#/components/schemas/CollectionPeriod'}
+        needs:
+          type: object
+          additionalProperties: false
+          properties:
+            offSeason: {$ref: '#/components/schemas/CollectionPeriod'}
+            season: {$ref: '#/components/schemas/CollectionPeriod'}
+        comment: {type: string, maxLength: 20000}
+    CollectionResponseWrite:
+      type: object
+      additionalProperties: false
+      required: [revision, data]
+      properties:
+        revision: {type: integer, minimum: 0}
+        data: {$ref: '#/components/schemas/CollectionForm'}
+    CollectionMeterApproval:
+      type: object
+      required: [expectedHash, confirmHistorical, allocations]
+      properties:
+        expectedHash: {type: string}
+        confirmHistorical: {type: boolean, const: true}
+        canonicalResponseId: {$ref: '#/components/schemas/Uuid'}
+        allocations:
+          type: array
+          items:
+            type: object
+            required: [exploitationId, offSeasonPercentage, seasonPercentage]
+            properties:
+              exploitationId: {$ref: '#/components/schemas/Uuid'}
+              offSeasonPercentage: {type: [number, string]}
+              seasonPercentage: {type: [number, string]}
+              additive: {type: boolean}
+    CollectionEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, const: true}
+        data:
+          type: object
+          additionalProperties: true
+          description: >-
+            Ressource ou liste paginée avec droits explicites. Les brouillons ne sont jamais exposés au collecteur.
+            Les dates sont ISO et les états de réponse et de publication sont distincts.
+            Chaque réponse expose volumes (offSeason, season, total, publicationStatus, partial).
+            Les nombres sont des m³ effectivement publiés ; null signifie absence de volume publié et ne vaut pas zéro.
+            Les résultats exposent totals.publishedVolumes et les volumes demandés séparément.
     MeterAllocationSettings:
       type: object
       required: [meter, stream, expectedVersion, minEffectiveDate, allocations]

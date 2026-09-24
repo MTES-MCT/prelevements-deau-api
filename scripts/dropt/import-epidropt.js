@@ -13,15 +13,18 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
   'rebuild-identities': {type: 'boolean', default: false},
   'login-scope': {type: 'string'},
   'allow-email-aliases': {type: 'boolean', default: false},
+  'campaign-config': {type: 'string'}, 'actor-user-id': {type: 'string'},
   'epidropt-file': {type: 'string'}, snapshot: {type: 'string'}, 'previous-manifest': {type: 'string'},
   apply: {type: 'boolean', default: false}, 'activate-at': {type: 'string'}, 'effective-at': {type: 'string'}, 'service-account-id': {type: 'string'},
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
-if (!['prepare', 'apply', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify|rebuild|recompute-rebuild|enable-logins [--input dossier] [--target local|testing] [--apply]')
+if (!['prepare', 'apply', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign [--input dossier] [--target local|testing] [--apply]')
 if (operation === 'enable-logins' && !['non-realimente', 'all'].includes(values['login-scope'])) throw new Error('--login-scope non-realimente|all obligatoire.')
 if (values['login-scope'] && operation !== 'enable-logins') throw new Error('--login-scope est réservé à enable-logins.')
 if (values['allow-email-aliases'] && operation !== 'enable-logins') throw new Error('--allow-email-aliases est réservé à enable-logins.')
+if (operation === 'seed-campaign' && !values['campaign-config']) throw new Error('--campaign-config data/.../configuration.json obligatoire pour seed-campaign.')
+if ((values['campaign-config'] || values['actor-user-id']) && operation !== 'seed-campaign') throw new Error('--campaign-config et --actor-user-id sont réservés à seed-campaign.')
 const base = path.resolve(values.input)
 const manifestPath = path.resolve(values.manifest ?? path.join(base, 'mapping/manifest.json'))
 
@@ -104,6 +107,10 @@ try {
       else if (operation === 'enable-logins') {
         const {enableManifestLogins} = await import('./lib/enable-logins.js')
         result = await enableManifestLogins(prisma, manifest, {...options, scope: values['login-scope'], allowEmailAliases: values['allow-email-aliases']})
+      } else if (operation === 'seed-campaign') {
+        const {readCampaignSeedConfig, seedManifestCampaign} = await import('./lib/seed-campaign.js')
+        const config = await readCampaignSeedConfig(values['campaign-config'], {actorUserId: values['actor-user-id']})
+        result = await seedManifestCampaign(prisma, manifest, config, {...options, target: values.target})
       }
       else if (operation === 'rebuild') {
         const {rebuildManifest} = await import('./lib/rebuild-epidropt.js')
@@ -125,6 +132,6 @@ try {
   }
 } catch (error) {
   // No ORM, provider or connection error may disclose credentials or source rows.
-  console.error(error.name === 'PrismaClientKnownRequestError' ? `Import interrompu (${error.code}).` : error.name === 'PrismaClientInitializationError' ? 'Connexion à la base impossible.' : error.message.replace(/postgres(?:ql)?:\/\/\S+/g, '[connexion masquée]'))
+  console.error(error.name === 'PrismaClientKnownRequestError' ? `Import interrompu (${error.code}).` : error.name === 'PrismaClientInitializationError' ? 'Connexion à la base impossible.' : error.name?.startsWith('PrismaClient') ? 'Import interrompu ; vérifier le schéma et les migrations de la cible.' : error.message.replace(/postgres(?:ql)?:\/\/\S+/g, '[connexion masquée]'))
   process.exitCode = 1
 }

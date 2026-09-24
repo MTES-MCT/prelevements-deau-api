@@ -78,6 +78,8 @@ model MeterAllocationVersion {
   endDate DateTime? @db.Timestamptz(3)
   enabled Boolean @default(false)
   additive Boolean @default(false)
+  usageId String? @db.Uuid
+  usage SandreWaterUse? @relation(fields: [usageId], references: [id], onDelete: Restrict)
   metadata Json @default("{}")
   createdAt DateTime @default(now())
   contributions MeterVolumeContribution[]

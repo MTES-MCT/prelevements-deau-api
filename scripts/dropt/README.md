@@ -46,6 +46,20 @@ Sur autorisation explicite, ajouter `--allow-email-aliases` aux **deux** command
 
 Seuls les comptes vierges, actifs, avec un email source unique confirmé dans les contacts importés (ou des alias explicitement autorisés) sont activés. Les emails partagés, déjà attribués/réservés, les identités non confirmées et les sources ambiguës restent bloqués et détaillés dans le rapport. Les comptes déjà configurés et les retraits manuels d’email sont préservés. Les cas bloqués sont exclus, les autres peuvent être appliqués après examen de la simulation. Toute dérive du plan depuis cette simulation ou erreur SQL annule toute l’application. Le rejeu exige une nouvelle simulation et ne réactive pas les comptes modifiés manuellement.
 
+## Préparer la campagne de collecte
+
+Après l’import du référentiel et les migrations de campagne, `seed-campaign` crée le collecteur et ses droits sur **toutes** les exploitations du manifeste, puis une campagne **brouillon sans dates** pour les seules exploitations non réalimentées. Les exploitations sans compteur et les usages non agricoles sont inclus. Aucun compteur, répartition, index, connexion de préleveur ou volume n’est modifié ; aucun email n’est envoyé.
+
+La configuration JSON privée doit être dans `data/`, exclue du suivi Git du sous-dépôt : `name` (facultatif), `createdByUserId` (ou option `--actor-user-id`) et `collecteur: {socialReason, firstName, lastName, email, phoneNumber}`. Les coordonnées réelles ne doivent jamais apparaître dans ce README, les fixtures ou le dépôt public. L’administrateur doit déjà exister et être actif sur la cible. Ne pas lui substituer un compte synthétique. La configuration locale préparée se trouve dans `mapping/campaign-index-needs-2026-2027.json`.
+
+```sh
+npm run import:dropt -- seed-campaign --target local --target-env .env.local --manifest chemin/manifeste-applique.json --campaign-config data/dropt/epidropt-2026/mapping/campaign-index-needs-2026-2027.json --actor-user-id UUID_ADMIN_EXISTANT --report data/dropt/epidropt-2026/reports/simulation-campagne.json
+# Examiner les populations et changements, puis répéter avec les mêmes arguments :
+# --apply --against-report data/dropt/epidropt-2026/reports/simulation-campagne.json
+```
+
+Pour testing, utiliser les options de connexion privée décrites plus haut. Seules les cibles local et testing sont autorisées. La simulation transactionnelle ne conserve rien ; l’application exige les mêmes manifeste, configuration, cible et état. Tout conflit d’identité/email, exploitation absente ou réaffectée, ou dérive depuis la simulation annule l’ensemble. Les identités source du collecteur et de la campagne sont stables. Le rejeu préserve les identifiants de connexion, coordonnées, réponses, nom et dates modifiés manuellement, ainsi que les autres droits du collecteur ; une population modifiée exige une vérification manuelle, jamais un remplacement des réponses. Une fois les dates choisies, le lancement reste une action explicite dans l’administration.
+
 ## Reconstruction exceptionnelle sur testing
 
 Préparer un manifeste distinct avec `prepare --rebuild-identities --previous-manifest ancien-manifeste.json --snapshot export-testing.json --manifest nouveau-manifeste.json` et le classeur sélectionné. Cela renouvelle les identités PP/exploitations à regrouper, tout en conservant les ancres des préleveurs et compteurs.

@@ -137,6 +137,7 @@ model PointPrelevementZone {
 }
 
 model DeclarantPointPrelevement {
+  collectionResponses CollectionResponse[]
   id String @id @default(uuid()) @db.Uuid
 
   declarantUserId String    @db.Uuid
