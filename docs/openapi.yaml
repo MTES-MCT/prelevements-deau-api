@@ -282,7 +282,7 @@ paths:
       tags: [Campagnes]
       operationId: saveCollectionResponseDraft
       summary: Enregistrer le brouillon
-      description: Préleveur propriétaire hors impersonation et campagne ouverte. Conflit 409 si revision obsolète. Aucun effet sur les déclarations publiées.
+      description: Session humaine du préleveur propriétaire et campagne ouverte, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Conflit 409 si revision obsolète. Aucun effet sur les déclarations publiées.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -310,7 +310,7 @@ paths:
       tags: [Campagnes]
       operationId: submitCollectionResponse
       summary: Soumettre ou corriger une réponse
-      description: Préleveur propriétaire hors impersonation. Tous les champs sont requis sauf commentaire. Envoi à partir du 31 octobre 2026. Déclaration stable et publication atomique ou en attente de validation.
+      description: Session humaine du préleveur propriétaire, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Tous les champs sont requis sauf commentaire. Envoi à partir du 31 octobre 2026. Déclaration stable et publication atomique ou en attente de validation.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
