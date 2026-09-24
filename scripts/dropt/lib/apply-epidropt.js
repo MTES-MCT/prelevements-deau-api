@@ -6,7 +6,7 @@ import {assertExploitationMultiplicity, normalizeCountingCode} from '../../../li
 
 const entityFields = {POINT: 'pointPrelevementId', DECLARANT: 'declarantUserId', METER: 'compteurId'}
 
-async function referenceIdentity(client, record, kind) {
+export async function referenceIdentity(client, record, kind) {
   const field = entityFields[kind]
   const references = await client.externalReference.findMany({where: {scope: SCOPE, kind, OR: record.references.map(ref => ({provider: ref.provider, externalId: ref.externalId}))}})
   const model = {POINT: 'pointPrelevement', DECLARANT: 'declarant', METER: 'compteur'}[kind]
@@ -253,7 +253,7 @@ async function putMeter(client, record, allocations, exploitationIds, options) {
   return identity.id
 }
 
-function validateManifest(manifest) {
+export function validateManifest(manifest) {
   if (!manifest || manifest.formatVersion !== FORMAT_VERSION || manifest.scope !== SCOPE
     || !/^[a-f\d]{64}$/.test(manifest.manifestHash ?? '')
     || ['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].some(kind => !Array.isArray(manifest[kind]))) {

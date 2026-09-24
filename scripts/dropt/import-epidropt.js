@@ -11,12 +11,17 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
   manifest: {type: 'string'}, overrides: {type: 'string'}, report: {type: 'string'}, 'against-report': {type: 'string'},
   'backup-evidence': {type: 'string'}, resume: {type: 'string'},
   'rebuild-identities': {type: 'boolean', default: false},
+  'login-scope': {type: 'string'},
+  'allow-email-aliases': {type: 'boolean', default: false},
   'epidropt-file': {type: 'string'}, snapshot: {type: 'string'}, 'previous-manifest': {type: 'string'},
   apply: {type: 'boolean', default: false}, 'activate-at': {type: 'string'}, 'effective-at': {type: 'string'}, 'service-account-id': {type: 'string'},
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
-if (!['prepare', 'apply', 'verify', 'rebuild', 'recompute-rebuild'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify|rebuild|recompute-rebuild [--input dossier] [--target local|testing] [--apply]')
+if (!['prepare', 'apply', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify|rebuild|recompute-rebuild|enable-logins [--input dossier] [--target local|testing] [--apply]')
+if (operation === 'enable-logins' && !['non-realimente', 'all'].includes(values['login-scope'])) throw new Error('--login-scope non-realimente|all obligatoire.')
+if (values['login-scope'] && operation !== 'enable-logins') throw new Error('--login-scope est réservé à enable-logins.')
+if (values['allow-email-aliases'] && operation !== 'enable-logins') throw new Error('--allow-email-aliases est réservé à enable-logins.')
 const base = path.resolve(values.input)
 const manifestPath = path.resolve(values.manifest ?? path.join(base, 'mapping/manifest.json'))
 
@@ -96,6 +101,10 @@ try {
       }
       let result
       if (operation === 'verify') result = await verifyManifest(prisma, manifest, {report})
+      else if (operation === 'enable-logins') {
+        const {enableManifestLogins} = await import('./lib/enable-logins.js')
+        result = await enableManifestLogins(prisma, manifest, {...options, scope: values['login-scope'], allowEmailAliases: values['allow-email-aliases']})
+      }
       else if (operation === 'rebuild') {
         const {rebuildManifest} = await import('./lib/rebuild-epidropt.js')
         const backupEvidence = values['backup-evidence'] ? JSON.parse(await readFile(values['backup-evidence'], 'utf8')) : undefined

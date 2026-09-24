@@ -30,6 +30,22 @@ Pour testing, utiliser `--target testing --target-env .env.testing --tunnel-port
 
 L’import utilise une transaction unique, limitée à 15 minutes par défaut pour couvrir les allers-retours du tunnel. `--transaction-timeout-seconds 900` permet de modifier cette limite (entier de 1 à 1800 secondes). Un dépassement annule toute la transaction, sans import partiel ; le rollback de simulation reste inchangé.
 
+## Activer les connexions des préleveurs importés
+
+Après l’import du référentiel, `enable-logins` permet d’utiliser l’email source pour recevoir le lien de connexion habituel. Cette opération distincte ne modifie que les identifiants de connexion : aucun point, exploitation, compteur, volume, contact ou réglage de notification n’est réimporté. Aucun email ni mot de passe n’est envoyé ou généré.
+
+```sh
+npm run import:dropt -- enable-logins --target local --target-env .env.local --manifest chemin/manifeste.json --login-scope non-realimente --report data/dropt/epidropt-2026/reports/simulation-connexions.json
+# Examiner le rapport privé avant l’application, avec le même manifeste et périmètre.
+npm run import:dropt -- enable-logins --target local --target-env .env.local --manifest chemin/manifeste.json --login-scope non-realimente --apply --against-report data/dropt/epidropt-2026/reports/simulation-connexions.json
+```
+
+Pour testing, remplacer les options de connexion comme indiqué plus haut. `--login-scope non-realimente` sélectionne les préleveurs ayant une exploitation importée active sur un PP sans `CACG` ; `all` inclut aussi le réalimenté et exige une autorisation portant sur cet ensemble. Utiliser le manifeste effectivement appliqué, pas un ancien fichier par défaut.
+
+Sur autorisation explicite, ajouter `--allow-email-aliases` aux **deux** commandes pour permettre la connexion avec toutes les adresses source d’un même préleveur. La première adresse normalisée du manifeste (tri alphabétique stable de l’import) devient l’adresse principale ; les suivantes deviennent des alias du même compte, sans créer de préleveur supplémentaire. Toutes doivent être confirmées et libres : un conflit sur une seule adresse bloque le compte entier. Un alias retiré manuellement ne sera pas rétabli au rejeu.
+
+Seuls les comptes vierges, actifs, avec un email source unique confirmé dans les contacts importés (ou des alias explicitement autorisés) sont activés. Les emails partagés, déjà attribués/réservés, les identités non confirmées et les sources ambiguës restent bloqués et détaillés dans le rapport. Les comptes déjà configurés et les retraits manuels d’email sont préservés. Les cas bloqués sont exclus, les autres peuvent être appliqués après examen de la simulation. Toute dérive du plan depuis cette simulation ou erreur SQL annule toute l’application. Le rejeu exige une nouvelle simulation et ne réactive pas les comptes modifiés manuellement.
+
 ## Reconstruction exceptionnelle sur testing
 
 Préparer un manifeste distinct avec `prepare --rebuild-identities --previous-manifest ancien-manifeste.json --snapshot export-testing.json --manifest nouveau-manifeste.json` et le classeur sélectionné. Cela renouvelle les identités PP/exploitations à regrouper, tout en conservant les ancres des préleveurs et compteurs.
@@ -46,7 +62,7 @@ Pour compléter l’historique depuis des archives vérifiées, `prepare-meter-a
 
 - Seuls les noms source contenant `CACG` sont rapprochés de Rives (réalimentés). Les autres restent non réalimentés. Après le nom exact, les variantes département/zéros conservent le suffixe complet et exigent une preuve par compteur ou coordonnées ; les références contradictoires restent à vérifier. Un lieu présent chez Rives ne prouve pas, à lui seul, la disponibilité d’une télérelève.
 - Identités stables par référence métier, jamais par numéro de ligne ou adresse email. Les doublons ambigus et coordonnées incohérentes sont isolés dans les rapports.
-- Les emails importés sont des contacts, pas des identifiants de connexion. Aucune invitation ni notification n’est envoyée.
+- L’import conserve les emails comme contacts ; l’activation des connexions est explicite via `enable-logins` et ses contrôles ci-dessus. Aucune invitation ni notification n’est envoyée.
 - Le rejeu conserve les changements manuels. Les corrections ambiguës exigent un mapping explicite, sans fusion automatique.
 - Un compteur physique peut desservir plusieurs exploitations. Sa répartition inclut aussi les parts hors périmètre, sans les redistribuer aux exploitations importées.
 - Les compteurs sans correspondance complète ne publient pas de volumes. L’import initial n’active aucun flux et ne charge pas l’exemple JSON dans les mesures courantes.
