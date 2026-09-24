@@ -260,7 +260,7 @@ paths:
       tags: [Campagnes]
       operationId: getCollectionResponse
       summary: Consulter le contexte du formulaire
-      description: Retourne campagne, réponse, exploitation, compteurs documentaires, sous-usages et permissions. Aucun accès aux index physiques globaux.
+      description: Retourne campagne, réponse, exploitation, compteurs documentaires, usages et sous-usages avec leurs liens parentId, et permissions. Aucun accès aux index physiques globaux.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -3181,6 +3181,11 @@ components:
     CollectionForm:
       type: object
       additionalProperties: false
+      description: >-
+        Les usages et sous-usages du référentiel sont acceptés. Lors de la soumission,
+        les trois index de chaque compteur doivent être croissants ou identiques dans l’ordre chronologique.
+        Les incohérences retournent les champs concernés dans data.fields et data.validationErrors.
+        Un brouillon peut rester incomplet ou contenir des index à corriger, sans publication des volumes.
       properties:
         meters:
           type: array
