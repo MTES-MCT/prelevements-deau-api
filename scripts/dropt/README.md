@@ -24,11 +24,28 @@ npm run import:dropt -- verify --target local --target-env .env.local
 
 Pour un nouveau classeur, utiliser `prepare --epidropt-file chemin.xlsx --previous-manifest ancien-manifeste.json --snapshot export-testing.json`. L’export doit être complet et en lecture seule. Les anciennes identités sont conservées même lorsqu’une référence Rives est découverte ; les décisions et les candidats non validés figurent dans `reconciliation`. Le code comptage reste distinct du numéro de série. Son attribution automatique exige un code unique et un propriétaire unique dans toutes les lignes sources correspondantes.
 
+Si `mapping/dataset.json` existe, il sélectionne les sources et paramètres privés du jeu courant : `version: 1`, `files: {epidropt, rives, ...justificatifs}`, `overrides`, `previousManifest`, `snapshot`, `manifest`. Les chemins sont relatifs au dossier `--input` ; aucune dépendance à `/tmp` n’est nécessaire. `--dataset` permet d’en choisir un autre, les options explicites restent prioritaires. Les corrections arbitrées conservent les originaux, les empreintes des lignes et la cellule justificative ; une source modifiée exige une nouvelle revue.
+
 Après examen de la simulation, `apply --apply --against-report simulation.json` exige les mêmes identités et changements. Une erreur d’exécution sur un objet annule **toute** la transaction et produit un rapport `applied: false, complete: false` ; les cas non rapprochés déjà exclus du manifeste ne constituent pas une erreur d’exécution. Un rejeu conserve les corrections manuelles. Pour les exploitations concurrentes codées, `MULTIPLE_EXPLOITATIONS_ENABLED=true` doit avoir été activé explicitement sur la cible après le rattachement des déclarations historiques.
 
 Pour testing, utiliser `--target testing --target-env .env.testing --tunnel-port PORT_LOCAL` à travers un tunnel déjà ouvert vers PostgreSQL privé. Le script contrôle la cible et vérifie le certificat TLS ; il ne prend pas en charge la production. Les secrets ne passent pas en arguments de commande.
 
 L’import utilise une transaction unique, limitée à 15 minutes par défaut pour couvrir les allers-retours du tunnel. `--transaction-timeout-seconds 900` permet de modifier cette limite (entier de 1 à 1800 secondes). Un dépassement annule toute la transaction, sans import partiel ; le rollback de simulation reste inchangé.
+
+## Réappliquer des arbitrages et fusions ciblées sur testing
+
+`review --target testing` simule en une transaction les seules fusions/retraits explicités dans `reviewedConsolidationPlan`, puis l’import complet. Les UUID survivants et les anciens liens vers les PP fusionnés sont conservés. Les documents, règles, réponses de campagne et données manuelles empêchant une fusion la bloquent : aucun effacement implicite.
+
+```sh
+npm run import:dropt -- prepare
+npm run import:dropt -- review --target testing --target-env .env.testing --tunnel-port PORT_LOCAL --report data/dropt/epidropt-2026/reports/revue-simulation.json
+# Après examen et vérification d’une sauvegarde restaurée :
+npm run import:dropt -- review --target testing --target-env .env.testing --tunnel-port PORT_LOCAL --apply --against-report data/dropt/epidropt-2026/reports/revue-simulation.json --backup-evidence data/dropt/epidropt-2026/reports/preuve-sauvegarde.json
+```
+
+La preuve contient `target: "testing"`, `backup.sha256`, `restore: {success: true, matchesPreflight: true}` et `reviewedStateHash`, obtenu sur la copie restaurée via `inspectReviewedApplication`. L’état doit correspondre à la simulation et à la cible. Les copies restaurées ne sont utilisables que par le lanceur interne protégé ; aucune cible demo/prod n’est acceptée.
+
+Sans dates d’effet fiables, `resetMeterIds` peut lister les compteurs dont les dérivés doivent être supprimés, **sur autorisation explicite**. Le rapport chiffre ces suppressions ; les index, révisions et ingestions bruts restent intacts. Les flux concernés restent désactivés, sans recalcul ni rétroactivité. Le journal empêche une nouvelle suppression au rejeu ; toute nouvelle activation/publication exige une nouvelle revue. Les autres volumes sont conservés. Les liens du collecteur déjà habilité sont ajoutés aux nouvelles exploitations, sans créer de compte ou de campagne.
 
 ## Activer les connexions des préleveurs importés
 
@@ -76,6 +93,8 @@ Pour compléter l’historique depuis des archives vérifiées, `prepare-meter-a
 
 - Seuls les noms source contenant `CACG` sont rapprochés de Rives (réalimentés). Les autres restent non réalimentés. Après le nom exact, les variantes département/zéros conservent le suffixe complet et exigent une preuve par compteur ou coordonnées ; les références contradictoires restent à vérifier. Un lieu présent chez Rives ne prouve pas, à lui seul, la disponibilité d’une télérelève.
 - Identités stables par référence métier, jamais par numéro de ligne ou adresse email. Les doublons ambigus et coordonnées incohérentes sont isolés dans les rapports.
+- En l’absence d’email/SIRET dans une ligne d’exploitation, le commentaire peut retrouver un préleveur par raison sociale source complète et unique. Les homonymes, identités incomplètes et correspondances approximatives restent exclus.
+- Le SAGE est choisi parmi les seuls périmètres intersectant les coordonnées, selon le milieu du PP et le type de ressource gérée configuré dans PE (surface, souterraine, transition, mixte). Un SAGE spécialisé compatible est prioritaire sur un SAGE mixte. Plusieurs spécialisés compatibles, ou plusieurs mixtes sans spécialisé, bloquent la décision ; aucun SAGE n’est choisi hors de sa géographie. Le rejeu réévalue aussi les PP dont les coordonnées n’ont pas changé, sans altérer les coordonnées corrigées manuellement.
 - L’import conserve les emails comme contacts ; l’activation des connexions est explicite via `enable-logins` et ses contrôles ci-dessus. Aucune invitation ni notification n’est envoyée.
 - Le rejeu conserve les changements manuels. Les corrections ambiguës exigent un mapping explicite, sans fusion automatique.
 - Un compteur physique peut desservir plusieurs exploitations. Sa répartition inclut aussi les parts hors périmètre, sans les redistribuer aux exploitations importées.

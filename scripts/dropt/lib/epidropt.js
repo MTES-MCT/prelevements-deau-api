@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto'
 import ExcelJS from 'exceljs'
 import proj4 from 'proj4'
 import {preserveManifestIdentities, resolvePointMatches, isCacgPoint} from './reconciliation.js'
+import {applyReviewedInputs, projectReviewedIdentities} from './reviewed-inputs.js'
 
 export const FORMAT_VERSION = 1
 export const SCOPE = 'epidropt'
@@ -77,6 +78,17 @@ export function normalizePointWorkbookRow(values, headers) {
   }
 }
 
+export function normalizeExploitationWorkbookRow(values, headers) {
+  const commentColumns = headers.flatMap((header, column) => headerKey(header) === 'commentaire' ? [column] : [])
+  if (commentColumns.length > 1) throw new Error('Colonne ambiguë : Commentaire')
+  const countingColumn = headers.findIndex(header => /^code comptage(?:\s|$)/.test(headerKey(header)))
+  return {
+    values,
+    ...(countingColumn !== -1 ? {countingCode: nullable(values[countingColumn])} : {}),
+    ...(commentColumns.length ? {declarantName: nullable(values[commentColumns[0]])} : {})
+  }
+}
+
 export async function readWorkbook(filename, definitions) {
   const book = new ExcelJS.Workbook()
   await book.xlsx.readFile(filename)
@@ -94,10 +106,9 @@ export async function readWorkbook(filename, definitions) {
       if (start === 3 && !clean(cellValue(row.getCell(2)))) continue
       const values = Array.from({length: sheet.columnCount}, (_, index) => cellValue(row.getCell(index + 1)))
       if (values.some(value => clean(value))) {
-        const countingColumn = labels.findIndex(label => /^code comptage(?:\s|$)/.test(headerKey(label)))
         result[name].push({row: rowNumber, ...(layout === 'points'
           ? normalizePointWorkbookRow(values, labels)
-          : {values, ...(name === 'Exploitations' && countingColumn !== -1 ? {countingCode: nullable(values[countingColumn])} : {})})})
+          : name === 'Exploitations' ? normalizeExploitationWorkbookRow(values, labels) : {values})})
       }
     }
   }
@@ -179,6 +190,9 @@ function pointData(values, conflictedColumns, source, issue) {
 }
 
 export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, previousManifest, snapshot, resetExistingPointAndExploitationIdentities = false}) {
+  const reviewed = applyReviewedInputs(epidropt, overrides.reviewedInputs)
+  epidropt = reviewed.epidropt
+  if (overrides.reviewedConsolidationPlan) snapshot = projectReviewedIdentities(snapshot, overrides.reviewedConsolidationPlan)
   if (resetExistingPointAndExploitationIdentities) {
     previousManifest = previousManifest ? {...previousManifest, points: [], exploitations: []} : undefined
     snapshot = snapshot ? {...snapshot, tables: {...snapshot.tables, points: [], exploitations: [],
@@ -186,6 +200,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   }
   const issues = []
   const reconciliation = []
+  reconciliation.push(...reviewed.decisions.map(decision => ({kind: 'SOURCE_REVIEW', status: 'ACCEPTED', ...decision})))
   const issue = (code, source, details = {}) => issues.push({code, source, ...details})
   const points = new Map()
   const pointsByName = new Map()
@@ -277,7 +292,8 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
       key, id: override.id ?? stableId(key), names: [], references: [], coordinates: geometry, countingCodes: [],
       supplyCategory: isCacgPoint(name) ? 'REALIMENTE' : 'NON_REALIMENTE',
       data: {name, flowType: 'PRELEVEMENT', waterBodyType, pointKind: 'PHYSIQUE',
-        ...incomingData, locationDescription: place?.label || null},
+        ...incomingData, locationDescription: override.locationDescription ?? place?.label ?? null,
+        ...(override.geometryPrecision ? {geometryPrecision: override.geometryPrecision} : {})},
       sourceId: `dropt-epidropt:point:${digest(key).slice(0, 32)}`, source: []
     }
     if (point.data.waterBodyType !== waterBodyType) {
@@ -287,8 +303,10 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
 
     point.names.push(name)
     point.names.sort()
-    point.data.name = point.names[0]
-    point.data.otherNames = point.names.slice(1).join(' | ') || null
+    const reviewedNames = [...new Set(point.names.map(alias => overrides.points?.[alias]?.displayName).filter(Boolean))]
+    if (reviewedNames.length > 1) throw new Error('REVIEWED_POINT_DISPLAY_NAME_CONFLICT')
+    point.data.name = reviewedNames[0] ?? point.names[0]
+    point.data.otherNames = point.names.filter(alias => alias !== point.data.name).join(' | ') || null
     point.references.push({provider: 'epidropt', externalId: name})
     if (lieuId && !point.references.some(ref => ref.provider === 'rives-et-eaux')) point.references.push({provider: 'rives-et-eaux', externalId: lieuId})
     point.source.push(rowsSource)
@@ -335,6 +353,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   }
 
   const candidates = []
+  const declarantNameSources = []
   for (const {row, values: v} of epidropt.Préleveurs) {
     if (!clean(v[1])) continue
     const fullName = normalized(v[4] || [v[6], v[7]].filter(Boolean).join(' '))
@@ -342,6 +361,9 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     const agencyId = clean(v[9])
     const override = overrides.declarants?.[agencyId || siret || digest([fullName, v[10], v[13], v[14]])] ?? {}
     const key = override.key ?? (agencyId ? `epidropt:preleveur:aeag:${agencyId}` : /^\d{14}$/.test(siret) ? `epidropt:preleveur:siret:${siret}` : null)
+    // Rejected or explicitly skipped identities must not make a homonym appear
+    // unique merely because it is the only remaining importable declarant.
+    if (!missing(fullName)) declarantNameSources.push({fullName, key, row, skipped: Boolean(override.skip)})
     if (override.skip) continue
     if (!key || !fullName) {
       issue('PRELEVEUR_IDENTITY_MISSING', {sheet: 'Préleveurs', row})
@@ -375,12 +397,13 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   }
 
   const declarantsBySiret = group([...declarants.values()].filter(owner => owner.data.siret), owner => owner.data.siret)
+  const declarantSourcesByName = group(declarantNameSources, owner => owner.fullName)
   const storedDeclarants = snapshot?.tables?.declarants ?? []
   const storedBySiret = group(storedDeclarants.filter(owner => owner.siret), owner => owner.siret)
   const storedOwnerIds = new Set(storedDeclarants.filter(owner => !owner.deletedAt).map(owner => owner.userId))
   const resolvedRows = []
   const readyExploitationRows = []
-  for (const {row, values: v, countingCode: rowCountingCode} of epidropt.Exploitations) {
+  for (const {row, values: v, countingCode: rowCountingCode, declarantName} of epidropt.Exploitations) {
     if (!clean(v[1])) continue
     const source = {sheet: 'Exploitations', row}
     const point = pointsByName.get(clean(v[1]))
@@ -389,6 +412,24 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     if (/^\d{14}$/.test(siret)) for (const owner of declarantsBySiret.get(siret) ?? []) owners.add(owner.key)
     const override = overrides.exploitations?.[digest(v)] ?? {}
     let ownerKey = override.declarantKey ?? (owners.size === 1 ? [...owners][0] : null)
+    if (!ownerKey && missing(v[2]) && !missing(declarantName) && !override.skip) {
+      const name = normalized(declarantName)
+      const sourceMatches = declarantSourcesByName.get(name) ?? []
+      const candidateKeys = [...new Set(sourceMatches.map(item => item.key))]
+      const candidate = candidateKeys.length === 1 ? declarants.get(candidateKeys[0]) : null
+      const conflictingSiret = candidate?.data.siret && (declarantsBySiret.get(candidate.data.siret) ?? [])
+        .some(owner => owner.key !== candidate.key)
+      const reason = !sourceMatches.length ? 'NAME_NOT_FOUND'
+        : candidateKeys.length > 1 ? 'NAME_AMBIGUOUS'
+          : !candidate || sourceMatches.some(item => item.skipped) ? 'NAME_IDENTITY_UNRESOLVED'
+            : conflictingSiret ? 'SIRET_IDENTITY_CONFLICT' : null
+      reconciliation.push({kind: 'DECLARANT', source, pointName: clean(v[1]),
+        method: 'EXACT_SOURCE_NAME_WITHOUT_EMAIL', status: reason ? 'REVIEW' : 'ACCEPTED', reason,
+        normalizedName: name, candidateKeys: candidateKeys.filter(Boolean),
+        sources: sourceMatches.map(item => ({sheet: 'Préleveurs', row: item.row})),
+        ...(!reason ? {candidateId: candidate.id, candidateKey: candidate.key} : {})})
+      if (!reason) ownerKey = candidate.key
+    }
     if (!ownerKey) {
       const contractNames = new Set(assignmentsForName(clean(v[1])).map(a => normalized(contracts.get(a.contractId)?.name)).filter(Boolean))
       const options = [...declarants.values()].filter(owner => contractNames.has(owner.fullName) && (!owners.size || owners.has(owner.key)))
@@ -620,6 +661,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   }
 
   const manifest = {formatVersion: FORMAT_VERSION, scope: SCOPE, inputs, overridesHash: digest(overrides),
+    ...(overrides.reviewedConsolidationPlan ? {reviewedConsolidationPlan: overrides.reviewedConsolidationPlan} : {}),
     points: [...points.values()].sort((a, b) => a.key.localeCompare(b.key)), declarants: [...declarants.values()].sort((a, b) => a.key.localeCompare(b.key)),
     exploitations: [...exploitations.values()].filter(e => !e.blocked).sort((a, b) => a.key.localeCompare(b.key)), meters: meters.sort((a, b) => a.serial.localeCompare(b.serial)), allocations: allocations.sort((a, b) => a.sourceId.localeCompare(b.sourceId)),
     contracts: [...contracts.values()], issues, reconciliation}

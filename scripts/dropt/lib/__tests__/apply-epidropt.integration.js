@@ -1,11 +1,15 @@
 import test from 'ava'
 import process from 'node:process'
 import {randomUUID} from 'node:crypto'
+import express from 'express'
+import request from 'supertest'
 import {prisma} from '../../../../db/prisma.js'
 import {ingestMeterBatch} from '../../../../lib/services/meter-ingestion.js'
 import {applyManifest, verifyManifest} from '../apply-epidropt.js'
 import {digest, stableId} from '../epidropt.js'
 import {requireDisposableDatabase} from '../../../../lib/util/test-helpers/disposable-database.js'
+import {handlePoint} from '../../../../lib/resolvers.js'
+import {authorizePointPrelevement} from '../../../../lib/auth/middleware.js'
 
 const integration = process.env.DROPT_INTEGRATION_TESTS === '1' ? test.serial : test.skip
 function fixtureRegistry() {
@@ -136,13 +140,13 @@ integration('dry-run laisse zéro objet, application et rejeu gardent exactement
   t.false((await verifyManifest(prisma, manifest, {report: forged})).complete)
 })
 
-integration('rejeu conserve changements manuels, rattachement de zone et désactivation du flux', async t => {
+integration('rejeu conserve changements manuels, rattachement de zone non-SAGE et désactivation du flux', async t => {
   const manifest = fixture()
   const {options} = await activate(manifest)
   const pointId = manifest.points[0].id
   const zoneId = randomUUID()
   owned.zones.add(zoneId)
-  await prisma.$executeRaw`INSERT INTO "Zone" (id, code, type, name, coordinates, "updatedAt") VALUES (${zoneId}::uuid, ${zoneId}, 'SAGE', 'Zone test manuelle', ST_GeomFromText('MULTIPOLYGON(((1 45,2 45,2 46,1 46,1 45)))',4326), now())`
+  await prisma.$executeRaw`INSERT INTO "Zone" (id, code, type, name, coordinates, "updatedAt") VALUES (${zoneId}::uuid, ${zoneId}, 'REGION', 'Zone test manuelle', ST_GeomFromText('MULTIPOLYGON(((1 45,2 45,2 46,1 46,1 45)))',4326), now())`
   await prisma.pointPrelevementZone.create({data: {pointPrelevementId: pointId, zoneId}})
   await prisma.pointPrelevement.update({where: {id: pointId}, data: {locationDescription: 'Correction manuelle'}})
   await prisma.declarant.update({where: {userId: manifest.declarants[0].id}, data: {socialReason: 'Nom corrigé'}})
@@ -158,6 +162,158 @@ integration('rejeu conserve changements manuels, rattachement de zone et désact
   t.deepEqual((await applyManifest(prisma, manifest, options)).issues, [])
   const [geometry] = await prisma.$queryRaw`SELECT ST_X(coordinates) AS x FROM "PointPrelevement" WHERE id = ${pointId}::uuid`
   t.is(geometry.x, 0.7)
+})
+
+integration('un ancien manifeste suit les alias PP et exploitations sans recréer les sources ni modifier les séries', async t => {
+  const manifest = fixture()
+  const initial = await applyManifest(prisma, manifest, {apply: true})
+  t.true(initial.applied)
+  const oldPointId = randomUUID()
+  const oldExploitationId = randomUUID()
+  const oldSourceId = `dropt-test:old:${oldPointId}`
+  owned.points.add(oldPointId)
+  owned.exploitations.add(oldExploitationId)
+  await prisma.pointPrelevement.create({data: {id: oldPointId, name: `merged:${oldPointId}`, sourceId: oldSourceId,
+    deletedAt: new Date(), waterBodyType: 'SUPERFICIELLE', flowType: 'PRELEVEMENT'}})
+  await prisma.externalReference.create({data: {provider: 'pe-import-alias', scope: 'epidropt', kind: 'POINT',
+    externalId: oldPointId, pointPrelevementId: manifest.points[0].id, metadata: {exploitationAliases: [
+      {sourceId: oldExploitationId, targetId: manifest.exploitations[0].id, sourceSourceId: `old:${oldExploitationId}`}
+    ]}}})
+  const old = structuredClone(manifest)
+  old.points[0].id = oldPointId
+  old.points[0].sourceId = oldSourceId
+  old.exploitations[0].id = oldExploitationId
+  old.exploitations[0].sourceId = `old:${oldExploitationId}`
+  old.exploitations[0].pointId = oldPointId
+  old.allocations[0].exploitationId = oldExploitationId
+  const oldManifest = sign(old)
+  const beforeVersions = await versions(manifest)
+  const preview = await applyManifest(prisma, oldManifest)
+  t.true(preview.complete)
+  t.false(preview.applied)
+  t.deepEqual(preview.objectIds, initial.objectIds)
+  t.deepEqual(preview.changes, [])
+  const replay = await applyManifest(prisma, oldManifest, {apply: true, expectedReport: preview})
+  t.true(replay.applied)
+  t.deepEqual(replay.changes, [])
+  t.true((await verifyManifest(prisma, oldManifest, {report: replay})).complete)
+  t.deepEqual(await versions(manifest), beforeVersions)
+  t.is(await prisma.declarantPointPrelevement.count({where: {id: oldExploitationId}}), 0)
+  t.truthy((await prisma.pointPrelevement.findUnique({where: {id: oldPointId}})).deletedAt)
+})
+
+integration('les anciennes URLs PP utilisent les droits de la cible canonique, jamais ceux du PP fusionné', async t => {
+  const manifest = fixture()
+  t.true((await applyManifest(prisma, manifest, {apply: true})).applied)
+  const targetId = manifest.points[0].id
+  const sourceId = randomUUID()
+  const retiredId = randomUUID()
+  const outsiderId = randomUUID()
+  const sourceExploitationId = randomUUID()
+  owned.points.add(sourceId)
+  owned.points.add(retiredId)
+  owned.users.add(outsiderId)
+  owned.exploitations.add(sourceExploitationId)
+  await prisma.pointPrelevement.createMany({data: [sourceId, retiredId].map(id => ({id, name: `merged:${id}`, waterBodyType: 'SUPERFICIELLE', flowType: 'PRELEVEMENT', deletedAt: new Date()}))})
+  await prisma.externalReference.createMany({data: [
+    {provider: 'pe-import-alias', scope: 'epidropt', kind: 'POINT', externalId: sourceId, pointPrelevementId: targetId},
+    {provider: 'pe-import-retired', scope: 'epidropt', kind: 'POINT', externalId: retiredId, pointPrelevementId: retiredId}
+  ]})
+  await prisma.user.create({data: {id: outsiderId, role: 'DECLARANT', declarant: {create: {socialReason: 'Préleveur test non autorisé', preleveurType: 'IRRIGANT'}}}})
+  const usage = await prisma.sandreWaterUse.findUniqueOrThrow({where: {code: '2'}})
+  // Even a stale link to the deleted source must not authorize the survivor.
+  await prisma.declarantPointPrelevement.create({data: {id: sourceExploitationId, pointPrelevementId: sourceId, declarantUserId: outsiderId, usageId: usage.id}})
+  const app = express()
+  app.use((req, _res, next) => {
+    req.user = {id: req.get('x-test-user') ?? outsiderId, role: 'DECLARANT'}
+    next()
+  })
+  app.param('pointId', handlePoint)
+  app.get('/points-prelevement/:pointId', authorizePointPrelevement(), (req, res) => res.json({id: req.point.id, parameter: req.params.pointId}))
+  app.put('/points-prelevement/:pointId', authorizePointPrelevement('write'), (_req, res) => res.sendStatus(204))
+  app.use((error, _req, res, _next) => res.status(error.status || 500).json({message: error.message}))
+  const ownerId = manifest.declarants[0].id
+  const allowed = await request(app).get(`/points-prelevement/${sourceId}`).set('x-test-user', ownerId)
+  t.is(allowed.status, 200)
+  t.deepEqual(allowed.body, {id: targetId, parameter: targetId})
+  t.is((await request(app).get(`/points-prelevement/${sourceId}`)).status, 403)
+  t.is((await request(app).put(`/points-prelevement/${sourceId}`).set('x-test-user', ownerId)).status, 403)
+  t.is((await request(app).get(`/points-prelevement/${retiredId}`).set('x-test-user', ownerId)).status, 404)
+  await prisma.pointPrelevement.update({where: {id: targetId}, data: {deletedAt: new Date()}})
+  t.is((await request(app).get(`/points-prelevement/${sourceId}`).set('x-test-user', ownerId)).status, 404)
+})
+
+integration('les SAGE suivent le milieu et les candidats PostGIS au rejeu, avec rollback et sans écraser les corrections manuelles', async t => {
+  const input = fixture()
+  input.points[0].coordinates = [0.95, 44.95]
+  const manifest = sign(input)
+  const pointId = manifest.points[0].id
+  const zones = [
+    {code: 'sage-SAGE05024', name: 'Dropt test', managedResourceType: 'MIXTE', minX: 0.9, maxX: 1},
+    {code: 'sage-SAGE05003', name: 'Nappes profondes test', managedResourceType: 'SOUTERRAIN', minX: 0.94, maxX: 1.2},
+    {code: 'sage-SAGE05009', name: 'Garonne test', managedResourceType: 'SUPERFICIELLE', minX: 1.02, maxX: 1.2}
+  ].map(zone => ({...zone, id: randomUUID()}))
+  for (const zone of zones) {
+    owned.zones.add(zone.id)
+    const geometry = `MULTIPOLYGON(((${zone.minX} 44.9,${zone.maxX} 44.9,${zone.maxX} 44.99,${zone.minX} 44.99,${zone.minX} 44.9)))`
+    await prisma.$executeRaw`INSERT INTO "Zone" (id, code, type, name, "managedResourceType", coordinates, "updatedAt") VALUES (${zone.id}::uuid, ${zone.code}, 'SAGE', ${zone.name}, ${zone.managedResourceType}::"ZoneManagedResourceType", ST_GeomFromText(${geometry},4326), now())`
+  }
+  const [dropt, gironde, garonne] = zones
+  const sageIds = async () => (await prisma.pointPrelevementZone.findMany({
+    where: {pointPrelevementId: pointId, zone: {type: 'SAGE'}}, select: {zoneId: true}
+  })).map(link => link.zoneId).sort()
+
+  const preview = await applyManifest(prisma, manifest)
+  t.true(preview.complete)
+  t.is(await prisma.pointPrelevement.count({where: {id: pointId}}), 0)
+  const result = await applyManifest(prisma, manifest, {apply: true, expectedReport: preview})
+  t.true(result.applied)
+  t.deepEqual(await sageIds(), [dropt.id])
+
+  // Reproduce the former automatic double attachment without moving the point.
+  await prisma.pointPrelevementZone.create({data: {pointPrelevementId: pointId, zoneId: gironde.id}})
+  const replayPreview = await applyManifest(prisma, manifest)
+  t.deepEqual(await sageIds(), [dropt.id, gironde.id].sort())
+  t.is(replayPreview.pointZoneDecisions[0].untraceableRemovedSageLinks[0].id, gironde.id)
+  t.true((await applyManifest(prisma, manifest, {apply: true, expectedReport: replayPreview})).complete)
+  t.deepEqual(await sageIds(), [dropt.id])
+
+  await prisma.pointPrelevement.update({where: {id: pointId}, data: {waterBodyType: 'SOUTERRAIN'}})
+  t.true((await applyManifest(prisma, manifest, {apply: true})).complete)
+  t.deepEqual(await sageIds(), [gironde.id])
+  t.is((await prisma.pointPrelevement.findUnique({where: {id: pointId}})).waterBodyType, 'SOUTERRAIN')
+
+  // A third candidate is not silently discarded and every write rolls back.
+  const unknownId = randomUUID()
+  owned.zones.add(unknownId)
+  await prisma.$executeRaw`INSERT INTO "Zone" (id, code, type, name, "managedResourceType", coordinates, "updatedAt") VALUES (${unknownId}::uuid, ${unknownId}, 'SAGE', 'SAGE non arbitré', 'SOUTERRAIN', ST_GeomFromText('MULTIPOLYGON(((0.94 44.9,1 44.9,1 44.99,0.94 44.99,0.94 44.9)))',4326), now())`
+  const rejected = await applyManifest(prisma, manifest, {apply: true})
+  t.false(rejected.applied)
+  t.true(rejected.executionIssues.some(issue => issue.code === 'SAGE_CANDIDATES_AMBIGUOUS'))
+  t.deepEqual(await sageIds(), [gironde.id])
+
+  // Groundwater outside Nappes profondes remains covered by mixed Dropt.
+  await prisma.$executeRaw`UPDATE "PointPrelevement" SET coordinates = ST_SetSRID(ST_MakePoint(0.92,44.95),4326) WHERE id = ${pointId}::uuid`
+  const mixedReplay = await applyManifest(prisma, manifest, {apply: true})
+  t.true(mixedReplay.complete)
+  t.deepEqual(await sageIds(), [dropt.id])
+  t.is((await prisma.pointPrelevement.findUnique({where: {id: pointId}})).waterBodyType, 'SOUTERRAIN')
+
+  // The actual manual coordinate now intersects Garonne + Gironde, not Dropt.
+  await prisma.$executeRaw`UPDATE "PointPrelevement" SET coordinates = ST_SetSRID(ST_MakePoint(1.1,44.95),4326), "waterBodyType" = 'SUPERFICIELLE' WHERE id = ${pointId}::uuid`
+  const garonneReplay = await applyManifest(prisma, manifest, {apply: true})
+  t.true(garonneReplay.complete)
+  t.is(garonneReplay.pointZoneDecisions[0].reason, 'SINGLE_COMPATIBLE_SAGE')
+  t.deepEqual(await sageIds(), [garonne.id])
+  t.deepEqual(garonneReplay.pointZoneDecisions[0].coordinates, [1.1, 44.95])
+  t.true((await verifyManifest(prisma, manifest)).complete)
+
+  // No polygon candidate: no forced assignment to either of the known SAGEs.
+  await prisma.$executeRaw`UPDATE "PointPrelevement" SET coordinates = ST_SetSRID(ST_MakePoint(1.25,44.95),4326) WHERE id = ${pointId}::uuid`
+  const outside = await applyManifest(prisma, manifest, {apply: true})
+  t.true(outside.complete)
+  t.is(outside.pointZoneDecisions[0].reason, 'NO_GEOMETRIC_SAGE')
+  t.deepEqual(await sageIds(), [])
 })
 
 integration('référence stable rapproche un ID existant sans changer son sourceId ni ses champs manuels', async t => {

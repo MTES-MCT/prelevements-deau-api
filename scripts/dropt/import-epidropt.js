@@ -8,7 +8,8 @@ import {getTransactionTimeoutMs} from './lib/import-options.js'
 
 const {positionals, values} = parseArgs({allowPositionals: true, options: {
   input: {type: 'string', default: 'data/dropt/epidropt-2026'}, target: {type: 'string'},
-  manifest: {type: 'string'}, overrides: {type: 'string'}, report: {type: 'string'}, 'against-report': {type: 'string'},
+  manifest: {type: 'string'}, overrides: {type: 'string'}, dataset: {type: 'string'}, report: {type: 'string'}, 'against-report': {type: 'string'},
+  'consolidation-plan': {type: 'string'},
   'backup-evidence': {type: 'string'}, resume: {type: 'string'},
   'rebuild-identities': {type: 'boolean', default: false},
   'login-scope': {type: 'string'},
@@ -19,14 +20,25 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
-if (!['prepare', 'apply', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign [--input dossier] [--target local|testing] [--apply]')
+if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign [--input dossier] [--target local|testing] [--apply]')
 if (operation === 'enable-logins' && !['non-realimente', 'all'].includes(values['login-scope'])) throw new Error('--login-scope non-realimente|all obligatoire.')
 if (values['login-scope'] && operation !== 'enable-logins') throw new Error('--login-scope est réservé à enable-logins.')
 if (values['allow-email-aliases'] && operation !== 'enable-logins') throw new Error('--allow-email-aliases est réservé à enable-logins.')
 if (operation === 'seed-campaign' && !values['campaign-config']) throw new Error('--campaign-config data/.../configuration.json obligatoire pour seed-campaign.')
 if ((values['campaign-config'] || values['actor-user-id']) && operation !== 'seed-campaign') throw new Error('--campaign-config et --actor-user-id sont réservés à seed-campaign.')
 const base = path.resolve(values.input)
-const manifestPath = path.resolve(values.manifest ?? path.join(base, 'mapping/manifest.json'))
+let dataset
+try { dataset = JSON.parse(await readFile(values.dataset ?? path.join(base, 'mapping/dataset.json'), 'utf8')) } catch (error) {
+  if (error.code !== 'ENOENT' || values.dataset) throw error
+}
+if (dataset && dataset.version !== 1) throw new Error('Version de jeu de données non prise en charge.')
+if (dataset && (!dataset.files?.epidropt || !dataset.files?.rives)) throw new Error('Les deux classeurs sources doivent être déclarés dans le jeu de données.')
+const datasetPath = filename => {
+  const resolved = path.resolve(base, filename)
+  if (!resolved.startsWith(`${base}${path.sep}`)) throw new Error('Les sources du jeu de données doivent rester dans son dossier privé.')
+  return resolved
+}
+const manifestPath = path.resolve(values.manifest ?? datasetPath(dataset?.manifest ?? 'mapping/manifest.json'))
 
 async function writePrivate(filename, value) {
   await mkdir(path.dirname(filename), {recursive: true, mode: 0o700})
@@ -38,17 +50,22 @@ async function writePrivate(filename, value) {
 try {
   getTransactionTimeoutMs(values['transaction-timeout-seconds'])
   if (operation === 'prepare') {
-    const files = {epidropt: path.resolve(values['epidropt-file'] ?? path.join(base, 'raw/Prelevement_Epidropt_20_08_2026.xlsx')), rives: path.join(base, 'raw/ExportTableEpiDropt.xlsx')}
+    const files = Object.fromEntries(Object.entries(dataset?.files ?? {
+      epidropt: 'raw/Prelevement_Epidropt_20_08_2026.xlsx', rives: 'raw/ExportTableEpiDropt.xlsx'
+    }).map(([key, filename]) => [key, datasetPath(filename)]))
+    if (values['epidropt-file']) files.epidropt = path.resolve(values['epidropt-file'])
     const inputs = {}
     for (const [key, filename] of Object.entries(files)) inputs[key] = {name: path.basename(filename), sha256: createHash('sha256').update(await readFile(filename)).digest('hex')}
-    const overrides = values.overrides ? JSON.parse(await readFile(values.overrides, 'utf8')) : {}
-    const previousPath = path.resolve(values['previous-manifest'] ?? manifestPath)
+    const overridesPath = values.overrides ?? (dataset?.overrides ? datasetPath(dataset.overrides) : undefined)
+    const overrides = overridesPath ? JSON.parse(await readFile(overridesPath, 'utf8')) : {}
+    const previousPath = path.resolve(values['previous-manifest'] ?? (dataset?.previousManifest ? datasetPath(dataset.previousManifest) : manifestPath))
     let previousManifest
-    try { previousManifest = JSON.parse(await readFile(previousPath, 'utf8')) } catch (error) { if (error.code !== 'ENOENT' || values['previous-manifest']) throw error }
-    const snapshot = values.snapshot ? JSON.parse(await readFile(values.snapshot, 'utf8')) : undefined
+    try { previousManifest = JSON.parse(await readFile(previousPath, 'utf8')) } catch (error) { if (error.code !== 'ENOENT' || values['previous-manifest'] || dataset?.previousManifest) throw error }
+    const snapshotPath = values.snapshot ?? (dataset?.snapshot ? datasetPath(dataset.snapshot) : undefined)
+    const snapshot = snapshotPath ? JSON.parse(await readFile(snapshotPath, 'utf8')) : undefined
     if (snapshot && (!snapshot.readOnly || !snapshot.completed || !snapshot.tables || snapshot.target !== 'testing')) throw new Error('Export testing complet et en lecture seule requis.')
     if (previousManifest) inputs.previousManifestHash = previousManifest.manifestHash
-    if (snapshot) inputs.snapshot = {startedAt: snapshot.startedAt, sha256: createHash('sha256').update(await readFile(values.snapshot)).digest('hex')}
+    if (snapshot) inputs.snapshot = {startedAt: snapshot.startedAt, sha256: createHash('sha256').update(await readFile(snapshotPath)).digest('hex')}
     const manifest = buildManifest({epidropt: await readWorkbook(files.epidropt, EPIDROPT_SHEETS), rives: await readWorkbook(files.rives, RIVES_SHEETS),
       overrides, inputs, previousManifest, snapshot, resetExistingPointAndExploitationIdentities: values['rebuild-identities']})
     // Keep every reviewed mapping even when refreshing the convenient latest file.
@@ -57,7 +74,7 @@ try {
     console.log(JSON.stringify({manifestHash: manifest.manifestHash, counts: Object.fromEntries(['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].map(key => [key, manifest[key].length]))}))
   } else {
     if (!['local', 'testing'].includes(values.target)) throw new Error('Cible explicite local ou testing obligatoire ; production interdite.')
-    if (['rebuild', 'recompute-rebuild'].includes(operation) && values.target !== 'testing') throw new Error('La reconstruction en ligne est réservée à testing.')
+    if (['review', 'rebuild', 'recompute-rebuild'].includes(operation) && values.target !== 'testing') throw new Error('La correction en ligne est réservée à testing.')
     if (values['target-env']) {
       const configuration = parseEnv(await readFile(values['target-env'], 'utf8'))
       if (!configuration.DATABASE_URL) throw new Error('DATABASE_URL absente du fichier cible.')
@@ -104,6 +121,13 @@ try {
       }
       let result
       if (operation === 'verify') result = await verifyManifest(prisma, manifest, {report})
+      else if (operation === 'review') {
+        if (options.activateAt || options.effectiveAt) throw new Error('La revue de référentiel ne doit ni activer ni recalculer les volumes.')
+        const {applyReviewedManifest} = await import('./lib/apply-reviewed.js')
+        const consolidationPlan = values['consolidation-plan'] ? JSON.parse(await readFile(values['consolidation-plan'], 'utf8')) : manifest.reviewedConsolidationPlan
+        const backupEvidence = values['backup-evidence'] ? JSON.parse(await readFile(values['backup-evidence'], 'utf8')) : undefined
+        result = await applyReviewedManifest(prisma, manifest, {...options, target: values.target, consolidationPlan, backupEvidence})
+      }
       else if (operation === 'enable-logins') {
         const {enableManifestLogins} = await import('./lib/enable-logins.js')
         result = await enableManifestLogins(prisma, manifest, {...options, scope: values['login-scope'], allowEmailAliases: values['allow-email-aliases']})

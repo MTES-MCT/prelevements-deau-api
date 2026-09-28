@@ -1,4 +1,5 @@
 import {clean, coordinates, digest} from './epidropt.js'
+import {createImportAliasResolver} from '../../../lib/services/import-aliases.js'
 
 const referenceKey = reference => `${reference.provider}:${reference.externalId}`
 const unique = values => [...new Set(values.filter(Boolean))]
@@ -35,6 +36,10 @@ export function resolvePointMatches({pointRows, lieux, assignments, previousMani
   for (const [name, rows] of grouped) {
     const base = {kind: 'POINT', names: [name], sources: rows.map(row => ({sheet: 'Points prélèvement', row: row.row})),
       supplyCategory: isCacgPoint(name) ? 'REALIMENTE' : 'NON_REALIMENTE'}
+    if (overrides.points?.[name]?.skip) {
+      results.set(name, {...base, status: 'EXCLUDED', method: 'REVIEWED_RETIREMENT', candidates: [], matchedNames: [], reason: 'REVIEWED_RETIREMENT'})
+      continue
+    }
     if (!isCacgPoint(name)) {
       results.set(name, {...base, status: 'EXCLUDED', method: 'NON_REALIMENTE', candidates: [], reason: 'NOT_ELIGIBLE_FOR_RIVES'})
       continue
@@ -44,9 +49,11 @@ export function resolvePointMatches({pointRows, lieux, assignments, previousMani
     const serialPlaces = unique(assignments.filter(row => serials.includes(row.serial)).map(row => row.lieuId))
     const sourceCoordinates = rows.map(row => coordinates(row.values[3], row.values[4])).filter(Boolean)
     const coordinatePlaces = lieux.filter(place => place.coordinates && sourceCoordinates.some(position => distanceMeters(position, place.coordinates) <= 5)).map(place => place.id)
-    const codes = unique([name.split(/CACG/i)[0], ...rows.map(row => clean(row.values[11]))])
+    const codes = unique([...variants.map(variant => variant.split(/CACG/i)[0]), ...rows.map(row => clean(row.values[11]))])
     const codePlaces = lieux.filter(place => codes.includes(place.codeOU) || codes.includes(place.id)).map(place => place.id)
-    const evidence = {variants, serials, serialPlaces, coordinatePlaces, codePlaces}
+    const contractId = /CACG_([^\s]+)$/i.exec(name)?.[1]
+    const contractPlaces = unique(assignments.filter(row => row.contractId === `CACG_${contractId}`).map(row => row.lieuId))
+    const evidence = {variants, serials, serialPlaces, coordinatePlaces, codePlaces, contractPlaces}
     const tiers = [
       ['EXACT_NAME', assignments.filter(row => row.pointName === name)],
       ['CACG_SOURCE_VARIANT', assignments.filter(row => variants.includes(row.pointName))],
@@ -71,6 +78,14 @@ export function resolvePointMatches({pointRows, lieux, assignments, previousMani
         method = 'CODE_OR_PLACE_WITH_EVIDENCE'
         candidates = unique(codePlaces)
       }
+      if (!candidates.length && serialPlaces.length) {
+        candidates = unique(serialPlaces.filter(id => coordinatePlaces.includes(id)))
+        if (candidates.length) method = 'SERIAL_AND_COORDINATES'
+      }
+      if (!candidates.length && !serialPlaces.length && contractId) {
+        candidates = unique(contractPlaces.filter(id => coordinatePlaces.includes(id)))
+        if (candidates.length) method = 'CONTRACT_AND_COORDINATES'
+      }
     }
     const knownPlace = candidates.length === 1 && lieux.some(place => place.id === candidates[0])
     const corroborated = candidates.length === 1 && (serialPlaces.includes(candidates[0]) || coordinatePlaces.includes(candidates[0]))
@@ -88,18 +103,30 @@ export function resolvePointMatches({pointRows, lieux, assignments, previousMani
   // A newly discovered alias must not make an already imported point disappear
   // by grouping two existing UUIDs before the identity ledger can check them.
   const refs = snapshot?.tables?.externalReferences ?? []
+  const canonical = createImportAliasResolver(refs, {scope: 'epidropt', points: snapshot?.tables?.points})
   const sourceAnchors = name => unique([
     ...refs.filter(ref => ref.kind === 'POINT' && ref.provider === 'epidropt' && ref.externalId === name).map(ref => ref.pointPrelevementId),
     ...(previousManifest?.points ?? []).filter(point => point.references.some(ref => ref.provider === 'epidropt' && ref.externalId === name)).map(point => point.id)
-  ])
+  ].map(id => canonical.point(id)))
   const placeAnchors = lieuId => unique([
     ...refs.filter(ref => ref.kind === 'POINT' && ref.provider === 'rives-et-eaux' && ref.externalId === lieuId).map(ref => ref.pointPrelevementId),
     ...(previousManifest?.points ?? []).filter(point => point.references.some(ref => ref.provider === 'rives-et-eaux' && ref.externalId === lieuId)).map(point => point.id)
-  ])
+  ].map(id => canonical.point(id)))
   for (const lieuId of unique([...results.values()].filter(item => item.status === 'ACCEPTED').flatMap(item => item.candidates))) {
     const aliases = [...results.values()].filter(item => item.status === 'ACCEPTED' && item.candidates[0] === lieuId)
-    const claimed = placeAnchors(lieuId)
-    const ids = unique([...claimed, ...aliases.flatMap(item => sourceAnchors(item.names[0]))])
+    let claimed
+    let ids
+    try {
+      claimed = placeAnchors(lieuId)
+      ids = unique([...claimed, ...aliases.flatMap(item => sourceAnchors(item.names[0]))])
+    } catch (error) {
+      if (!error.message.startsWith('IMPORT_ALIAS_')) throw error
+      for (const item of aliases) {
+        item.status = 'REVIEW'
+        item.reason = error.message
+      }
+      continue
+    }
     if (ids.length <= 1) continue
     for (const item of aliases) {
       const anchors = sourceAnchors(item.names[0])
@@ -121,6 +148,7 @@ export function preserveManifestIdentities(manifest, {previousManifest, snapshot
   const blocked = new Set()
   const live = snapshot?.tables ?? {}
   const refs = live.externalReferences ?? []
+  const canonical = createImportAliasResolver(refs, {scope: 'epidropt', points: live.points, exploitations: live.exploitations})
   for (const [kind, table, field, referenceKind] of [
     ['points', 'points', 'id', 'POINT'], ['declarants', 'declarants', 'userId', 'DECLARANT'], ['meters', 'compteurs', 'id', 'METER']
   ]) {
@@ -134,8 +162,20 @@ export function preserveManifestIdentities(manifest, {previousManifest, snapshot
         || (kind === 'meters' && item.serialNumber === record.serial))
       const previousLiveIds = previous.map(item => (live[table] ?? []).find(stored => stored[field] === item.id
         || (item.sourceId && stored.sourceId === item.sourceId))?.[field] ?? item.id)
-      const ids = unique([...matches.map(ref => ref[targetField]), ...sourceMatches.map(row => row[field]), ...previousLiveIds])
-      if (ids.length > 1 || previous.length > 1) {
+      let ids
+      let previousIds
+      try {
+        const resolve = id => kind === 'points' ? canonical.point(id) : id
+        previousIds = unique(previous.map(item => resolve(item.id)))
+        ids = unique([...matches.map(ref => ref[targetField]), ...sourceMatches.map(row => row[field]), ...previousLiveIds,
+          ...(resolve(record.id) !== record.id ? [resolve(record.id)] : [])].map(resolve))
+      } catch (error) {
+        if (!error.message.startsWith('IMPORT_ALIAS_')) throw error
+        blocked.add(record.id)
+        result.issues.push({code: error.message, source: {kind, id: record.id}})
+        continue
+      }
+      if (ids.length > 1 || previousIds.length > 1 || (kind !== 'points' && previous.length > 1)) {
         blocked.add(record.id)
         result.issues.push({code: 'IDENTITY_LEDGER_CONFLICT', source: {kind, id: record.id}, candidates: ids})
         continue
@@ -149,9 +189,10 @@ export function preserveManifestIdentities(manifest, {previousManifest, snapshot
         }
       }
       const beforeId = record.id
-      const anchor = previous[0]
       const id = ids[0] ?? record.id
+      const anchor = previous.find(item => item.id === id) ?? previous[0]
       remapped.set(beforeId, id)
+      for (const item of previous) remapped.set(item.id, id)
       if (anchor) {
         remapped.set(anchor.id, id)
         record.key = anchor.key
@@ -168,6 +209,15 @@ export function preserveManifestIdentities(manifest, {previousManifest, snapshot
 
   for (const record of result.exploitations) {
     const beforeId = record.id
+    let canonicalId
+    try {
+      canonicalId = canonical.exploitation(beforeId, record.sourceId)
+    } catch (error) {
+      if (!error.message.startsWith('IMPORT_ALIAS_')) throw error
+      blocked.add(beforeId)
+      result.issues.push({code: error.message, source: {kind: 'exploitations', id: beforeId}})
+      continue
+    }
     if (blocked.has(record.pointId) || blocked.has(record.declarantId)) {
       blocked.add(beforeId)
       result.issues.push({code: 'EXPLOITATION_IDENTITY_DEPENDENCY_CONFLICT', source: {id: beforeId}})
@@ -175,20 +225,48 @@ export function preserveManifestIdentities(manifest, {previousManifest, snapshot
     }
     record.pointId = remapped.get(record.pointId) ?? record.pointId
     record.declarantId = remapped.get(record.declarantId) ?? record.declarantId
-    const previous = (previousManifest?.exploitations ?? []).filter(previous =>
+    const matchingPrevious = (previousManifest?.exploitations ?? []).filter(previous =>
       (remapped.get(previous.pointId) ?? previous.pointId) === record.pointId
       && (remapped.get(previous.declarantId) ?? previous.declarantId) === record.declarantId)
+    let previous
+    try {
+      const anchors = new Map()
+      for (const item of matchingPrevious) {
+        const id = canonical.exploitation(item.id, item.sourceId)
+        // Two historical records explicitly merged into one exploitation are a
+        // single anchor. Prefer the surviving record and its import identity.
+        if (!anchors.has(id) || item.id === id) anchors.set(id, {...item, id})
+      }
+      previous = [...anchors.values()]
+    } catch (error) {
+      if (!error.message.startsWith('IMPORT_ALIAS_')) throw error
+      blocked.add(beforeId)
+      result.issues.push({code: error.message, source: {kind: 'exploitations', id: beforeId}})
+      continue
+    }
     const siblings = result.exploitations.filter(item => (remapped.get(item.pointId) ?? item.pointId) === record.pointId
       && (remapped.get(item.declarantId) ?? item.declarantId) === record.declarantId)
     const exact = previous.filter(previous => clean(previous.countingCode) === clean(record.countingCode))
-    const anchor = previous.find(previous => previous.id === beforeId)
+    const aliasAnchor = previous.find(previous => previous.id === canonicalId)
+      ?? previous.find(previous => previous.id === beforeId)
+    const anchor = aliasAnchor
       ?? (exact.length === 1 ? exact[0] : previous.length === 1 && siblings.length === 1 ? previous[0] : null)
     if (previous.some(previous => !previous.countingCode) && siblings.length > 1 && !anchor) {
       blocked.add(beforeId)
       result.issues.push({code: 'EXPLOITATION_LEGACY_CODE_AMBIGUOUS', source: {id: beforeId}})
       continue
     }
-    const stored = (live.exploitations ?? []).filter(item => item.id === (anchor?.id ?? beforeId)
+    let anchorId
+    try {
+      anchorId = anchor ? canonical.exploitation(anchor.id, anchor.sourceId) : canonicalId
+      if (canonicalId !== beforeId && canonicalId !== anchorId) throw new Error('IMPORT_ALIAS_CONFLICT')
+    } catch (error) {
+      if (!error.message.startsWith('IMPORT_ALIAS_')) throw error
+      blocked.add(beforeId)
+      result.issues.push({code: error.message, source: {kind: 'exploitations', id: beforeId}})
+      continue
+    }
+    const stored = (live.exploitations ?? []).filter(item => item.id === anchorId
       || (anchor?.sourceId && item.sourceId === anchor.sourceId)
       || (record.sourceId && item.sourceId === record.sourceId))
     if (unique(stored.map(item => item.id)).length > 1) {
@@ -197,16 +275,21 @@ export function preserveManifestIdentities(manifest, {previousManifest, snapshot
       continue
     }
     if (anchor) {
-      record.id = anchor.id
+      record.id = anchorId
       record.key = anchor.key
       record.sourceId = anchor.sourceId
       record.previousCountingCode = anchor.countingCode ?? null
     }
+    if (!anchor) record.id = canonicalId
     if (stored[0]) {
       record.id = stored[0].id
       record.sourceId = stored[0].sourceId ?? record.sourceId
     }
     remapped.set(beforeId, record.id)
+    if (anchor) remapped.set(anchor.id, record.id)
+    for (const item of matchingPrevious) {
+      if (canonical.exploitation(item.id, item.sourceId) === record.id) remapped.set(item.id, record.id)
+    }
   }
   result.exploitations = result.exploitations.filter(record => !blocked.has(record.id))
   result.allocations = result.allocations.filter(record => !blocked.has(record.exploitationId) && !blocked.has(record.compteurId))

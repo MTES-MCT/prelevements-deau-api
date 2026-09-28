@@ -3,6 +3,8 @@ import {validateAllocationSnapshot} from '../../../lib/services/meter-core.js'
 import {digest, stableId, SCOPE, FORMAT_VERSION} from './epidropt.js'
 import {getTransactionTimeoutMs} from './import-options.js'
 import {assertExploitationMultiplicity, normalizeCountingCode} from '../../../lib/services/exploitation-periods.js'
+import {inspectDroptPointZones, synchronizeDroptPointZones} from './point-zones.js'
+import {createImportAliasResolver, IMPORT_ALIAS_PROVIDER, resolvePointImportAlias} from '../../../lib/services/import-aliases.js'
 
 const entityFields = {POINT: 'pointPrelevementId', DECLARANT: 'declarantUserId', METER: 'compteurId'}
 
@@ -15,9 +17,48 @@ export async function referenceIdentity(client, record, kind) {
     {[idField]: record.id},
     ...(record.sourceId ? [{sourceId: record.sourceId}] : [])
   ]}, select: {[idField]: true}})
-  const ids = [...new Set([...references.map(ref => ref[field]), ...candidates.map(candidate => candidate[idField])])]
+  const rawIds = [...references.map(ref => ref[field]), ...candidates.map(candidate => candidate[idField])]
+  let ids = [...new Set(rawIds)]
+  if (kind === 'POINT') {
+    const canonical = await resolvePointImportAlias(client, record.id, {scope: SCOPE})
+    ids = [...new Set(await Promise.all([...ids, ...(canonical !== record.id ? [canonical] : [])]
+      .map(id => resolvePointImportAlias(client, id, {scope: SCOPE}))))]
+  }
   if (ids.length > 1) throw new Error('REFERENCES_INCOMPATIBLES')
-  return {id: ids[0] ?? record.id, imported: references.find(ref => ref.metadata?.imported)?.metadata.imported}
+  const id = ids[0] ?? record.id
+  let imported = references.find(ref => ref.metadata?.imported)?.metadata.imported
+  if (kind === 'POINT') {
+    // A donor's import baseline describes the donor, not the surviving point.
+    // Using it could turn a manual correction of the survivor into an apparent
+    // imported value and overwrite it. Prefer the survivor's own Rives anchor.
+    const ownBaseline = refs => refs.filter(ref => ref.pointPrelevementId === id
+      && ref.metadata?.imported && !ref.metadata?.mergedFromPointId)
+      .sort((left, right) => Number(right.provider === 'rives-et-eaux') - Number(left.provider === 'rives-et-eaux')
+        || `${left.provider}:${left.externalId}:${left.id}`.localeCompare(`${right.provider}:${right.externalId}:${right.id}`))[0]?.metadata.imported
+    imported = ownBaseline(references)
+    // An old manifest may only mention a donor reference; the canonical anchor
+    // is still available on the surviving point after the explicit fusion.
+    if (!imported) imported = ownBaseline(await client.externalReference.findMany({where: {scope: SCOPE, kind, pointPrelevementId: id}}))
+  }
+  return {id, imported}
+}
+
+export async function exploitationIdentity(client, record) {
+  const aliases = await client.externalReference.findMany({where: {scope: SCOPE, kind: 'POINT', provider: {in: [IMPORT_ALIAS_PROVIDER, 'pe-import-retired']}}})
+  if (aliases.some(ref => ref.provider === 'pe-import-retired' && (ref.metadata?.retiredExploitationId === record.id
+    || (record.sourceId && ref.metadata?.retiredExploitationId && ref.metadata.sourceId === record.sourceId)))) {
+    throw new Error('EXPLOITATION_RETIREE')
+  }
+  const canonical = createImportAliasResolver(aliases, {scope: SCOPE})
+  const id = canonical.exploitation(record.id, record.sourceId)
+  const matches = await client.declarantPointPrelevement.findMany({where: {OR: [
+    {id: record.id}, {id}, ...(record.sourceId ? [{sourceId: record.sourceId}] : [])
+  ]}})
+  // A stale live source row is a collision, not permission to collapse two
+  // exploitations: consolidation must have removed it beforehand.
+  if (matches.length > 1) throw new Error('REFERENCES_INCOMPATIBLES')
+  if (id !== record.id && (matches[0]?.id !== id || matches[0]?.deletedAt)) throw new Error('IMPORT_ALIAS_TARGET_MISSING')
+  return matches[0] ?? null
 }
 
 async function recordReferences(client, record, kind, id, imported) {
@@ -44,8 +85,11 @@ function sameCoordinates(left, right) {
     && left.every((value, index) => Number.isFinite(value) && Number.isFinite(right[index]) && Math.abs(value - right[index]) < 1e-10)
 }
 
-async function putPoint(client, record, changes) {
+async function putPoint(client, record, changes, pointZoneDecisions) {
   const identity = await referenceIdentity(client, record, 'POINT')
+  // Serialize edits of the imported point while preserving the fields changed by
+  // a person before this transaction. No lock or update affects unrelated PPs.
+  await client.$queryRaw`SELECT id FROM "PointPrelevement" WHERE id = ${identity.id}::uuid FOR UPDATE`
   const existing = await client.pointPrelevement.findUnique({where: {id: identity.id}})
   const sameName = await client.pointPrelevement.findUnique({where: {name: record.data.name}, select: {id: true}})
   if (sameName && sameName.id !== identity.id) throw new Error('NOM_POINT_EXISTANT_A_RAPPROCHER')
@@ -56,14 +100,15 @@ async function putPoint(client, record, changes) {
   if (!existing || Object.keys(data).length) changes.push({kind: 'points', id: identity.id, action: existing ? 'UPDATED' : 'CREATED', fields: data})
   const stored = await client.$queryRaw`SELECT ST_X(coordinates) AS x, ST_Y(coordinates) AS y FROM "PointPrelevement" WHERE id = ${identity.id}::uuid`
   const previousCoordinates = stored[0]?.x == null || stored[0]?.y == null ? null : [stored[0].x, stored[0].y]
-  if (!existing || (sameCoordinates(previousCoordinates, identity.imported?.coordinates) && !sameCoordinates(previousCoordinates, record.coordinates))) {
+  const coordinatesChanged = !existing || (sameCoordinates(previousCoordinates, identity.imported?.coordinates) && !sameCoordinates(previousCoordinates, record.coordinates))
+  if (coordinatesChanged) {
     changes.push({kind: 'points', id: identity.id, action: 'COORDINATES_UPDATED', before: previousCoordinates, after: record.coordinates})
     const [longitude, latitude] = record.coordinates
     await client.$executeRaw`UPDATE "PointPrelevement" SET coordinates = ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326) WHERE id = ${identity.id}::uuid`
-    const zones = await client.$queryRaw`SELECT z.id FROM "Zone" z JOIN "PointPrelevement" p ON p.id = ${identity.id}::uuid WHERE ST_Intersects(z.coordinates, p.coordinates)`
-    await client.pointPrelevementZone.deleteMany({where: {pointPrelevementId: identity.id}})
-    await client.pointPrelevementZone.createMany({data: zones.map(zone => ({pointPrelevementId: identity.id, zoneId: zone.id})), skipDuplicates: true})
   }
+  await synchronizeDroptPointZones(client, identity.id, {
+    refreshNonSageZones: coordinatesChanged, changes, decisions: pointZoneDecisions
+  })
 
   await recordReferences(client, record, 'POINT', identity.id, {...record.data, coordinates: record.coordinates})
   return identity.id
@@ -98,9 +143,7 @@ async function putDeclarant(client, record, recordedChanges) {
 
 async function putExploitation(client, record, pointId, declarantUserId, changes) {
   if (!pointId || !declarantUserId) throw new Error('DEPENDANCE_NON_IMPORTEE')
-  const matches = await client.declarantPointPrelevement.findMany({where: {OR: [{id: record.id}, {sourceId: record.sourceId}]}})
-  if (matches.length > 1) throw new Error('REFERENCES_INCOMPATIBLES')
-  const existing = matches[0]
+  const existing = await exploitationIdentity(client, record)
   const usage = await client.sandreWaterUse.findUnique({where: {code: record.usageCode}})
   if (!usage) throw new Error('USAGE_ABSENT')
   if (existing) {
@@ -293,14 +336,14 @@ async function applyManifestWithOptions(client, manifest, {apply = false, activa
   effectiveAt = explicitInstant(effectiveAt)
   if (serviceAccountId && !await client.serviceAccount.findUnique({where: {id: serviceAccountId}})) throw new Error('Compte de service absent.')
   if (expectedReport && (expectedReport.manifestHash !== manifestHash || !expectedReport.complete || !expectedReport.planHash)) throw new Error('Simulation de référence incompatible ou incomplète.')
-  const result = {manifestHash, applied: apply, complete: false, counts: {}, changes: [], issues: [...manifest.issues], executionIssues: [], objectIds: {points: [], declarants: [], exploitations: [], meters: []}, mappings: {points: [], declarants: [], exploitations: [], meters: []}}
+  const result = {manifestHash, applied: apply, complete: false, counts: {}, changes: [], pointZoneDecisions: [], issues: [...manifest.issues], executionIssues: [], objectIds: {points: [], declarants: [], exploitations: [], meters: []}, mappings: {points: [], declarants: [], exploitations: [], meters: []}}
   const pointIds = new Map()
   const declarantIds = new Map()
   const exploitationIds = new Map()
   const execute = async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('dropt-referential'), hashtext(${SCOPE}))`
     for (const [kind, rows, fn, idMap] of [
-      ['points', manifest.points, (db, r) => putPoint(db, r, result.changes), pointIds],
+      ['points', manifest.points, (db, r) => putPoint(db, r, result.changes, result.pointZoneDecisions), pointIds],
       ['declarants', manifest.declarants, (db, r) => putDeclarant(db, r, result.changes), declarantIds],
       ['exploitations', manifest.exploitations, (db, r) => putExploitation(db, r, pointIds.get(r.pointId), declarantIds.get(r.declarantId), result.changes), exploitationIds],
       ['meters', manifest.meters, (db, r) => putMeter(db, r, manifest.allocations.filter(a => a.compteurId === r.id), exploitationIds, {activateAt, effectiveAt, serviceAccountId, manifestHash, changes: result.changes, deferReprocessing}), new Map()]
@@ -328,7 +371,7 @@ async function applyManifestWithOptions(client, manifest, {apply = false, activa
       }
     }
 
-    result.planHash = digest({manifestHash, mappings: result.mappings, changes: result.changes,
+    result.planHash = digest({manifestHash, mappings: result.mappings, changes: result.changes, pointZoneDecisions: result.pointZoneDecisions,
       executionIssues: result.executionIssues, activateAt: activateAt?.toISOString() ?? null, effectiveAt: effectiveAt?.toISOString() ?? null,
       serviceAccountId: serviceAccountId ?? null})
     if (expectedReport && result.planHash !== expectedReport.planHash) {
@@ -369,6 +412,7 @@ export async function verifyManifest(client, manifest, {report} = {}) {
   if (report && (report.manifestHash !== manifest.manifestHash || !report.objectIds || !report.mappings)) throw new Error('Rapport incompatible avec le manifeste.')
   const counts = {}
   const issues = []
+  const pointZoneDecisions = []
   const mappings = {points: [], declarants: [], exploitations: [], meters: []}
   const resolved = new Map()
   for (const [kind, model, entityKind, field] of [
@@ -381,12 +425,15 @@ export async function verifyManifest(client, manifest, {report} = {}) {
     for (const record of manifest[kind]) {
       try {
         const id = entityKind ? (await referenceIdentity(client, record, entityKind)).id
-          : (await client[model].findMany({where: {OR: [{id: record.id}, {sourceId: record.sourceId}]}})).reduce((result, row) => {
-            if (result && result !== row.id) throw new Error('REFERENCES_INCOMPATIBLES')
-            return row.id
-          }, null)
+          : (await exploitationIdentity(client, record))?.id
         const entity = id ? await client[model].findUnique({where: {[field]: id}}) : null
         if (!entity || entity.deletedAt) throw new Error('OBJET_ABSENT_OU_SUPPRIME')
+        if (kind === 'points') {
+          const decision = await inspectDroptPointZones(client, id)
+          pointZoneDecisions.push(decision)
+          if (decision.reason === 'SAGE_CANDIDATES_AMBIGUOUS') throw new Error('SAGE_CANDIDATES_AMBIGUOUS')
+          if (decision.removed.length || decision.added.length) throw new Error('SAGE_ZONE_DIFFERENTE')
+        }
         if (entityKind) {
           for (const reference of record.references) {
             const stored = await client.externalReference.findUnique({where: {provider_scope_kind_externalId: {
@@ -423,5 +470,5 @@ export async function verifyManifest(client, manifest, {report} = {}) {
     else issues.push({code: 'AFFECTATION_ABSENTE_OU_DIFFERENTE', source: {kind: 'allocations', id: record.sourceId}})
   }
   return {manifestHash: manifest.manifestHash, counts, mappings, objectIds: Object.fromEntries(Object.entries(mappings).map(([kind, rows]) => [kind, rows.map(row => row.id)])),
-    issues, complete: issues.length === 0 && Object.values(counts).every(({expected, actual}) => expected === actual)}
+    pointZoneDecisions, issues, complete: issues.length === 0 && Object.values(counts).every(({expected, actual}) => expected === actual)}
 }

@@ -2283,6 +2283,40 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DashboardWaterResources'}
         default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/resource-settings:
+    get:
+      tags: [Zones]
+      operationId: getZoneResourceSettings
+      summary: Consulter le type de ressource gérée par un SAGE
+      description: Attribut propre à PE, réservé aux SAGE. Nécessite une session humaine et le droit zone.detail.read. Les autres types de zones sont refusés.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+      responses:
+        '200':
+          description: Type de ressource et capacité de modification
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneResourceSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Zones]
+      operationId: updateZoneResourceSettings
+      summary: Modifier le type de ressource gérée par un SAGE
+      description: Réservé à un administrateur global ou à un gestionnaire actif réunissant zone.agent.create, zone.agent.update et zone.agent.remove, hors impersonation. Ne modifie que cet attribut et ne réaffecte pas automatiquement les points existants.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ZoneResourceSettingsInput'}
+      responses:
+        '200':
+          description: Attribut modifié
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneResourceSettings'}
+        default: {$ref: '#/components/responses/Error'}
   /zones/{zoneId}/monitoring-stations:
     get:
       tags: [Zones]
@@ -2971,6 +3005,7 @@ components:
       in: path
       name: pointId
       required: true
+      description: UUID du point. Un ancien UUID fusionné par un alias PE explicite désigne le point conservé ; ses droits d’accès restent applicables. Un retrait sans cible reste introuvable.
       schema: {$ref: '#/components/schemas/Uuid'}
     SeriesId:
       in: path
@@ -5132,6 +5167,21 @@ components:
               quality: {type: [string, 'null'], description: Qualité opaque fournie par le producteur.}
               origin: {type: [string, 'null']}
               reason: {type: [string, 'null']}
+    ZoneResourceSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [managedResourceType]
+      properties:
+        managedResourceType:
+          type: string
+          enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION, MIXTE]
+          description: Ressource gérée par le SAGE. MIXTE accepte tous les milieux.
+    ZoneResourceSettings:
+      type: object
+      required: [data, canEdit]
+      properties:
+        data: {$ref: '#/components/schemas/ZoneResourceSettingsInput'}
+        canEdit: {type: boolean}
     ZoneMonitoringStationInput:
       type: object
       additionalProperties: false
