@@ -5,7 +5,7 @@ Cette documentation interne décrit les indicateurs de `/stats`. Les explication
 ## Périodes et périmètre
 
 - `month` est un mois terminé au format `AAAA-MM`, entre janvier 1900 et le dernier mois terminé. Par défaut, ce dernier mois est retenu. Le mois courant est déterminé dans le fuseau `Europe/Paris`.
-- Le sélecteur pilote ensemble les déclarations mensuelles par territoire et les canaux de transmission. L’activité et les visiteurs du site vitrine présentent les six derniers mois terminés, indépendamment de ce sélecteur. L’API conserve sa réponse complète par mois, pour compatibilité et réutilisation du cache.
+- Le sélecteur pilote ensemble les déclarations mensuelles par territoire et les canaux de transmission. L’activité et les visiteurs du site institutionnel et de l’application présentent les six derniers mois terminés, indépendamment de ce sélecteur. L’API conserve sa réponse complète par mois, pour compatibilité et réutilisation du cache.
 - Les mois proposés commencent au premier mois de mesure connu ; les mois sans données intermédiaires restent sélectionnables. Le mois demandé reste présent même s’il précède la première mesure.
 - Le référentiel des points, préleveurs et rattachements est le référentiel actuel, pas une photographie historique reconstruite pour chaque mois.
 
@@ -84,15 +84,17 @@ Le champ public `activeUsers` contient six mois (`administration`, `declarants`,
 
 L’ancien champ `connections` est conservé sans changement de calcul pour les consommateurs existants : connexions réussies, rôle de la dernière connexion du mois, premier mois d’audit partiel. Il ne doit pas être présenté comme une mesure complète d’usage réel.
 
-## Visiteurs uniques du site vitrine
+## Visiteurs uniques du site institutionnel et de l’application
 
-`publicVisitors` est indépendant des comptes et de l’activité authentifiée : il mesure les visiteurs uniques mensuels du site `https://partageonsleau.beta.gouv.fr/`, sur les six derniers mois terminés. Le site vitrine et l’application partageant un identifiant Matomo, la requête est segmentée sur le préfixe exact du domaine vitrine (HTTP ou HTTPS, avec le `/` final) ; une visite limitée au domaine de l’application n’est pas retenue. Une personne ayant consulté les deux domaines peut être comptée comme visiteur du site vitrine.
+`publicVisitors` est indépendant des comptes et de l’activité authentifiée. Ses champs historiques `website`, `months` et `fetchedAt` restent limités au site institutionnel `https://partageonsleau.beta.gouv.fr/`, pour les consommateurs existants. Le nouvel objet `combined` contient `websites`, `months` et `fetchedAt` pour le site institutionnel **et** l’application `https://app.partageonsleau.beta.gouv.fr/`.
 
-Le service serveur appelle `VisitsSummary.getUniqueVisitors` avec `period=month`, en regroupant les six requêtes dans un POST `API.getBulkRequest`. Il ne somme ni visiteurs uniques journaliers ni visiteurs uniques par page, et ne substitue pas le nombre de visites. Les mois suivent le fuseau du site configuré dans Matomo. Les statistiques reflètent le suivi reçu par Matomo, pas un décompte certain de personnes physiques.
+Les deux domaines partagent un identifiant Matomo. Pour chaque mois terminé, le service serveur demande les visiteurs uniques de leur **union** via `VisitsSummary.getUniqueVisitors` avec `period=month`. Le segment combine les préfixes exacts des deux domaines par un OU (HTTP et HTTPS, avec le `/` final). Il exclut testing, démo et les domaines ressemblants. Il ne somme ni les visiteurs des deux domaines, ni les visiteurs uniques journaliers ou par page, et ne substitue pas le nombre de visites. La déduplication est celle des identités reconnues par Matomo : ce n’est pas un décompte certain de personnes physiques. Les mois suivent le fuseau du site configuré dans Matomo.
+
+Un POST `API.getBulkRequest` regroupe les douze requêtes : six mois pour le périmètre historique et les mêmes six mois pour l’union. Le front affiche `combined` lorsqu’il est présent ; avec une ancienne API, il conserve la série limitée au site institutionnel. Il ne remplace jamais un total combiné indisponible par le seul chiffre institutionnel. Les textes de la page restent inchangés à la demande produit.
 
 Configuration serveur : `MATOMO_REPORTING_URL` (base HTTPS), `MATOMO_REPORTING_SITE_ID`, `MATOMO_REPORTING_TOKEN` (secret runtime, jamais une variable `NEXT_PUBLIC_*`). Le jeton est envoyé uniquement dans le corps POST ; les redirections sont refusées. Aucun changement du suivi navigateur ni du consentement n’est nécessaire.
 
-La réponse contient `website`, `months: [{month, uniqueVisitors, status}]` et `fetchedAt`. `status` vaut `complete` ou `unavailable`. Une valeur zéro reçue est conservée ; une métrique absente, un refus d’accès, une réponse invalide ou un dépassement du délai de cinq secondes produit `null`/`unavailable`, sans masquer les statistiques métier. Seuls les agrégats explicitement attendus sont exposés, jamais les erreurs Matomo ni les paramètres d’authentification.
+Chaque série contient `months: [{month, uniqueVisitors, status}]` et son propre `fetchedAt`. `status` vaut `complete` ou `unavailable`. Une valeur zéro reçue est conservée ; une métrique absente, un refus d’accès, une réponse invalide ou un dépassement du délai de cinq secondes produit `null`/`unavailable`, sans masquer les statistiques métier. Une erreur limitée à l’un des rapports ne masque pas l’autre. Seuls les agrégats explicitement attendus sont exposés, jamais les erreurs Matomo ni les paramètres d’authentification.
 
 Le cache est limité à une fenêtre de six mois pendant une heure et mutualise les requêtes concurrentes. Une erreur est réessayée après une minute ; le changement de mois ou de configuration invalide ce cache. Il reste indépendant du cache des statistiques métier.
 

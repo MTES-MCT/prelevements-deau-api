@@ -1975,7 +1975,8 @@ paths:
         session persistante. L'historique antérieur à cette collecte est une borne basse incomplète
         issue des connexions réussies ; le mois de démarrage reste partiel. connections conserve
         l'ancien indicateur de connexions réussies pour compatibilité. publicVisitors expose séparément
-        les visiteurs uniques mensuels du seul site vitrine ; son indisponibilité ne bloque pas les données métier.
+        les visiteurs uniques mensuels du site vitrine, et publicVisitors.combined ceux de l’union
+        site institutionnel et application de production ; leur indisponibilité ne bloque pas les données métier.
         Le mois sélectionné s'applique aux territoires et aux canaux, pas aux séries des six derniers mois terminés.
         Les deux découpages
         géographiques ne s'additionnent pas. La méthodologie interne est documentée dans docs/public-stats.md.
@@ -1991,7 +1992,7 @@ paths:
             example: '2026-08'
       responses:
         '200':
-          description: Statistiques agrégées du mois et six mois d'activité, de connexions et de visiteurs du site vitrine
+          description: Statistiques agrégées du mois et six mois d'activité, de connexions et de visiteurs du site et de l’application
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicStatsResponse'}
@@ -3433,6 +3434,17 @@ components:
           type: string
           enum: [available, partial, unavailable]
           description: Les compteurs indisponibles sont null. Le premier mois connu du journal est partiel.
+    PublicVisitorMonth:
+      type: object
+      additionalProperties: false
+      required: [month, uniqueVisitors, status]
+      properties:
+        month: {type: string, example: '2026-08'}
+        uniqueVisitors: {type: [integer, 'null'], minimum: 0}
+        status:
+          type: string
+          enum: [complete, unavailable]
+          description: Indisponible implique un compteur null, jamais un zéro fabriqué.
     PublicStatsResponse:
       type: object
       additionalProperties: false
@@ -3473,21 +3485,32 @@ components:
           properties:
             website: {type: string, format: uri, example: 'https://partageonsleau.beta.gouv.fr/'}
             fetchedAt: {type: [string, 'null'], format: date-time}
+            combined:
+              type: object
+              additionalProperties: false
+              description: >
+                Visiteurs uniques de l’union du site institutionnel et de l’application, calculés par Matomo
+                sur son identifiant de site partagé, jamais par addition des deux audiences.
+                Les champs historiques de publicVisitors restent limités au site institutionnel.
+              required: [websites, months, fetchedAt]
+              properties:
+                websites:
+                  type: array
+                  minItems: 2
+                  maxItems: 2
+                  items: {type: string, format: uri}
+                  example: ['https://partageonsleau.beta.gouv.fr/', 'https://app.partageonsleau.beta.gouv.fr/']
+                fetchedAt: {type: [string, 'null'], format: date-time}
+                months:
+                  type: array
+                  minItems: 6
+                  maxItems: 6
+                  items: {$ref: '#/components/schemas/PublicVisitorMonth'}
             months:
               type: array
               minItems: 6
               maxItems: 6
-              items:
-                type: object
-                additionalProperties: false
-                required: [month, uniqueVisitors, status]
-                properties:
-                  month: {type: string, example: '2026-08'}
-                  uniqueVisitors: {type: [integer, 'null'], minimum: 0}
-                  status:
-                    type: string
-                    enum: [complete, unavailable]
-                    description: Indisponible implique un compteur null, jamais un zéro fabriqué.
+              items: {$ref: '#/components/schemas/PublicVisitorMonth'}
         connections:
           type: object
           additionalProperties: false
