@@ -13,7 +13,7 @@ import {authorizePointPrelevement} from '../../../../lib/auth/middleware.js'
 
 const integration = process.env.DROPT_INTEGRATION_TESTS === '1' ? test.serial : test.skip
 function fixtureRegistry() {
-  return {points: new Set(), users: new Set(), exploitations: new Set(), meters: new Set(), zones: new Set(), accounts: new Set(), batches: new Set()}
+  return {points: new Set(), users: new Set(), exploitations: new Set(), meters: new Set(), zones: new Set(), accounts: new Set(), batches: new Set(), sources: new Set()}
 }
 const owned = fixtureRegistry()
 let databaseValidated = false
@@ -30,6 +30,7 @@ async function cleanupFixtures(ids) {
     await tx.meterVolumeContribution.deleteMany({where: {publication: {compteurId}}})
     await tx.meterPublication.deleteMany({where: {compteurId}})
     await tx.source.deleteMany({where: {id: {in: publications.map(row => row.sourceId)}}})
+    await tx.source.deleteMany({where: {id: {in: [...ids.sources]}}})
     await tx.meterReading.updateMany({where: {compteurId}, data: {currentRevisionId: null}})
     // Test-only, transactional DDL: never commit a disabled immutability guard.
     // Only this transaction can observe the change while its table lock is held.
@@ -358,6 +359,135 @@ integration('code comptage enrichi sans changement d’identité et correction m
   t.true(manual.complete)
   t.true(manual.changes.some(change => change.action === 'PRESERVED_MANUAL_VALUE'))
   t.is((await prisma.declarantPointPrelevement.findUnique({where: {id: original.exploitations[0].id}})).countingCode, '002')
+})
+
+function usageFixture(usageCode = '17') {
+  const manifest = fixture()
+  manifest.meters = []
+  manifest.allocations = []
+  manifest.exploitations[0].usageCode = usageCode
+  return sign(manifest)
+}
+
+function withUsage(manifest, usageCode, previousUsageCode) {
+  const incoming = structuredClone(manifest)
+  Object.assign(incoming.exploitations[0], {usageCode, previousUsageCode})
+  return sign(incoming)
+}
+
+integration('usage importé corrigé avec baseline : simulation, application et rejeu sans toucher les autres volumes', async t => {
+  const unrelated = fixture()
+  const {account} = await activate(unrelated)
+  await ingest(unrelated, account)
+  const existingPublications = await prisma.meterPublication.findMany({where: {compteurId: unrelated.meters[0].id}, orderBy: {id: 'asc'}})
+  const existingChunks = await prisma.chunk.findMany({where: {exploitationId: unrelated.exploitations[0].id}, include: {chunkValues: {orderBy: {id: 'asc'}}}, orderBy: {id: 'asc'}})
+  t.true(existingPublications.length > 0)
+  const original = usageFixture()
+  t.true((await applyManifest(prisma, original, {apply: true})).applied)
+  const id = original.exploitations[0].id
+  const before = await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})
+  const usage = await prisma.sandreWaterUse.findUniqueOrThrow({where: {code: '7'}})
+  const incoming = withUsage(original, '7', '17')
+  const preview = await applyManifest(prisma, incoming)
+  t.true(preview.complete)
+  t.false(preview.applied)
+  t.deepEqual(preview.changes, [{kind: 'exploitations', id, field: 'usageId', action: 'UPDATED',
+    before: before.usageId, after: usage.id, beforeCode: '17', afterCode: '7', removedAutoSecondaryUsageId: before.usageId}])
+  t.deepEqual(await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}}), before)
+  const applied = await applyManifest(prisma, incoming, {apply: true, expectedReport: preview})
+  t.true(applied.applied)
+  t.deepEqual(applied.objectIds.exploitations, [id])
+  const after = await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})
+  t.is(after.usageId, usage.id)
+  t.deepEqual({...after, usageId: before.usageId, updatedAt: before.updatedAt}, before)
+  t.is(await prisma.declarantPointPrelevementSecondaryUsage.count({where: {exploitationId: id}}), 0)
+  const replay = await applyManifest(prisma, incoming, {apply: true})
+  t.true(replay.applied)
+  t.deepEqual(replay.changes, [])
+  t.deepEqual(await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}}), after)
+  t.deepEqual(await prisma.meterPublication.findMany({where: {compteurId: unrelated.meters[0].id}, orderBy: {id: 'asc'}}), existingPublications)
+  t.deepEqual(await prisma.chunk.findMany({where: {exploitationId: unrelated.exploitations[0].id}, include: {chunkValues: {orderBy: {id: 'asc'}}}, orderBy: {id: 'asc'}}), existingChunks)
+})
+
+integration('usage manuel ou baseline inconnue conservés sans modifier l’exploitation', async t => {
+  for (const [currentCode, previousCode, action] of [
+    ['4', '17', 'PRESERVED_MANUAL_VALUE'],
+    ['17', undefined, 'PRESERVED_UNKNOWN_BASELINE'],
+    ['17', 'missing-test-code', 'PRESERVED_UNKNOWN_BASELINE']
+  ]) {
+    const original = usageFixture(currentCode)
+    t.true((await applyManifest(prisma, original, {apply: true})).applied)
+    const id = original.exploitations[0].id
+    const before = await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})
+    const result = await applyManifest(prisma, withUsage(original, '7', previousCode), {apply: true})
+    t.true(result.applied)
+    t.true(result.changes.some(change => change.field === 'usageId' && change.action === action))
+    t.deepEqual(await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}}), before)
+  }
+})
+
+integration('usage avec compteur : correction bloquée, publications et versions intégralement conservées', async t => {
+  const original = fixture()
+  const {account} = await activate(original)
+  await ingest(original, account)
+  const id = original.exploitations[0].id
+  const before = await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})
+  const beforeVersions = await versions(original)
+  const publications = await prisma.meterPublication.findMany({where: {compteurId: original.meters[0].id}, include: {contributions: {orderBy: {id: 'asc'}}}, orderBy: {id: 'asc'}})
+  const result = await applyManifest(prisma, withUsage(original, '7', '2'), {apply: true})
+  t.false(result.applied)
+  t.false(result.complete)
+  t.true(result.executionIssues.some(issue => issue.code === 'USAGE_IMPORT_METER_REVIEW_REQUIRED'))
+  t.deepEqual(await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}}), before)
+  t.deepEqual(await versions(original), beforeVersions)
+  t.deepEqual(await prisma.meterPublication.findMany({where: {compteurId: original.meters[0].id}, include: {contributions: {orderBy: {id: 'asc'}}}, orderBy: {id: 'asc'}}), publications)
+})
+
+integration('usage avec déclaration, même sans lien exploitation historique : correction bloquée et données préservées', async t => {
+  for (const legacy of [false, true]) {
+    const original = usageFixture()
+    t.true((await applyManifest(prisma, original, {apply: true})).applied)
+    const id = original.exploitations[0].id
+    const existing = await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})
+    const source = await prisma.source.create({data: {type: 'API'}})
+    owned.sources.add(source.id)
+    const chunk = await prisma.chunk.create({data: {sourceId: source.id,
+      pointPrelevementId: original.points[0].id, preleveurUserId: original.declarants[0].id,
+      exploitationId: legacy ? null : id, usageId: existing.usageId,
+      minDate: new Date('2026-01-01Z'), maxDate: new Date('2026-02-01Z'),
+      chunkValues: {create: {metricTypeCode: 'volume', unit: 'm³', frequency: 'irregular',
+        periodStart: new Date('2026-01-01Z'), periodEnd: new Date('2026-02-01Z'), valueKind: 'DECLARED', value: '123'}}
+    }, include: {chunkValues: true}})
+    const result = await applyManifest(prisma, withUsage(original, '7', '17'), {apply: true})
+    t.false(result.applied)
+    t.true(result.executionIssues.some(issue => issue.code === 'USAGE_IMPORT_DECLARATION_REVIEW_REQUIRED'))
+    t.deepEqual(await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}}), existing)
+    t.deepEqual(await prisma.chunk.findUniqueOrThrow({where: {id: chunk.id}, include: {chunkValues: true}}), chunk)
+  }
+})
+
+integration('usages secondaires et correction entre simulation et application sont protégés', async t => {
+  const original = usageFixture()
+  t.true((await applyManifest(prisma, original, {apply: true})).applied)
+  const id = original.exploitations[0].id
+  const before = await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})
+  const incoming = withUsage(original, '7', '17')
+  const preview = await applyManifest(prisma, incoming)
+  const otherUsage = await prisma.sandreWaterUse.findUniqueOrThrow({where: {code: '4'}})
+  await prisma.declarantPointPrelevement.update({where: {id}, data: {usageId: otherUsage.id}})
+  const rejected = await applyManifest(prisma, incoming, {apply: true, expectedReport: preview})
+  t.false(rejected.applied)
+  t.true(rejected.executionIssues.some(issue => issue.code === 'DRY_RUN_STATE_CHANGED'))
+  t.is((await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})).usageId, otherUsage.id)
+  await prisma.declarantPointPrelevement.update({where: {id}, data: {usageId: before.usageId}})
+  // The compatibility trigger keeps the manually selected real usage as a
+  // secondary after restoring the primary. The import must leave it intact.
+  t.is(await prisma.declarantPointPrelevementSecondaryUsage.count({where: {exploitationId: id, usageId: otherUsage.id}}), 1)
+  const withSecondary = await applyManifest(prisma, incoming, {apply: true})
+  t.false(withSecondary.applied)
+  t.true(withSecondary.executionIssues.some(issue => issue.code === 'USAGE_IMPORT_SECONDARY_USAGES_REVIEW_REQUIRED'))
+  t.is((await prisma.declarantPointPrelevement.findUniqueOrThrow({where: {id}})).usageId, before.usageId)
+  t.is(await prisma.declarantPointPrelevementSecondaryUsage.count({where: {exploitationId: id, usageId: otherUsage.id}}), 1)
 })
 
 integration('une différence entre simulation et application annule le lot au lieu d’ignorer la dérive', async t => {

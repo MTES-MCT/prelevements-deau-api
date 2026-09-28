@@ -71,7 +71,7 @@ try {
     // Keep every reviewed mapping even when refreshing the convenient latest file.
     await writePrivate(path.join(base, `mapping/manifests/${manifest.manifestHash}.json`), manifest)
     await writePrivate(manifestPath, manifest)
-    console.log(JSON.stringify({manifestHash: manifest.manifestHash, counts: Object.fromEntries(['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].map(key => [key, manifest[key].length]))}))
+    console.log(JSON.stringify({source: inputs.epidropt, manifestHash: manifest.manifestHash, counts: Object.fromEntries(['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].map(key => [key, manifest[key].length]))}))
   } else {
     if (!['local', 'testing'].includes(values.target)) throw new Error('Cible explicite local ou testing obligatoire ; production interdite.')
     if (['review', 'rebuild', 'recompute-rebuild'].includes(operation) && values.target !== 'testing') throw new Error('La correction en ligne est réservée à testing.')

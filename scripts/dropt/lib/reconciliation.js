@@ -280,6 +280,9 @@ export function preserveManifestIdentities(manifest, {previousManifest, snapshot
       record.sourceId = anchor.sourceId
       record.previousCountingCode = anchor.countingCode ?? null
     }
+    // Only the previous import is a baseline: never infer it from the live
+    // usage, which may have been corrected manually since that import.
+    record.previousUsageCode = anchor?.usageCode ?? null
     if (!anchor) record.id = canonicalId
     if (stored[0]) {
       record.id = stored[0].id

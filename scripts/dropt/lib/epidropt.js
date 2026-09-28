@@ -157,11 +157,13 @@ function referenceMap(rows, toRecord, sheet, conflictCode, issue) {
   return {entries, conflicts}
 }
 
-const usageCodes = {irrigation: '2', domestique: '17', aep: '5', 'alimentation en eau potable': '5', aquaculture: '3B', industrie: '4'}
+const usageCodes = {irrigation: '2', domestique: '17', aep: '5', 'alimentation en eau potable': '5', aquaculture: '3B', industrie: '4', loisirs: '7'}
 const waterBodyTypes = {'eau de surface': 'SUPERFICIELLE', 'eau souterraine': 'SOUTERRAIN'}
 const nullable = value => clean(value) || null
 const missingValues = new Set(['', 'non renseigne', 'non renseignee', 'non concerne', 'non concernee', 'sans objet', 'n/a', '#n/a', 'inconnu', '?', '-'])
 const missing = value => missingValues.has(normalized(value))
+// This source marker only concerns the declarant reference, never other fields.
+const missingDeclarantReference = value => missing(value) || normalized(value) === 'pas de mail'
 const booleanValue = value => ({oui: true, non: false, true: true, false: false})[normalized(value)]
 const identifierFields = [[11, 'waterAgencyInternalIdentifier'], [19, 'codeBSS'], [20, 'codeBNPE'], [21, 'codeAIOT'],
   [22, 'codeEUMasseDEau'], [23, 'codePTP'], [25, 'codeOPR'], [26, 'codeBDLISA'], [27, 'codeBDCarthage'],
@@ -412,7 +414,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     if (/^\d{14}$/.test(siret)) for (const owner of declarantsBySiret.get(siret) ?? []) owners.add(owner.key)
     const override = overrides.exploitations?.[digest(v)] ?? {}
     let ownerKey = override.declarantKey ?? (owners.size === 1 ? [...owners][0] : null)
-    if (!ownerKey && missing(v[2]) && !missing(declarantName) && !override.skip) {
+    if (!ownerKey && missingDeclarantReference(v[2]) && !missing(declarantName) && !override.skip) {
       const name = normalized(declarantName)
       const sourceMatches = declarantSourcesByName.get(name) ?? []
       const candidateKeys = [...new Set(sourceMatches.map(item => item.key))]

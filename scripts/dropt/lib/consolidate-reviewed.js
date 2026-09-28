@@ -7,6 +7,7 @@ const RETIREMENT_PROVIDER = 'pe-import-retired'
 const RESET_PROVIDER = 'pe-import-reset'
 const POINT_PREFIX = 'dropt-epidropt:point:'
 const EXPLOITATION_PREFIX = 'dropt-epidropt:exploitation:'
+const CAMPAIGN_SOURCE_ID = 'dropt-epidropt:campaign:index-needs:2026-2027'
 const uuidPattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 const unique = values => [...new Set(values)].sort()
 const ids = rows => rows.map(row => row.id)
@@ -16,13 +17,14 @@ const requireCondition = (condition, code) => { if (!condition) throw new Error(
 const emptyInventory = () => Object.fromEntries([
   'points', 'exploitations', 'zones', 'references', 'meters', 'allocations', 'versions', 'streams', 'publications',
   'sources', 'chunks', 'contributions', 'values', 'replacements', 'documents', 'documentLinks',
-  'rules', 'connectors', 'responses', 'collecteurs', 'secondaryUsages'
+  'rules', 'connectors', 'responses', 'campaigns', 'collecteurs', 'secondaryUsages'
 ].map(key => [key, []]))
 
 export function normalizeReviewedConsolidationPlan(plan) {
   requireCondition(plan?.scope === SCOPE, 'CONSOLIDATION_SCOPE_INVALID')
   requireCondition(Array.isArray(plan.merges ?? []) && Array.isArray(plan.retirePointIds ?? [])
-    && Array.isArray(plan.retireExploitationIds ?? []) && Array.isArray(plan.resetMeterIds ?? []), 'CONSOLIDATION_PLAN_INVALID')
+    && Array.isArray(plan.retireExploitationIds ?? []) && Array.isArray(plan.resetMeterIds ?? [])
+    && Array.isArray(plan.retireEmptyCampaignResponseIds ?? []), 'CONSOLIDATION_PLAN_INVALID')
   const checkId = value => {
     requireCondition(typeof value === 'string' && uuidPattern.test(value), 'CONSOLIDATION_UUID_REQUIRED')
     return value.toLowerCase()
@@ -35,6 +37,7 @@ export function normalizeReviewedConsolidationPlan(plan) {
   const retirePointIds = unique((plan.retirePointIds ?? []).map(checkId))
   const retireExploitationIds = unique((plan.retireExploitationIds ?? []).map(checkId))
   const resetMeterIds = unique((plan.resetMeterIds ?? []).map(checkId))
+  const retireEmptyCampaignResponseIds = unique((plan.retireEmptyCampaignResponseIds ?? []).map(checkId))
   const sources = merges.map(item => item.sourcePointId)
   requireCondition(unique(sources).length === sources.length, 'CONSOLIDATION_SOURCE_REPEATED')
   requireCondition(merges.every(item => item.sourcePointId !== item.targetPointId
@@ -45,7 +48,9 @@ export function normalizeReviewedConsolidationPlan(plan) {
     && exploitationMerges.every(item => item.sourceId !== item.targetId && !retireExploitationIds.includes(item.sourceId)
       && !retireExploitationIds.includes(item.targetId) && !exploitationMerges.some(other => other.sourceId === item.targetId)),
   'CONSOLIDATION_EXPLOITATION_MAPPING_CONFLICT')
-  return {scope: SCOPE, merges, retirePointIds, retireExploitationIds, resetMeterIds, discardMeterVolumes: plan.discardMeterVolumes === true}
+  // Preserve the digest of plans already recorded in the meter reset ledger.
+  return {scope: SCOPE, merges, retirePointIds, retireExploitationIds, resetMeterIds, discardMeterVolumes: plan.discardMeterVolumes === true,
+    ...(retireEmptyCampaignResponseIds.length ? {retireEmptyCampaignResponseIds} : {})}
 }
 
 function decimalVolume(values) {
@@ -68,6 +73,16 @@ const isResetMarker = reference => reference.provider === RESET_PROVIDER && refe
   && reference.kind === 'METER' && reference.externalId === `${reference.metadata?.planHash}:${reference.compteurId}`
   && /^[\da-f]{64}$/.test(reference.metadata?.planHash ?? '')
 
+function canRetireEmptyCampaignResponse(response, exploitation, campaign) {
+  return response.preleveurUserId === exploitation?.declarantUserId
+    && campaign?.sourceId === CAMPAIGN_SOURCE_ID && campaign.type === 'DROPT_INDEX_NEEDS_2026_2027'
+    && ['DRAFT', 'OPEN'].includes(campaign.status) && campaign.closedAt === null
+    && response.revision === 0 && response.publicationStatus === 'NOT_SUBMITTED'
+    && Array.isArray(response.publicationIssues) && response.publicationIssues.length === 0
+    && ['draftData', 'submittedData', 'submittedHash', 'firstSubmittedAt', 'lastSubmittedAt', 'declarationId']
+      .every(field => response[field] === null)
+}
+
 // Pure planning: reports contain identifiers/counts/hashes, never row payloads.
 export function planReviewedConsolidation(plan, suppliedInventory) {
   plan = normalizeReviewedConsolidationPlan(plan)
@@ -78,7 +93,7 @@ export function planReviewedConsolidation(plan, suppliedInventory) {
   const block = (code, details = {}) => blocked.push({code, ...details})
   const pointById = new Map(inventory.points.map(point => [point.id, point]))
   const exploitationById = new Map(inventory.exploitations.map(item => [item.id, item]))
-  const actions = {merges: [], retirePointIds: [], moveExploitations: [], mergeExploitations: [], retireExploitationIds: [], resetMeterIds: []}
+  const actions = {merges: [], retirePointIds: [], moveExploitations: [], mergeExploitations: [], retireExploitationIds: [], resetMeterIds: [], retireEmptyCampaignResponseIds: []}
   const checkPoint = (point, id) => {
     if (!point) block('POINT_MISSING', {id})
     else if (!point.sourceId?.startsWith(POINT_PREFIX)) block('POINT_OUTSIDE_DROPT_IMPORT', {id})
@@ -151,9 +166,33 @@ export function planReviewedConsolidation(plan, suppliedInventory) {
   for (const id of changedExploitationIds) {
     if (!exploitationById.get(id)?.sourceId?.startsWith(EXPLOITATION_PREFIX)) block('EXPLOITATION_OUTSIDE_DROPT_IMPORT', {id})
   }
+  for (const id of plan.retireEmptyCampaignResponseIds ?? []) {
+    const response = inventory.responses.find(item => item.id === id)
+    if (!response) {
+      const previouslyRetired = plan.retireExploitationIds.some(exploitationId => {
+        const marker = retirementFor(inventory.references, `exploitation:${exploitationId}`)
+        return !exploitationById.has(exploitationId) && marker?.metadata?.planHash === planHash
+          && marker.metadata.retiredExploitationId === exploitationId
+          && Array.isArray(marker.metadata.retiredEmptyCampaignResponseIds)
+          && marker.metadata.retiredEmptyCampaignResponseIds.includes(id)
+      })
+      if (!previouslyRetired) block('EMPTY_CAMPAIGN_RESPONSE_MISSING_WITHOUT_RETIREMENT', {id})
+      continue
+    }
+    if (!plan.retireExploitationIds.includes(response.exploitationId)
+      || !actions.retireExploitationIds.includes(response.exploitationId)) {
+      block('EMPTY_CAMPAIGN_RESPONSE_OUTSIDE_EXPLICIT_RETIREMENT', {id})
+    } else if (!canRetireEmptyCampaignResponse(response, exploitationById.get(response.exploitationId),
+      inventory.campaigns.find(item => item.id === response.campaignId))) {
+      block('CAMPAIGN_RESPONSE_NOT_EMPTY_OR_OUTSIDE_DROPT', {id})
+    } else if (retirementFor(inventory.references, `exploitation:${response.exploitationId}`)) {
+      block('EMPTY_CAMPAIGN_RESPONSE_RETIREMENT_CONFLICT', {id})
+    } else actions.retireEmptyCampaignResponseIds.push(id)
+  }
   for (const [key, field] of [['documents', 'declarantPointPrelevementId'], ['documentLinks', 'declarantPointPrelevementId'],
     ['rules', 'declarantPointPrelevementId'], ['connectors', 'declarantPointPrelevementId'], ['responses', 'exploitationId']]) {
-    const count = inventory[key].filter(item => changedExploitationIds.includes(item[field])).length
+    const count = inventory[key].filter(item => changedExploitationIds.includes(item[field])
+      && (key !== 'responses' || !actions.retireEmptyCampaignResponseIds.includes(item.id))).length
     if (count) block(`DEPENDENCY_${key.toUpperCase()}`, {count})
   }
   const retiredAccess = inventory.collecteurs.filter(item => actions.retireExploitationIds.includes(item.exploitationId))
@@ -233,6 +272,7 @@ export function planReviewedConsolidation(plan, suppliedInventory) {
       exploitationsMoved: actions.moveExploitations.length, exploitationsMerged: actions.mergeExploitations.length,
       exploitationsRetired: actions.retireExploitationIds.length, metersPaused: meterIds.length,
       collectorLinksDeleted: retiredAccess.length, metersReset: actions.resetMeterIds.length,
+      emptyCampaignResponsesDeleted: actions.retireEmptyCampaignResponseIds.length,
       metersResetAlreadyApplied: plan.resetMeterIds.length - actions.resetMeterIds.length,
       allocationsReset: resetAllocationIds.length,
       allocationVersionsReset: inventory.versions.filter(item => resetAllocationIds.includes(item.allocationId)).length,
@@ -298,9 +338,13 @@ async function loadInventory(tx, plan) {
     ['documentLinks', 'resourceDocumentExploitation', {declarantPointPrelevementId: inIds(changedIds)}],
     ['rules', 'resourceRuleExploitation', {declarantPointPrelevementId: inIds(changedIds)}],
     ['connectors', 'declarantPointPrelevementConnector', {declarantPointPrelevementId: inIds(changedIds)}],
-    ['responses', 'collectionResponse', {exploitationId: inIds(changedIds)}],
+    ['responses', 'collectionResponse', {OR: [{exploitationId: inIds(changedIds)}, {id: inIds(plan.retireEmptyCampaignResponseIds ?? [])}]}],
     ['collecteurs', 'declarantCollecteurExploitation', {exploitationId: inIds(allExploitationIds)}]
   ]) inventory[key] = await tx[model].findMany({where, orderBy: {id: 'asc'}})
+  if (inventory.responses.length) inventory.campaigns = await tx.collectionCampaign.findMany({
+    where: {id: inIds(unique(inventory.responses.map(item => item.campaignId)))}, orderBy: {id: 'asc'},
+    select: {id: true, sourceId: true, type: true, status: true, closedAt: true}
+  })
   inventory.secondaryUsages = await tx.declarantPointPrelevementSecondaryUsage.findMany({where: {exploitationId: inIds(allExploitationIds)}, orderBy: [{exploitationId: 'asc'}, {usageId: 'asc'}]})
   const sourceIds = inventory.publications.map(item => item.sourceId)
   inventory.sources = await tx.source.findMany({where: {id: inIds(sourceIds)}, orderBy: {id: 'asc'}})
@@ -335,6 +379,13 @@ export async function consolidateReviewedInTransaction(tx, plan, {target, expect
   await tx.$executeRaw`SET LOCAL lock_timeout = '10s'`
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('dropt-referential'), hashtext(${SCOPE}))`
   const beforeLocks = await loadInventory(tx, plan)
+  // Campaign submissions lock campaign -> response -> meter -> point. Keep the
+  // same order, then recheck the empty response while all these locks are held.
+  const campaignIds = ids(beforeLocks.campaigns)
+  for (const id of campaignIds) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('collection-campaign'), hashtext(${id}))`
+  await tx.$queryRaw`SELECT id FROM "CollectionCampaign" WHERE id = ANY(${campaignIds}::uuid[]) ORDER BY id FOR UPDATE`
+  const responseIds = ids(beforeLocks.responses)
+  await tx.$queryRaw`SELECT id FROM "CollectionResponse" WHERE id = ANY(${responseIds}::uuid[]) ORDER BY id FOR UPDATE`
   const lockedMeters = unique([...beforeLocks.allocations.map(item => item.compteurId), ...plan.resetMeterIds])
   for (const id of lockedMeters) await lockMeter(tx, id)
   await tx.$queryRaw`SELECT id FROM "Compteur" WHERE id = ANY(${lockedMeters}::uuid[]) ORDER BY id FOR UPDATE`
@@ -361,6 +412,7 @@ export async function consolidateReviewedInTransaction(tx, plan, {target, expect
   ]) await tx.$queryRawUnsafe(`SELECT 1 FROM "${table}" WHERE ${predicate} ORDER BY ${orderBy} FOR UPDATE`, values)
   const inventory = await loadInventory(tx, plan)
   requireCondition(inventory.allocations.every(item => lockedMeters.includes(item.compteurId)), 'CONSOLIDATION_SCOPE_CHANGED_RETRY')
+  requireCondition(inventory.responses.every(item => responseIds.includes(item.id) && campaignIds.includes(item.campaignId)), 'CONSOLIDATION_SCOPE_CHANGED_RETRY')
   const report = planReviewedConsolidation(plan, inventory)
   requireCondition(report.complete, `CONSOLIDATION_BLOCKED:${unique(report.blocked.map(item => item.code)).join(',')}`)
   requireCondition(report.stateHash === expectedReport.stateHash, 'CONSOLIDATION_STATE_CHANGED_SINCE_REVIEW')
@@ -368,6 +420,11 @@ export async function consolidateReviewedInTransaction(tx, plan, {target, expect
   const byId = new Map(inventory.exploitations.map(item => [item.id, item]))
   const mergeTargets = new Map(actions.mergeExploitations.map(item => [item.sourceId, item.targetId]))
   const retiredIds = new Set(actions.retireExploitationIds)
+  if (actions.retireEmptyCampaignResponseIds.length) {
+    const deleted = await tx.collectionResponse.deleteMany({where: {id: inIds(actions.retireEmptyCampaignResponseIds),
+      exploitationId: inIds(actions.retireExploitationIds), revision: 0, publicationStatus: 'NOT_SUBMITTED'}})
+    requireCondition(deleted.count === actions.retireEmptyCampaignResponseIds.length, 'EMPTY_CAMPAIGN_RESPONSE_CHANGED')
+  }
   if (report.meterIds.length) await tx.meterStream.updateMany({where: {compteurId: inIds(report.meterIds)}, data: {enabled: false}})
   if (actions.resetMeterIds.length) await tx.meterStream.updateMany({where: {compteurId: inIds(actions.resetMeterIds)},
     data: {enabled: false, activatedAt: null, allocationSnapshotValidated: false, allocationSnapshot: []}})
@@ -400,8 +457,11 @@ export async function consolidateReviewedInTransaction(tx, plan, {target, expect
   }
   for (const id of actions.retireExploitationIds) {
     const row = byId.get(id)
+    const retiredEmptyCampaignResponseIds = inventory.responses.filter(item => item.exploitationId === id
+      && actions.retireEmptyCampaignResponseIds.includes(item.id)).map(item => item.id)
     await marker(tx, {provider: RETIREMENT_PROVIDER, externalId: `exploitation:${id}`, pointPrelevementId: row.pointPrelevementId,
-      metadata: {planHash: report.planHash, sourceId: row.sourceId, retiredExploitationId: id}})
+      metadata: {planHash: report.planHash, sourceId: row.sourceId, retiredExploitationId: id,
+        ...(retiredEmptyCampaignResponseIds.length ? {retiredEmptyCampaignResponseIds} : {})}})
   }
   await tx.declarantPointPrelevement.deleteMany({where: {id: inIds([...mergeTargets.keys(), ...retiredIds])}})
   for (const move of actions.moveExploitations) {

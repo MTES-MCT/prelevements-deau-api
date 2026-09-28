@@ -1,5 +1,5 @@
 import test from 'ava'
-import {stableId} from '../epidropt.js'
+import {digest, stableId} from '../epidropt.js'
 import {normalizeReviewedConsolidationPlan, planReviewedConsolidation, inspectReviewedConsolidation, consolidateReviewedInTransaction} from '../consolidate-reviewed.js'
 
 const id = label => stableId(`reviewed-synthetic:${label}`)
@@ -38,6 +38,18 @@ function withMeter(input) {
   input.inventory.values = [{id: id('value'), chunkId: id('chunk')}]
   input.inventory.contributions = [{id: id('contribution'), publicationId: id('publication'), allocationVersionId: id('version'),
     chunkValueId: id('value'), volume: '12.3456'}]
+  return input
+}
+
+function withEmptyCampaignResponse(input) {
+  input.plan.merges = []
+  input.plan.retireExploitationIds = [id('source-exploitation')]
+  input.plan.retireEmptyCampaignResponseIds = [id('empty-response')]
+  input.inventory.campaigns = [{id: id('campaign'), sourceId: 'dropt-epidropt:campaign:index-needs:2026-2027',
+    type: 'DROPT_INDEX_NEEDS_2026_2027', status: 'OPEN', closedAt: null}]
+  input.inventory.responses = [{id: id('empty-response'), campaignId: id('campaign'), exploitationId: id('source-exploitation'),
+    preleveurUserId: id('owner'), draftData: null, submittedData: null, submittedHash: null, revision: 0,
+    firstSubmittedAt: null, lastSubmittedAt: null, declarationId: null, publicationStatus: 'NOT_SUBMITTED', publicationIssues: []}]
   return input
 }
 
@@ -145,6 +157,72 @@ test('documents, règles, connecteurs et réponse de campagne même vide sont bl
     input.inventory[key] = [{id: id(key), [field]: id('source-exploitation')}]
     t.true(hasBlock(review(input), `DEPENDENCY_${key.toUpperCase()}`))
   }
+})
+
+test('seule une inscription vierge explicitement autorisée peut accompagner le retrait de son exploitation', t => {
+  const input = withEmptyCampaignResponse(fixture())
+  const report = review(input)
+  t.true(report.complete)
+  t.is(report.counts.emptyCampaignResponsesDeleted, 1)
+  t.deepEqual(report.actions.retireEmptyCampaignResponseIds, [id('empty-response')])
+  delete input.plan.retireEmptyCampaignResponseIds
+  t.true(hasBlock(review(input), 'DEPENDENCY_RESPONSES'))
+})
+
+test('une réponse même partiellement saisie, soumise ou incohérente reste bloquante', t => {
+  const invalidFields = {draftData: {}, submittedData: {}, submittedHash: 'saved', revision: 1,
+    firstSubmittedAt: '2026-09-28T00:00:00Z', lastSubmittedAt: '2026-09-28T00:00:00Z', declarationId: id('declaration'),
+    publicationStatus: 'PENDING_REVIEW', publicationIssues: [{code: 'SYNTHETIC'}], preleveurUserId: id('other-owner')}
+  for (const [field, value] of Object.entries(invalidFields)) {
+    const input = withEmptyCampaignResponse(fixture())
+    input.inventory.responses[0][field] = value
+    const report = review(input)
+    t.true(hasBlock(report, 'CAMPAIGN_RESPONSE_NOT_EMPTY_OR_OUTSIDE_DROPT'), field)
+    t.true(hasBlock(report, 'DEPENDENCY_RESPONSES'), field)
+    t.is(report.counts.emptyCampaignResponsesDeleted, 0)
+  }
+  const missing = withEmptyCampaignResponse(fixture())
+  delete missing.inventory.responses[0].submittedHash
+  t.true(hasBlock(review(missing), 'CAMPAIGN_RESPONSE_NOT_EMPTY_OR_OUTSIDE_DROPT'))
+})
+
+test('une campagne étrangère, close ou archivée ne peut pas bénéficier de l’exception', t => {
+  for (const [field, value] of [['sourceId', 'another-campaign'], ['type', 'OTHER_TYPE'], ['status', 'ARCHIVED'], ['closedAt', '2026-09-28T00:00:00Z']]) {
+    const input = withEmptyCampaignResponse(fixture())
+    input.inventory.campaigns[0][field] = value
+    t.true(hasBlock(review(input), 'CAMPAIGN_RESPONSE_NOT_EMPTY_OR_OUTSIDE_DROPT'), String(field))
+  }
+})
+
+test('une fusion ou un retrait de PP ne vaut pas autorisation de supprimer une réponse', t => {
+  const input = withEmptyCampaignResponse(fixture())
+  input.plan.retireExploitationIds = []
+  input.plan.retirePointIds = [id('source')]
+  t.true(hasBlock(review(input), 'EMPTY_CAMPAIGN_RESPONSE_OUTSIDE_EXPLICIT_RETIREMENT'))
+  input.plan.retirePointIds = []
+  input.plan.merges = [{sourcePointId: id('source'), targetPointId: id('target')}]
+  t.true(hasBlock(review(input), 'EMPTY_CAMPAIGN_RESPONSE_OUTSIDE_EXPLICIT_RETIREMENT'))
+})
+
+test('une réponse absente sans preuve de retrait ne devient pas un faux rejeu', t => {
+  const input = withEmptyCampaignResponse(fixture())
+  input.inventory.responses = []
+  t.true(hasBlock(review(input), 'EMPTY_CAMPAIGN_RESPONSE_MISSING_WITHOUT_RETIREMENT'))
+})
+
+test('l’option de retrait des réponses ne modifie jamais l’empreinte des anciens plans si elle est vide', t => {
+  const {plan} = fixture()
+  const historical = {scope: 'epidropt', merges: [{...plan.merges[0], exploitationMerges: []}],
+    retirePointIds: [], retireExploitationIds: [], resetMeterIds: [], discardMeterVolumes: true}
+  for (const option of [{}, {retireEmptyCampaignResponseIds: []}]) {
+    const normalized = normalizeReviewedConsolidationPlan({...plan, ...option})
+    t.deepEqual(normalized, historical)
+    t.is(digest(normalized), digest(historical))
+    t.false(Object.hasOwn(normalized, 'retireEmptyCampaignResponseIds'))
+  }
+  t.throws(() => normalizeReviewedConsolidationPlan({...plan, retireEmptyCampaignResponseIds: ['ALL']}), {message: 'CONSOLIDATION_UUID_REQUIRED'})
+  t.throws(() => normalizeReviewedConsolidationPlan({...plan, retireEmptyCampaignResponseIds: id('response')}), {message: 'CONSOLIDATION_PLAN_INVALID'})
+  t.deepEqual(normalizeReviewedConsolidationPlan({...plan, retireEmptyCampaignResponseIds: [id('response').toUpperCase(), id('response')]}).retireEmptyCampaignResponseIds, [id('response')])
 })
 
 test('deux exploitations équivalentes ne fusionnent qu’avec un mapping explicite', t => {
@@ -274,7 +352,7 @@ function fakeDatabase(inventory) {
     meterStream: 'streams', meterPublication: 'publications', source: 'sources', chunk: 'chunks', chunkValue: 'values',
     meterVolumeContribution: 'contributions', chunkValueReplacement: 'replacements', resourceDocument: 'documents',
     resourceDocumentExploitation: 'documentLinks', resourceRuleExploitation: 'rules', declarantPointPrelevementConnector: 'connectors',
-    collectionResponse: 'responses', declarantCollecteurExploitation: 'collecteurs', declarantPointPrelevementSecondaryUsage: 'secondaryUsages'
+    collectionResponse: 'responses', collectionCampaign: 'campaigns', declarantCollecteurExploitation: 'collecteurs', declarantPointPrelevementSecondaryUsage: 'secondaryUsages'
   }).map(([model, key]) => [model, structuredClone(inventory[key] ?? [])]))
   const writes = []
   const sql = []
@@ -462,6 +540,75 @@ test('retirer explicitement une exploitation supprime ses seuls liens collecteur
   t.is(replay.counts.exploitationsRetired, 0)
 })
 
+test('retirer l’inscription vierge est verrouillé, tracé et rejouable sans toucher les autres réponses', async t => {
+  const input = withEmptyCampaignResponse(fixture())
+  input.inventory.exploitations.push(exploitation('target-exploitation', id('target')))
+  const kept = {...input.inventory.responses[0], id: id('kept-response'), exploitationId: id('target-exploitation'),
+    draftData: {comment: 'Réponse synthétique à conserver'}, revision: 1}
+  input.inventory.responses.push(kept)
+  const db = fakeDatabase(input.inventory)
+  const expectedReport = await inspectReviewedConsolidation(db.tx, input.plan, {target: 'testing'})
+  const result = await consolidateReviewedInTransaction(db.tx, input.plan, {target: 'testing', expectedReport})
+  t.is(result.counts.emptyCampaignResponsesDeleted, 1)
+  t.deepEqual(db.tables.collectionResponse, [kept])
+  t.deepEqual(db.tables.collectionCampaign, input.inventory.campaigns)
+  const marker = db.tables.externalReference.find(item => item.provider === 'pe-import-retired')
+  t.deepEqual(marker.metadata.retiredEmptyCampaignResponseIds, [id('empty-response')])
+  t.is(marker.metadata.retiredExploitationId, id('source-exploitation'))
+  t.is(marker.metadata.planHash, expectedReport.planHash)
+  t.true(db.writes.indexOf('collectionResponse.deleteMany') < db.writes.indexOf('declarantPointPrelevement.deleteMany'))
+  const responseLock = db.sql.findIndex(query => query.includes('FROM "CollectionResponse"') && query.includes('FOR UPDATE'))
+  const pointLock = db.sql.findIndex(query => query.includes('FROM "PointPrelevement"') && query.includes('FOR UPDATE'))
+  t.true(responseLock >= 0 && responseLock < pointLock)
+  const replay = await inspectReviewedConsolidation(db.tx, input.plan, {target: 'testing'})
+  t.true(replay.complete)
+  t.is(replay.counts.emptyCampaignResponsesDeleted, 0)
+  t.is(replay.counts.exploitationsRetired, 0)
+  const writesBeforeReplay = db.writes.filter(item => item === 'collectionResponse.deleteMany').length
+  await consolidateReviewedInTransaction(db.tx, input.plan, {target: 'testing', expectedReport: replay})
+  t.is(db.writes.filter(item => item === 'collectionResponse.deleteMany').length, writesBeforeReplay)
+  t.deepEqual(db.tables.collectionResponse, [kept])
+  marker.metadata.retiredEmptyCampaignResponseIds = []
+  const missingLedger = await inspectReviewedConsolidation(db.tx, input.plan, {target: 'testing'})
+  t.true(hasBlock(missingLedger, 'EMPTY_CAMPAIGN_RESPONSE_MISSING_WITHOUT_RETIREMENT'))
+})
+
+test('une saisie concurrente avant le verrou de réponse annule le retrait avant toute écriture', async t => {
+  const input = withEmptyCampaignResponse(fixture())
+  const db = fakeDatabase(input.inventory)
+  const expectedReport = await inspectReviewedConsolidation(db.tx, input.plan, {target: 'testing'})
+  const query = db.tx.$queryRaw
+  db.tx.$queryRaw = async (strings, ...parameters) => {
+    if (strings.join('?').includes('FROM "CollectionResponse"')) {
+      db.tables.collectionResponse[0].draftData = {comment: 'Saisie concurrente synthétique'}
+      db.tables.collectionResponse[0].revision = 1
+    }
+    return query(strings, ...parameters)
+  }
+  await t.throwsAsync(() => consolidateReviewedInTransaction(db.tx, input.plan, {target: 'testing', expectedReport}), {
+    message: /CONSOLIDATION_BLOCKED:.*CAMPAIGN_RESPONSE_NOT_EMPTY_OR_OUTSIDE_DROPT/
+  })
+  t.is(db.writes.length, 0)
+  t.is(db.tables.collectionResponse.length, 1)
+})
+
+test('une nouvelle réponse concurrente fait réviser le périmètre au lieu d’être supprimée', async t => {
+  const input = withEmptyCampaignResponse(fixture())
+  const db = fakeDatabase(input.inventory)
+  const expectedReport = await inspectReviewedConsolidation(db.tx, input.plan, {target: 'testing'})
+  const query = db.tx.$queryRaw
+  db.tx.$queryRaw = async (strings, ...parameters) => {
+    if (strings.join('?').includes('FROM "CollectionResponse"')) {
+      db.tables.collectionResponse.push({...input.inventory.responses[0], id: id('concurrent-response')})
+    }
+    return query(strings, ...parameters)
+  }
+  await t.throwsAsync(() => consolidateReviewedInTransaction(db.tx, input.plan, {target: 'testing', expectedReport}), {
+    message: 'CONSOLIDATION_SCOPE_CHANGED_RETRY'
+  })
+  t.is(db.writes.length, 0)
+})
+
 test('le ledger empêche de supprimer à nouveau les affectations recréées par le manifeste', async t => {
   const input = withMeter(fixture())
   input.plan.merges = []
@@ -484,6 +631,10 @@ test('le ledger empêche de supprimer à nouveau les affectations recréées par
   t.true(replay.complete)
   t.is(replay.counts.metersReset, 0)
   t.deepEqual(replay.meterIds, [])
+  input.plan.retireEmptyCampaignResponseIds = []
+  const compatibleReplay = await inspectReviewedConsolidation(db.tx, input.plan, {target: 'testing'})
+  t.is(compatibleReplay.planHash, replay.planHash)
+  t.is(compatibleReplay.counts.metersReset, 0)
   await consolidateReviewedInTransaction(db.tx, input.plan, {target: 'testing', expectedReport: replay})
   t.deepEqual(db.tables.meterAllocation, [recreatedAllocation])
   t.deepEqual(db.tables.meterAllocationVersion, [recreatedVersion])

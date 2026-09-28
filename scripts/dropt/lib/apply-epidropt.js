@@ -141,13 +141,56 @@ async function putDeclarant(client, record, recordedChanges) {
   return identity.id
 }
 
+async function synchronizeImportedUsage(client, record, existing, usage, changes) {
+  if (existing.usageId === usage.id) return
+  const previous = record.previousUsageCode
+    ? await client.sandreWaterUse.findUnique({where: {code: record.previousUsageCode}})
+    : null
+  if (!previous || existing.usageId !== previous.id) {
+    changes.push({kind: 'exploitations', id: existing.id, field: 'usageId',
+      action: previous ? 'PRESERVED_MANUAL_VALUE' : 'PRESERVED_UNKNOWN_BASELINE',
+      incoming: usage.id, current: existing.usageId, previousUsageCode: record.previousUsageCode ?? null})
+    return
+  }
+  if (usage.kind !== 'USAGE' || (!['0', '1'].includes(previous.code) && ['0', '1'].includes(usage.code))) {
+    throw new Error('USAGE_IMPORT_INVALID_CHANGE')
+  }
+  // Changing the reference usage must never silently reclassify or republish
+  // existing volumes. Those cases require their own explicit reviewed plan.
+  if (await client.meterAllocation.count({where: {exploitationId: existing.id}})) {
+    throw new Error('USAGE_IMPORT_METER_REVIEW_REQUIRED')
+  }
+  if (await client.chunk.count({where: {OR: [
+    {exploitationId: existing.id},
+    {exploitationId: null, pointPrelevementId: existing.pointPrelevementId,
+      OR: [{preleveurUserId: existing.declarantUserId}, {preleveurUserId: null}]}
+  ]}})) throw new Error('USAGE_IMPORT_DECLARATION_REVIEW_REQUIRED')
+  if (await client.declarantPointPrelevementSecondaryUsage.count({where: {exploitationId: existing.id}})) {
+    throw new Error('USAGE_IMPORT_SECONDARY_USAGES_REVIEW_REQUIRED')
+  }
+  await client.declarantPointPrelevement.update({where: {id: existing.id}, data: {usageId: usage.id}})
+  // The compatibility trigger retains the former primary as a secondary. Here
+  // it is a proven source correction, not an additional activity: remove only
+  // that link created by this update. Pre-existing secondary usages block above.
+  const removed = await client.declarantPointPrelevementSecondaryUsage.deleteMany({where: {exploitationId: existing.id, usageId: previous.id}})
+  changes.push({kind: 'exploitations', id: existing.id, field: 'usageId', action: 'UPDATED',
+    before: existing.usageId, after: usage.id, beforeCode: previous.code, afterCode: usage.code,
+    removedAutoSecondaryUsageId: removed.count ? previous.id : null})
+}
+
 async function putExploitation(client, record, pointId, declarantUserId, changes) {
   if (!pointId || !declarantUserId) throw new Error('DEPENDANCE_NON_IMPORTEE')
-  const existing = await exploitationIdentity(client, record)
+  let existing = await exploitationIdentity(client, record)
   const usage = await client.sandreWaterUse.findUnique({where: {code: record.usageCode}})
   if (!usage) throw new Error('USAGE_ABSENT')
+  if (existing && existing.usageId !== usage.id) {
+    // Re-read under the same row lock used by manual exploitation editing.
+    await client.$queryRaw`SELECT id FROM "DeclarantPointPrelevement" WHERE id = ${existing.id}::uuid FOR UPDATE`
+    existing = await client.declarantPointPrelevement.findUniqueOrThrow({where: {id: existing.id}})
+  }
   if (existing) {
     if (existing.pointPrelevementId !== pointId || existing.declarantUserId !== declarantUserId) throw new Error('EXPLOITATION_EXISTANTE_DIFFERENTE')
+    await synchronizeImportedUsage(client, record, existing, usage, changes)
     const code = normalizeCountingCode(record.countingCode)
     const previousCode = normalizeCountingCode(record.previousCountingCode)
     if (code && code !== existing.countingCode) {

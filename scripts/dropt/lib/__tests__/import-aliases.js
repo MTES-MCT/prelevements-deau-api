@@ -48,11 +48,13 @@ test('plusieurs anciennes ancres PP ne sont compatibles que si leurs alias prouv
 test('deux anciennes exploitations fusionnées sont une ancre unique pour un nouveau code de manifeste', t => {
   const {manifest, snapshot} = fixture()
   const previousManifest = structuredClone(manifest)
+  previousManifest.exploitations[0].usageCode = '17'
   previousManifest.points.push({...manifest.points[0], id: targetId, sourceId: 'kept-source-point'})
   previousManifest.exploitations.push({...manifest.exploitations[0], id: 'kept-exploitation',
-    sourceId: 'kept-source-exploitation', key: 'kept-key', pointId: targetId})
+    sourceId: 'kept-source-exploitation', key: 'kept-key', pointId: targetId, usageCode: '2'})
   manifest.exploitations[0].id = 'newly-generated-exploitation'
   manifest.exploitations[0].sourceId = 'newly-generated-source'
+  manifest.exploitations[0].usageCode = '7'
   const result = preserveManifestIdentities(manifest, {previousManifest, snapshot})
   t.deepEqual(result.issues, [])
   t.is(result.exploitations[0].id, 'kept-exploitation')
@@ -60,6 +62,25 @@ test('deux anciennes exploitations fusionnées sont une ancre unique pour un nou
   t.is(result.exploitations[0].key, 'kept-key')
   t.is(result.exploitations[0].pointId, targetId)
   t.is(result.exploitations[0].previousCountingCode, 'count-1')
+  t.is(result.exploitations[0].previousUsageCode, '2')
+  t.is(result.exploitations[0].usageCode, '7')
+})
+
+test('la baseline usage vient de la précédente ancre importée, jamais de la valeur live ou d’une ancienne baseline', t => {
+  const {manifest, snapshot} = fixture()
+  const previousManifest = structuredClone(manifest)
+  previousManifest.exploitations[0].usageCode = '17'
+  previousManifest.exploitations[0].previousUsageCode = '2'
+  snapshot.tables.exploitations[0].usageCode = '4'
+  manifest.exploitations[0].usageCode = '7'
+  const result = preserveManifestIdentities(manifest, {previousManifest, snapshot})
+  t.deepEqual(result.issues, [])
+  t.is(result.exploitations[0].previousUsageCode, '17')
+  t.is(result.exploitations[0].usageCode, '7')
+  t.false(Object.hasOwn(manifest.exploitations[0], 'previousUsageCode'))
+  manifest.exploitations[0].previousUsageCode = '4'
+  const withoutPrevious = preserveManifestIdentities(manifest, {snapshot})
+  t.is(withoutPrevious.exploitations[0].previousUsageCode, null)
 })
 
 test('cible absente, conflit de référence ou exploitation source encore vivante ne sont pas masqués par un alias', t => {

@@ -57,6 +57,80 @@ test('le fallback conserve un préleveur sans aucune adresse email, sans en inve
   t.is(result.declarants[0].user.email, null)
 })
 
+test('la mention exacte pas de mail permet le rapprochement par nom sans inventer d’adresse', t => {
+  for (const identifier of ['pas de mail', ' PAS  DE\u00a0MAIL ']) {
+    const input = fixture()
+    input.epidropt.Préleveurs[0].values[2] = null
+    input.epidropt.Exploitations[0].values[2] = identifier
+    const before = structuredClone(input)
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 1)
+    t.is(result.exploitations[0].declarantId, result.declarants[0].id)
+    t.deepEqual(result.declarants[0].emails, [])
+    t.is(result.declarants[0].user.email, null)
+    t.deepEqual(result.exploitations[0].source, [{sheet: 'Exploitations', row: 3}])
+    t.deepEqual(nameDecision(result).sources, [{sheet: 'Préleveurs', row: 3}])
+    t.is(nameDecision(result).status, 'ACCEPTED')
+    t.deepEqual(input, before)
+  }
+})
+
+test('pas de mail ne contourne ni les homonymes ni un nom inconnu', t => {
+  const ambiguous = fixture()
+  ambiguous.epidropt.Exploitations[0].values[2] = 'pas de mail'
+  addDeclarant(ambiguous)
+  const result = buildManifest(ambiguous)
+  t.is(result.exploitations.length, 0)
+  t.is(nameDecision(result).reason, 'NAME_AMBIGUOUS')
+
+  const unknown = fixture()
+  unknown.epidropt.Exploitations[0].values[2] = 'pas de mail'
+  unknown.epidropt.Exploitations[0].declarantName = 'Ferme introuvable'
+  const unresolved = buildManifest(unknown)
+  t.is(unresolved.exploitations.length, 0)
+  t.is(nameDecision(unresolved).reason, 'NAME_NOT_FOUND')
+})
+
+test('un email connu reste prioritaire même accompagné de la mention pas de mail', t => {
+  const input = fixture()
+  addDeclarant(input, {name: 'Autre ferme'})
+  input.epidropt.Exploitations[0].values[2] = 'pas de mail ferme@example.test'
+  input.epidropt.Exploitations[0].declarantName = 'Autre ferme'
+  const result = buildManifest(input)
+  t.is(result.exploitations.length, 1)
+  t.is(result.exploitations[0].declarantId, stableId('epidropt:preleveur:aeag:AEAG-A'))
+  t.is(nameDecision(result), undefined)
+})
+
+test('une mention complétée ou un email invalide ne devient pas une absence d’email', t => {
+  for (const identifier of ['pas de mail absent@example.test', 'pas de mail broken@', 'pas de mail à vérifier']) {
+    const input = fixture()
+    input.epidropt.Exploitations[0].values[2] = identifier
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 0)
+    t.is(nameDecision(result), undefined)
+  }
+})
+
+test('la mention pas de mail ne masque pas les champs hydrologiques invalides', t => {
+  const input = fixture()
+  Object.assign(input.epidropt['Points prélèvement'][0].values, {10: 'pas de mail', 17: 'pas de mail'})
+  const result = buildManifest(input)
+  t.true(result.issues.some(item => item.code === 'POINT_FIELD_INVALID' && item.field === 'isZre'))
+  t.is(result.points[0].data.managementUnit, 'pas de mail')
+})
+
+test('l’usage Loisirs utilise le code Sandre 7 sans être confondu avec Domestique', t => {
+  for (const [label, expected] of [['Loisirs', '7'], [' LOISIRS ', '7'], ['Domestique', '17']]) {
+    const input = fixture()
+    input.epidropt.Exploitations[0].values[3] = label
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 1)
+    t.is(result.exploitations[0].usageCode, expected)
+    t.deepEqual(result.issues, [])
+  }
+})
+
 test('le nom complet personnel suit l’ordre prénom puis nom de la feuille source', t => {
   const input = fixture()
   Object.assign(input.epidropt.Préleveurs[0].values, {3: null, 4: null, 6: 'Camille', 7: 'Exemple'})

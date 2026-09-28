@@ -45,6 +45,10 @@ npm run import:dropt -- review --target testing --target-env .env.testing --tunn
 
 La preuve contient `target: "testing"`, `backup.sha256`, `restore: {success: true, matchesPreflight: true}` et `reviewedStateHash`, obtenu sur la copie restaurée via `inspectReviewedApplication`. L’état doit correspondre à la simulation et à la cible. Les copies restaurées ne sont utilisables que par le lanceur interne protégé ; aucune cible demo/prod n’est acceptée.
 
+Sur autorisation explicite, `retireEmptyCampaignResponseIds` peut désigner les inscriptions entièrement vierges de la campagne importée à supprimer avec une exploitation retirée. Le script verrouille et revérifie leur état ; tout brouillon, envoi ou changement de périmètre bloque la suppression. Les autres réponses sont conservées et le retrait est journalisé pour le rejeu.
+
+Un usage modifié dans la source n’est corrigé que si sa valeur en base correspond encore au précédent import, sans compteur, déclaration ou usage secondaire dépendant. Les corrections manuelles sont conservées et les changements qui nécessiteraient un recalcul restent bloqués.
+
 Sans dates d’effet fiables, `resetMeterIds` peut lister les compteurs dont les dérivés doivent être supprimés, **sur autorisation explicite**. Le rapport chiffre ces suppressions ; les index, révisions et ingestions bruts restent intacts. Les flux concernés restent désactivés, sans recalcul ni rétroactivité. Le journal empêche une nouvelle suppression au rejeu ; toute nouvelle activation/publication exige une nouvelle revue. Les autres volumes sont conservés. Les liens du collecteur déjà habilité sont ajoutés aux nouvelles exploitations, sans créer de compte ou de campagne.
 
 ## Activer les connexions des préleveurs importés
@@ -93,7 +97,7 @@ Pour compléter l’historique depuis des archives vérifiées, `prepare-meter-a
 
 - Seuls les noms source contenant `CACG` sont rapprochés de Rives (réalimentés). Les autres restent non réalimentés. Après le nom exact, les variantes département/zéros conservent le suffixe complet et exigent une preuve par compteur ou coordonnées ; les références contradictoires restent à vérifier. Un lieu présent chez Rives ne prouve pas, à lui seul, la disponibilité d’une télérelève.
 - Identités stables par référence métier, jamais par numéro de ligne ou adresse email. Les doublons ambigus et coordonnées incohérentes sont isolés dans les rapports.
-- En l’absence d’email/SIRET dans une ligne d’exploitation, le commentaire peut retrouver un préleveur par raison sociale source complète et unique. Les homonymes, identités incomplètes et correspondances approximatives restent exclus.
+- En l’absence d’email/SIRET dans une ligne d’exploitation (y compris la mention explicite « pas de mail »), le commentaire peut retrouver un préleveur par raison sociale source complète et unique. Les homonymes, identités incomplètes et correspondances approximatives restent exclus ; une adresse invalide ou inconnue n’est pas assimilée à une absence d’email.
 - Le SAGE est choisi parmi les seuls périmètres intersectant les coordonnées, selon le milieu du PP et le type de ressource gérée configuré dans PE (surface, souterraine, transition, mixte). Un SAGE spécialisé compatible est prioritaire sur un SAGE mixte. Plusieurs spécialisés compatibles, ou plusieurs mixtes sans spécialisé, bloquent la décision ; aucun SAGE n’est choisi hors de sa géographie. Le rejeu réévalue aussi les PP dont les coordonnées n’ont pas changé, sans altérer les coordonnées corrigées manuellement.
 - L’import conserve les emails comme contacts ; l’activation des connexions est explicite via `enable-logins` et ses contrôles ci-dessus. Aucune invitation ni notification n’est envoyée.
 - Le rejeu conserve les changements manuels. Les corrections ambiguës exigent un mapping explicite, sans fusion automatique.
