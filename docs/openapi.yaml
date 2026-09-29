@@ -260,7 +260,7 @@ paths:
       tags: [Campagnes]
       operationId: getCollectionResponse
       summary: Consulter le contexte du formulaire
-      description: Retourne campagne, réponse, exploitation, compteurs documentaires, usages et sous-usages avec leurs liens parentId, et permissions. Aucun accès aux index physiques globaux.
+      description: Retourne campagne, réponse, exploitation, compteurs documentaires, usages et sous-usages avec leurs liens parentId, et permissions. Pour le propriétaire ou un administrateur, prefill indique les propositions importées utilisées avant toute saisie ; leur provenance privée n’est jamais exposée. Aucun accès aux index physiques globaux.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -3219,7 +3219,7 @@ components:
     CollectionPeriod:
       type: object
       additionalProperties: false
-      description: Champs agricoles et mesures. Tous sont obligatoires à la soumission selon la section, mais peuvent manquer dans un brouillon. Les nombres positifs ou nuls acceptent quatre décimales.
+      description: Champs agricoles et mesures. Ils sont obligatoires à la soumission selon la section, sauf surface et crops pour la réalimentation (usage SANDRE 12 et ses sous-usages). Tous peuvent manquer dans un brouillon. Les nombres positifs ou nuls acceptent quatre décimales.
       properties:
         usageId: {$ref: '#/components/schemas/Uuid'}
         surface: {type: [string, number, 'null']}
@@ -3227,9 +3227,9 @@ components:
           description: >-
             Libellés d’assolement sélectionnés, sans dépendance entre catégories et sous-catégories.
             Chaque libellé est nettoyé des espaces en début et fin, non vide et limité à 3000 caractères.
-            Un tableau vide est autorisé dans un brouillon ; la soumission exige au moins un libellé.
-            Les anciennes chaînes libres restent acceptées, non vides à la soumission.
-            null et la chaîne vide sont réservés aux brouillons. Le CSV joint les libellés avec une virgule et une espace.
+            Un tableau vide est autorisé dans un brouillon ou pour la réalimentation (usage SANDRE 12 et ses sous-usages) ; les autres usages exigent au moins un libellé à la soumission.
+            Les anciennes chaînes libres restent acceptées, non vides à la soumission sauf pour la réalimentation.
+            null et la chaîne vide sont autorisés dans les brouillons et pour la réalimentation. Le CSV joint les libellés avec une virgule et une espace.
           oneOf:
             - type: array
               maxItems: 100
@@ -3280,6 +3280,20 @@ components:
       properties:
         revision: {type: integer, minimum: 0}
         data: {$ref: '#/components/schemas/CollectionForm'}
+    CollectionPrefillContext:
+      type: [object, 'null']
+      additionalProperties: false
+      description: >-
+        Présent à la racine du contexte de réponse, réservé au propriétaire et aux administrateurs (null pour le collecteur).
+        Ne contient ni provenance ni données sources. Les propositions ne deviennent un brouillon qu’à l’enregistrement explicite.
+      required: [active, noAuthorizedOffSeasonUsage]
+      properties:
+        active:
+          type: boolean
+          description: true lorsque le formulaire non commencé utilise des propositions importées. Un brouillon ou une soumission prévaut toujours.
+        noAuthorizedOffSeasonUsage:
+          type: boolean
+          description: Aucun usage autorisé hors étiage dans le fichier source. Information historique, sans interdire la demande d’un besoin futur ni déduire une consommation nulle.
     CollectionMeterApproval:
       type: object
       required: [expectedHash, confirmHistorical, allocations]
@@ -3305,8 +3319,13 @@ components:
         data:
           type: object
           additionalProperties: true
+          properties:
+            prefill: {$ref: '#/components/schemas/CollectionPrefillContext'}
           description: >-
             Ressource ou liste paginée avec droits explicites. Les brouillons ne sont jamais exposés au collecteur.
+            Le détail d’une réponse ajoute prefill ; prefillData et prefillMetadata ne sont jamais exposés, même dans les listes administrateur.
+            Sans saisie, data combine les propositions autorisées avec les observations exactes existantes, prioritaires y compris à zéro.
+            Un conflit entre observations n’est jamais résolu par une proposition importée. Les compteurs sans rattachement actuel sont ignorés.
             Les dates sont ISO et les états de réponse et de publication sont distincts.
             Chaque réponse expose volumes (offSeason, season, total, publicationStatus, partial).
             Les nombres sont des m³ effectivement publiés ; null signifie absence de volume publié et ne vaut pas zéro.

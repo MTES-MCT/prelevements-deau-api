@@ -1,5 +1,7 @@
 import {parseArgs, parseEnv} from 'node:util'
-import {readFile, writeFile, mkdir, rename} from 'node:fs/promises'
+import {readFile, writeFile, mkdir, rename, access, link, unlink} from 'node:fs/promises'
+import {execFile} from 'node:child_process'
+import {promisify} from 'node:util'
 import path from 'node:path'
 import process from 'node:process'
 import {createHash, randomUUID} from 'node:crypto'
@@ -15,20 +17,28 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
   'login-scope': {type: 'string'},
   'allow-email-aliases': {type: 'boolean', default: false},
   'campaign-config': {type: 'string'}, 'actor-user-id': {type: 'string'},
+  'prefill-file': {type: 'string'}, 'campaign-id': {type: 'string'},
   'epidropt-file': {type: 'string'}, snapshot: {type: 'string'}, 'previous-manifest': {type: 'string'},
   apply: {type: 'boolean', default: false}, 'activate-at': {type: 'string'}, 'effective-at': {type: 'string'}, 'service-account-id': {type: 'string'},
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
-if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign [--input dossier] [--target local|testing] [--apply]')
+const prefillOperation = ['prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)
+if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign [--input dossier] [--target local|testing] [--apply]')
+if (prefillOperation && (!values['prefill-file'] || !values.report)) throw new Error('--prefill-file et --report hors Git sont obligatoires pour le préremplissage.')
+if (prefillOperation && operation !== 'prepare-prefill' && (!values['campaign-id'] || !values['actor-user-id'])) throw new Error('--campaign-id et --actor-user-id sont obligatoires.')
+if (operation === 'prepare-prefill' && values.apply) throw new Error('La préparation du préremplissage ne modifie aucune base.')
+if (operation === 'verify-prefill-campaign' && (values.apply || !values['against-report'])) throw new Error('La vérification exige le rapport appliqué et ne prend pas --apply.')
+if ((values['prefill-file'] || values['campaign-id']) && !prefillOperation) throw new Error('Options réservées au préremplissage de campagne.')
 if (operation === 'enable-logins' && !['non-realimente', 'all'].includes(values['login-scope'])) throw new Error('--login-scope non-realimente|all obligatoire.')
 if (values['login-scope'] && operation !== 'enable-logins') throw new Error('--login-scope est réservé à enable-logins.')
 if (values['allow-email-aliases'] && operation !== 'enable-logins') throw new Error('--allow-email-aliases est réservé à enable-logins.')
 if (operation === 'seed-campaign' && !values['campaign-config']) throw new Error('--campaign-config data/.../configuration.json obligatoire pour seed-campaign.')
-if ((values['campaign-config'] || values['actor-user-id']) && operation !== 'seed-campaign') throw new Error('--campaign-config et --actor-user-id sont réservés à seed-campaign.')
+if (values['campaign-config'] && operation !== 'seed-campaign') throw new Error('--campaign-config est réservé à seed-campaign.')
+if (values['actor-user-id'] && operation !== 'seed-campaign' && !prefillOperation) throw new Error('--actor-user-id est réservé aux opérations de campagne.')
 const base = path.resolve(values.input)
 let dataset
-try { dataset = JSON.parse(await readFile(values.dataset ?? path.join(base, 'mapping/dataset.json'), 'utf8')) } catch (error) {
+try { if (!prefillOperation) dataset = JSON.parse(await readFile(values.dataset ?? path.join(base, 'mapping/dataset.json'), 'utf8')) } catch (error) {
   if (error.code !== 'ENOENT' || values.dataset) throw error
 }
 if (dataset && dataset.version !== 1) throw new Error('Version de jeu de données non prise en charge.')
@@ -44,12 +54,36 @@ async function writePrivate(filename, value) {
   await mkdir(path.dirname(filename), {recursive: true, mode: 0o700})
   const temporary = `${filename}.${randomUUID()}.partial`
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {mode: 0o600, flag: 'wx'})
-  await rename(temporary, filename)
+  if (prefillOperation) {
+    // Publish exclusively: a report must never replace the source workbook or
+    // a previously reviewed report, including symlinks and concurrent writers.
+    try { await link(temporary, filename) } finally { await unlink(temporary) }
+  } else await rename(temporary, filename)
 }
 
 try {
   getTransactionTimeoutMs(values['transaction-timeout-seconds'])
-  if (operation === 'prepare') {
+  if (prefillOperation) {
+    if (path.extname(values.report).toLowerCase() !== '.json') throw new Error('Le rapport privé doit être un nouveau fichier .json.')
+    try {
+      await access(path.resolve(values.report))
+      throw new Error('Le rapport existe déjà ; choisir un nouveau fichier sans écraser la source ou un rapport précédent.')
+    } catch (error) { if (error.code !== 'ENOENT') throw error }
+    const directory = path.dirname(path.resolve(values.report))
+    await mkdir(directory, {recursive: true, mode: 0o700})
+    let insideGit = false
+    try {
+      const {stdout} = await promisify(execFile)('git', ['-C', directory, 'rev-parse', '--is-inside-work-tree'])
+      insideGit = stdout.trim() === 'true'
+    } catch (error) { if (error.code !== 128) throw new Error('Impossible de vérifier le dossier privé du rapport.', {cause: error}) }
+    if (insideGit) throw new Error('Le rapport de préremplissage doit être stocké hors de tout dépôt Git.')
+  }
+  if (operation === 'prepare-prefill') {
+    const {loadCampaignPrefillSource} = await import('./lib/campaign-prefill-source.js')
+    const source = await loadCampaignPrefillSource(values['prefill-file'])
+    await writePrivate(path.resolve(values.report), source)
+    console.log(JSON.stringify({operation, sourceSha256: source.source.sha256, summary: source.summary}))
+  } else if (operation === 'prepare') {
     const files = Object.fromEntries(Object.entries(dataset?.files ?? {
       epidropt: 'raw/Prelevement_Epidropt_20_08_2026.xlsx', rives: 'raw/ExportTableEpiDropt.xlsx'
     }).map(([key, filename]) => [key, datasetPath(filename)]))
@@ -108,9 +142,12 @@ try {
     try {
       const [identity] = await prisma.$queryRaw`SELECT current_database() AS name, (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls`
       if (identity.name !== decodeURIComponent(url.pathname.slice(1)) || (values.target === 'testing' && !identity.tls)) throw new Error('Identité ou TLS de la base incorrect.')
-      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-      const {manifestHash, ...payload} = manifest
-      if (digest(payload) !== manifestHash) throw new Error('Manifeste modifié ; relancer prepare.')
+      let manifest
+      if (!prefillOperation) {
+        manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+        const {manifestHash, ...payload} = manifest
+        if (digest(payload) !== manifestHash) throw new Error('Manifeste modifié ; relancer prepare.')
+      }
       const {applyManifest, verifyManifest} = await import('./lib/apply-epidropt.js')
       const report = values['against-report'] ? JSON.parse(await readFile(values['against-report'], 'utf8')) : undefined
       const stamp = new Date().toISOString().replaceAll(':', '-')
@@ -120,7 +157,15 @@ try {
         transactionTimeoutSeconds: values['transaction-timeout-seconds'], expectedReport: report
       }
       let result
-      if (operation === 'verify') result = await verifyManifest(prisma, manifest, {report})
+      if (prefillOperation) {
+        const {loadCampaignPrefillSource} = await import('./lib/campaign-prefill-source.js')
+        const {prefillCampaign, verifyCampaignPrefill} = await import('./lib/campaign-prefill.js')
+        const source = await loadCampaignPrefillSource(values['prefill-file'])
+        const prefillOptions = {...options, target: values.target, campaignId: values['campaign-id'], actorUserId: values['actor-user-id']}
+        result = operation === 'verify-prefill-campaign'
+          ? await verifyCampaignPrefill(prisma, source, prefillOptions)
+          : await prefillCampaign(prisma, source, prefillOptions)
+      } else if (operation === 'verify') result = await verifyManifest(prisma, manifest, {report})
       else if (operation === 'review') {
         if (options.activateAt || options.effectiveAt) throw new Error('La revue de référentiel ne doit ni activer ni recalculer les volumes.')
         const {applyReviewedManifest} = await import('./lib/apply-reviewed.js')

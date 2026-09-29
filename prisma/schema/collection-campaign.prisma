@@ -32,6 +32,8 @@ model CollectionResponse {
   exploitation DeclarantPointPrelevement @relation(fields: [exploitationId], references: [id], onDelete: Restrict)
   preleveurUserId String @db.Uuid
   preleveur Declarant @relation("CollectionResponsePreleveur", fields: [preleveurUserId], references: [userId], onDelete: Restrict)
+  prefillData Json?
+  prefillMetadata Json?
   draftData Json?
   submittedData Json?
   submittedHash String?
