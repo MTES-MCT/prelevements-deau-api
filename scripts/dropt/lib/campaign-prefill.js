@@ -7,6 +7,7 @@ import {getCompatibleMetricTypeCodes} from '../../../lib/constants/metric-type-c
 const clean = value => String(value ?? '').trim()
 const stateHash = value => digest(JSON.parse(JSON.stringify(value)))
 const requireCondition = (condition, message) => { if (!condition) throw new Error(message) }
+const assertTarget = target => requireCondition(['local', 'testing', 'prod'].includes(target), 'Cible de préremplissage local, testing ou prod requise.')
 const untouched = response => response.revision === 0 && response.draftData === null && response.submittedData === null
   && !response.firstSubmittedAt && !response.lastSubmittedAt && !response.submittedHash && !response.declarationId && response.publicationStatus === 'NOT_SUBMITTED'
 const sourceRows = records => [...new Set(records.flatMap(record => record.sourceRows))].sort((a, b) => a - b)
@@ -194,7 +195,7 @@ function assertReport(report, source, options, applied) {
 }
 
 export async function prefillCampaign(client, source, {campaignId, actorUserId, target, apply = false, expectedReport, transactionTimeoutSeconds} = {}) {
-  requireCondition(['local', 'testing'].includes(target), 'Cible de préremplissage local ou testing requise.')
+  assertTarget(target)
   requireCondition(/^[a-f0-9]{64}$/.test(source.source?.sha256 ?? ''), 'Empreinte de la source manquante.')
   if (apply) assertReport(expectedReport, source, {campaignId, actorUserId, target}, false)
   return client.$transaction(async tx => {
@@ -220,6 +221,7 @@ export async function prefillCampaign(client, source, {campaignId, actorUserId, 
 }
 
 export async function verifyCampaignPrefill(client, source, {campaignId, actorUserId, target, expectedReport} = {}) {
+  assertTarget(target)
   assertReport(expectedReport, source, {campaignId, actorUserId, target}, true)
   const {responses} = await snapshot(client, campaignId, actorUserId)
   const byId = new Map(responses.map(response => [response.id, response]))

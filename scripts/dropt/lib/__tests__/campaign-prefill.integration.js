@@ -30,8 +30,9 @@ async function fixture() {
   return {admin, farmer, campaign, response, source, options: {campaignId: campaign.id, actorUserId: admin.id, target: 'local'}}
 }
 
-integration('dry-run, apply, verify and replay preserve responses, counts and physical readings', async t => {
+for (const target of ['local', 'testing', 'prod']) integration(`${target} report cycle on disposable database preserves responses, counts and physical readings`, async t => {
   const f = await fixture()
+  f.options.target = target
   const original = await prisma.collectionResponse.findUnique({where: {id: f.response.id}})
   const sourceCount = await prisma.source.count()
   const indexCount = await prisma.chunkValue.count()
@@ -78,7 +79,10 @@ integration('source, actor, target and reviewed simulation are mandatory', async
   const simulation = await prefillCampaign(prisma, f.source, f.options)
   const changed = {...f.source, source: {sha256: 'b'.repeat(64)}}
   await t.throwsAsync(prefillCampaign(prisma, changed, {...f.options, apply: true, expectedReport: simulation}), {message: /Rapport/})
-  await t.throwsAsync(prefillCampaign(prisma, f.source, {...f.options, target: 'testing', apply: true, expectedReport: simulation}), {message: /Rapport/})
+  for (const target of ['testing', 'prod']) {
+    await t.throwsAsync(prefillCampaign(prisma, f.source, {...f.options, target, apply: true, expectedReport: simulation}), {message: /Rapport/})
+    await t.throwsAsync(prefillCampaign(prisma, f.source, {...f.options, target, apply: true, expectedReport: {...simulation, target}}), {message: /État modifié/})
+  }
   t.is((await prisma.collectionResponse.findUnique({where: {id: f.response.id}})).prefillData, null)
 })
 
