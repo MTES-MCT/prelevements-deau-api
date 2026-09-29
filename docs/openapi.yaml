@@ -3223,7 +3223,20 @@ components:
       properties:
         usageId: {$ref: '#/components/schemas/Uuid'}
         surface: {type: [string, number, 'null']}
-        crops: {type: [string, 'null'], maxLength: 3000}
+        crops:
+          description: >-
+            Libellés d’assolement sélectionnés, sans dépendance entre catégories et sous-catégories.
+            Chaque libellé est nettoyé des espaces en début et fin, non vide et limité à 3000 caractères.
+            Un tableau vide est autorisé dans un brouillon ; la soumission exige au moins un libellé.
+            Les anciennes chaînes libres restent acceptées, non vides à la soumission.
+            null et la chaîne vide sont réservés aux brouillons. Le CSV joint les libellés avec une virgule et une espace.
+          oneOf:
+            - type: array
+              maxItems: 100
+              uniqueItems: true
+              items: {type: string, minLength: 1, maxLength: 3000}
+            - type: [string, 'null']
+              maxLength: 3000
         indexStart: {type: [string, number, 'null']}
         indexEnd: {type: [string, number, 'null']}
         flow: {type: [string, number, 'null']}
@@ -3251,9 +3264,14 @@ components:
         needs:
           type: object
           additionalProperties: false
+          description: Besoins futurs pour l’étiage 2027 et le hors étiage du 1er novembre 2027 au 31 mai 2028. Les périodes d’index historiques restent inchangées.
           properties:
-            offSeason: {$ref: '#/components/schemas/CollectionPeriod'}
-            season: {$ref: '#/components/schemas/CollectionPeriod'}
+            offSeason:
+              $ref: '#/components/schemas/CollectionPeriod'
+              description: Hors étiage 2027–2028, du 1er novembre 2027 au 31 mai 2028.
+            season:
+              $ref: '#/components/schemas/CollectionPeriod'
+              description: Étiage 2027.
         comment: {type: string, maxLength: 20000}
     CollectionResponseWrite:
       type: object
