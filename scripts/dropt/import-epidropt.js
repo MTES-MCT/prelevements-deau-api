@@ -7,6 +7,7 @@ import process from 'node:process'
 import {createHash, randomUUID} from 'node:crypto'
 import {readWorkbook, EPIDROPT_SHEETS, RIVES_SHEETS, buildManifest, digest} from './lib/epidropt.js'
 import {getTransactionTimeoutMs} from './lib/import-options.js'
+import {PROD_DATABASE_ENDPOINT, validateProdAdminDatabaseUrl, assertConnectedProdAdminDatabase} from '../network/prod-database-target.js'
 
 const {positionals, values} = parseArgs({allowPositionals: true, options: {
   input: {type: 'string', default: 'data/dropt/epidropt-2026'}, target: {type: 'string'},
@@ -24,7 +25,11 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
 }})
 const operation = positionals[0]
 const prefillOperation = ['prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)
-if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign [--input dossier] [--target local|testing] [--apply]')
+if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign [--input dossier] [--target local|testing|prod] [--apply] ; prod réservé à prefill-campaign et verify-prefill-campaign.')
+if (values.target === 'prod') {
+  if (!['prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('La cible prod est réservée à prefill-campaign et verify-prefill-campaign.')
+  if (!values['target-env'] || !values['tunnel-port']) throw new Error('--target-env et --tunnel-port sont obligatoires pour prod.')
+}
 if (prefillOperation && (!values['prefill-file'] || !values.report)) throw new Error('--prefill-file et --report hors Git sont obligatoires pour le préremplissage.')
 if (prefillOperation && operation !== 'prepare-prefill' && (!values['campaign-id'] || !values['actor-user-id'])) throw new Error('--campaign-id et --actor-user-id sont obligatoires.')
 if (operation === 'prepare-prefill' && values.apply) throw new Error('La préparation du préremplissage ne modifie aucune base.')
@@ -59,6 +64,12 @@ async function writePrivate(filename, value) {
     // a previously reviewed report, including symlinks and concurrent writers.
     try { await link(temporary, filename) } finally { await unlink(temporary) }
   } else await rename(temporary, filename)
+}
+
+async function assertConnectedTarget(client, url) {
+  if (values.target === 'prod') return assertConnectedProdAdminDatabase(client)
+  const [identity] = await client.$queryRaw`SELECT current_database() AS name, (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls`
+  if (identity.name !== decodeURIComponent(url.pathname.slice(1)) || (values.target === 'testing' && !identity.tls)) throw new Error('Identité ou TLS de la base incorrect.')
 }
 
 try {
@@ -107,7 +118,7 @@ try {
     await writePrivate(manifestPath, manifest)
     console.log(JSON.stringify({source: inputs.epidropt, manifestHash: manifest.manifestHash, counts: Object.fromEntries(['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].map(key => [key, manifest[key].length]))}))
   } else {
-    if (!['local', 'testing'].includes(values.target)) throw new Error('Cible explicite local ou testing obligatoire ; production interdite.')
+    if (!['local', 'testing', 'prod'].includes(values.target)) throw new Error('Cible explicite local, testing ou prod obligatoire ; prod est réservé au préremplissage.')
     if (['review', 'rebuild', 'recompute-rebuild'].includes(operation) && values.target !== 'testing') throw new Error('La correction en ligne est réservée à testing.')
     if (values['target-env']) {
       const configuration = parseEnv(await readFile(values['target-env'], 'utf8'))
@@ -118,14 +129,18 @@ try {
     }
     if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL doit être chargée explicitement, sans argument de commande.')
     const url = new URL(process.env.DATABASE_URL)
+    // Validate the original deployment URL before changing its certificate path
+    // for the local tunnel. Never turn a different target or weak TLS into prod.
+    if (values.target === 'prod') validateProdAdminDatabaseUrl(url.toString())
     if (values['tunnel-port']) {
       const port = Number(values['tunnel-port'])
-      if (values.target !== 'testing' || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Tunnel réservé à testing sur un port local explicite.')
+      if (!['testing', 'prod'].includes(values.target) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Tunnel réservé à testing ou prod sur un port local explicite.')
       const {TESTING_DATABASE_ENDPOINT} = await import('../network/testing-database-target.js')
-      url.hostname = TESTING_DATABASE_ENDPOINT.host
-      url.port = TESTING_DATABASE_ENDPOINT.port
+      const endpoint = values.target === 'prod' ? PROD_DATABASE_ENDPOINT : TESTING_DATABASE_ENDPOINT
+      url.hostname = endpoint.host
+      url.port = endpoint.port
       url.searchParams.set('sslmode', 'verify-full')
-      url.searchParams.set('sslrootcert', path.resolve('deploy/certs/testing/postgres-ca.pem'))
+      url.searchParams.set('sslrootcert', path.resolve(`deploy/certs/${values.target}/postgres-ca.pem`))
       const {getPostgresConnectionOptions} = await import('../../db/connection-options.js')
       const {InstrumentedPool} = await import('../../db/instrumented-pool.js')
       const {ssl} = getPostgresConnectionOptions(url.toString())
@@ -137,11 +152,10 @@ try {
       const {TESTING_DATABASE_ENDPOINT} = await import('../network/testing-database-target.js')
       if (decodeURIComponent(url.pathname.slice(1)) !== 'testing-partageons-leau-api' || decodeURIComponent(url.username) !== 'testing-partageons-leau-api' || url.hostname !== TESTING_DATABASE_ENDPOINT.host || url.port !== TESTING_DATABASE_ENDPOINT.port || url.searchParams.get('sslmode') !== 'verify-full') throw new Error('La cible ne correspond pas au PostgreSQL privé testing avec TLS vérifié.')
     }
-    process.env.APP_ENV = values.target === 'testing' ? 'testing' : 'development'
+    process.env.APP_ENV = values.target === 'local' ? 'development' : values.target
     const {prisma} = await import('../../db/prisma.js')
     try {
-      const [identity] = await prisma.$queryRaw`SELECT current_database() AS name, (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls`
-      if (identity.name !== decodeURIComponent(url.pathname.slice(1)) || (values.target === 'testing' && !identity.tls)) throw new Error('Identité ou TLS de la base incorrect.')
+      await assertConnectedTarget(prisma, url)
       let manifest
       if (!prefillOperation) {
         manifest = JSON.parse(await readFile(manifestPath, 'utf8'))

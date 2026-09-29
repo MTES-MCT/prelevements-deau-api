@@ -1,6 +1,6 @@
 import test from 'ava'
 import {randomUUID} from 'node:crypto'
-import {buildCampaignPrefillPlan} from '../campaign-prefill.js'
+import {buildCampaignPrefillPlan, prefillCampaign, verifyCampaignPrefill} from '../campaign-prefill.js'
 import {CAMPAIGN_PREFILL_HEADERS, parseCampaignPrefillRows} from '../campaign-prefill-source.js'
 
 const irrigationId = randomUUID()
@@ -151,4 +151,21 @@ test('different source proposals for one response are excluded, never summed twi
   const plan = buildCampaignPrefillPlan(source([record(), record({sourceRows: [3], needs: {season: {volume: '2000'}, offSeason: {}}})]), [response()], usages)
   t.is(plan.counts.EXCLUDED_CONFLICT, 1)
   t.false(Object.hasOwn(plan.entries[0], 'prefillData'))
+})
+
+test('prefill and verification reject unsupported targets before accessing a database', async t => {
+  for (const target of [undefined, 'demo', 'production']) {
+    await t.throwsAsync(prefillCampaign({}, source([]), {target}), {message: /Cible de préremplissage/})
+    await t.throwsAsync(verifyCampaignPrefill({}, source([]), {target}), {message: /Cible de préremplissage/})
+  }
+})
+
+test('prod prefill and verification require reports from the same target', async t => {
+  const options = {target: 'prod', campaignId: randomUUID(), actorUserId: randomUUID()}
+  const report = {version: 1, operation: 'prefill-campaign', complete: true, sourceSha256: 'a'.repeat(64),
+    campaignId: options.campaignId, actorUserId: options.actorUserId, planHash: 'b'.repeat(64), entries: []}
+  for (const target of ['local', 'testing']) {
+    await t.throwsAsync(prefillCampaign({}, source([]), {...options, apply: true, expectedReport: {...report, target, applied: false}}), {message: /Rapport de préremplissage incompatible/})
+    await t.throwsAsync(verifyCampaignPrefill({}, source([]), {...options, expectedReport: {...report, target, applied: true}}), {message: /Rapport de préremplissage incompatible/})
+  }
 })
