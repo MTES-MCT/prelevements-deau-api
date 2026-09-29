@@ -2467,8 +2467,16 @@ paths:
         y compris lorsqu'un point est partagé. Leurs intervalles exacts sont
         répartis sur les jours Europe/Paris, en tenant compte des changements
         d'heure. Les mesures calendaires hors METER conservent leur interprétation.
+        Avec view=chart, la réponse omet uniquement metadata.points et exactPeriods.
+        Les valeurs, dates, compteurs, avertissements et autres métadonnées sont
+        inchangés, y compris exactVolumesEstimated. Sans view, le contrat habituel
+        est conservé.
       parameters:
         - $ref: '#/components/parameters/ExploitationFilter'
+        - in: query
+          name: view
+          description: Vue graphique allégée, sans liste des points ni périodes exactes détaillées. Aucun effet sur les valeurs, options d'agrégation ou droits d'accès.
+          schema: {type: string, enum: [chart]}
         - in: query
           name: metricTypeCode
           required: true
@@ -2550,8 +2558,14 @@ paths:
         sans ce paramètre conservent les options ordinaires inchangées.
         Les options issues de volumes METER sont toujours limitées aux affectations
         consultables par l'acteur, avec les mêmes filtres que les valeurs agrégées.
+        Avec view=chart, retourne uniquement parameters, avec les mêmes options et
+        métadonnées. Sans view, la liste points reste présente.
       parameters:
         - $ref: '#/components/parameters/ExploitationFilter'
+        - in: query
+          name: view
+          description: Omet uniquement la liste points ; les paramètres, fenêtres temporelles, compteurs de séries et droits restent inchangés.
+          schema: {type: string, enum: [chart]}
         - in: query
           name: includeExploitationIndexes
           description: Distingue les index ordinaires par exploitation et code comptage ; les options de volumes restent regroupées. Ne modifie pas les droits d'accès.
@@ -5091,6 +5105,13 @@ components:
         endDate: {type: [string, 'null'], format: date}
         minDate: {type: [string, 'null']}
         maxDate: {type: [string, 'null']}
+        points:
+          type: array
+          description: Points du périmètre ; absent avec view=chart.
+          items: {type: object, additionalProperties: true}
+        exactVolumesEstimated:
+          type: boolean
+          description: Présent à true si des volumes METER exacts ont été répartis pour l'affichage, y compris avec view=chart.
         distribution: {$ref: '#/components/schemas/AggregationDistribution'}
     AggregatedSeriesResponse:
       type: object
@@ -5102,6 +5123,21 @@ components:
           type: [string, 'null']
           format: uuid
           description: Présent pour les index physiques ; null à la dernière page. Aucune troncature silencieuse.
+        exactPeriods:
+          type: array
+          description: Périodes exactes METER si présentes dans le périmètre ; absent avec view=chart.
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              chunkValueId: {$ref: '#/components/schemas/Uuid'}
+              pointPrelevementId: {type: [string, 'null'], format: uuid}
+              compteurId: {type: [string, 'null'], format: uuid}
+              periodStart: {type: string, format: date-time}
+              periodEnd: {type: string, format: date-time}
+              value: {type: string}
+              unit: {type: [string, 'null']}
+              calculationStrategy: {type: string, const: METER}
         values:
           type: array
           items:
@@ -5116,10 +5152,11 @@ components:
     AggregatedSeriesOptionsResponse:
       type: object
       additionalProperties: true
-      required: [parameters, points]
+      required: [parameters]
       properties:
         points:
           type: array
+          description: Toujours présent sans view ; absent avec view=chart.
           items: {type: object, additionalProperties: true}
         parameters:
           type: array

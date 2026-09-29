@@ -22,6 +22,7 @@
     "lint:openapi": "spectral lint docs/openapi.yaml",
     "check:image-size": "sh deploy/check-image-size.sh",
     "benchmark:search": "node scripts/benchmark-search-performance.js",
+    "benchmark:series": "node scripts/benchmark-series-performance.js",
     "test": "ava",
     "audit:security": "npm audit --audit-level=low",
     "coverage": "c8 ava",
