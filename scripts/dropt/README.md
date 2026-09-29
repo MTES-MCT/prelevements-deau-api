@@ -81,6 +81,32 @@ npm run import:dropt -- seed-campaign --target local --target-env .env.local --m
 
 Pour testing, utiliser les options de connexion privée décrites plus haut. Seules les cibles local et testing sont autorisées. La simulation transactionnelle ne conserve rien ; l’application exige les mêmes manifeste, configuration, cible et état. Tout conflit d’identité/email, exploitation absente ou réaffectée, ou dérive depuis la simulation annule l’ensemble. Les identités source du collecteur et de la campagne sont stables. Le rejeu préserve les identifiants de connexion, coordonnées, réponses, nom et dates modifiés manuellement, ainsi que les autres droits du collecteur ; une population modifiée exige une vérification manuelle, jamais un remplacement des réponses. Une fois les dates choisies, le lancement reste une action explicite dans l’administration.
 
+## Préremplir les index et les besoins d’une campagne existante
+
+Ces commandes distinctes ne rejouent **pas** l’import du référentiel. Elles ne créent aucun participant, compteur, index publié, déclaration ou notification. Les propositions sont conservées séparément des réponses et ne comptent pas comme des brouillons. La migration `20260929160000_collection_response_prefill` doit être appliquée avant les commandes connectées à la base.
+
+Le classeur attendu est `BASE GLOBALE`, avec les 25 colonnes du fichier d’index/besoins. `prepare-prefill` ne se connecte à aucune base : il contrôle la structure, les doublons et les valeurs, puis produit un rapport privé. Le fichier source est lu sans modification. Les rapports doivent être de **nouveaux fichiers JSON hors de tout dépôt Git** ; aucun rapport existant n’est écrasé.
+
+```sh
+npm run import:dropt -- prepare-prefill --prefill-file /chemin/prive/besoins.xlsx --report /chemin/prive/lecture.json
+npm run import:dropt -- prefill-campaign --prefill-file /chemin/prive/besoins.xlsx --target local --target-env .env.local --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --report /chemin/prive/simulation.json
+# Examiner les correspondances et exclusions avant application explicite :
+npm run import:dropt -- prefill-campaign --prefill-file /chemin/prive/besoins.xlsx --target local --target-env .env.local --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --apply --against-report /chemin/prive/simulation.json --report /chemin/prive/application.json
+npm run import:dropt -- verify-prefill-campaign --prefill-file /chemin/prive/besoins.xlsx --target local --target-env .env.local --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --against-report /chemin/prive/application.json --report /chemin/prive/verification.json
+```
+
+Pour testing, remplacer les options de connexion par `--target testing --target-env .env.testing --tunnel-port PORT_LOCAL`, comme pour les autres commandes. Les gardes existants restent limités à local/testing ; ces commandes ne permettent pas un import demo/prod. Aucun manifeste de l’ancien import n’est requis : le rapprochement utilise exactement le code point OUGC (nom ou alias déjà enregistré), le SIRET et le code comptage parmi les participants actuels. Aucune correspondance approximative. Le numéro de série doit désigner un compteur déjà rattaché ; à défaut de série exploitable, un seul rattachement actuel doit exister.
+
+Règles de préparation :
+
+- Besoins étiage 2027 : volume D, débit E, surface F, usage W. Hors étiage 2027–2028 : volume **L + N + Q**, débit I, surface H, usage X. Les trois volumes doivent être numériques explicites ; zéro est valide, une cellule vide n’est pas zéro. Aucun recours au total G. Addition exacte puis arrondi à quatre décimales ; les décimaux sont transmis en chaînes.
+- Un second usage réel en Y exclut le bloc de besoins hors étiage entier. `Sans usage` reste une information d’absence d’autorisation, pas une consommation nulle ou une interdiction de besoin futur. Les cultures et informations historiques d’usage/surface ne sont pas inventées.
+- Seul V peut proposer l’index physique du 31 octobre 2025, sans pondération par U. Zéros ambigus, valeurs négatives/annotées et conflits de compteur sont exclus. Les observations existantes restent prioritaires ; les désaccords figurent au rapport. Les index contradictoires sont recherchés avant exclusion des zéros et après rapprochement des compteurs.
+- Des lignes identiques ne dupliquent jamais les volumes. Plusieurs propositions divergentes pour une même réponse restent exclues. Les propositions et leur provenance sont privées, sans exposition des lignes source aux collecteurs.
+- Toute réponse déjà commencée, soumise ou déjà préremplie différemment est préservée. Le rejeu du même fichier est sans effet. Une modification de source ou d’état depuis la simulation empêche toute application : refaire la simulation, avec un nouveau rapport.
+
+L’application verrouille la campagne comme les sauvegardes manuelles et recontrôle toutes les conditions en une transaction. Elle ne modifie que `prefillData`/`prefillMetadata` (et la date technique de modification), jamais les droits, secrets, répartitions, brouillons, révisions ou données soumises. `verify-prefill-campaign` compare les propositions enregistrées au rapport d’application sans remplacer les saisies intervenues depuis.
+
 ## Reconstruction exceptionnelle sur testing
 
 Préparer un manifeste distinct avec `prepare --rebuild-identities --previous-manifest ancien-manifeste.json --snapshot export-testing.json --manifest nouveau-manifeste.json` et le classeur sélectionné. Cela renouvelle les identités PP/exploitations à regrouper, tout en conservant les ancres des préleveurs et compteurs.
