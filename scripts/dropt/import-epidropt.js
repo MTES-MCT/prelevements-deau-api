@@ -1,10 +1,13 @@
-import {parseArgs, parseEnv} from 'node:util'
+import {parseArgs} from 'node:util'
 import {readFile, writeFile, mkdir, rename} from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import {createHash, randomUUID} from 'node:crypto'
 import {readWorkbook, EPIDROPT_SHEETS, RIVES_SHEETS, buildManifest, digest} from './lib/epidropt.js'
 import {getTransactionTimeoutMs} from './lib/import-options.js'
+import {assertDroptTargetOptions, getDroptProdDatabaseUrl, assertDroptProdReport, assertDroptConnectedDatabase} from './lib/production-target.js'
+import {getDroptOperationClient} from './lib/production-identities.js'
+import {readTargetEnvironment} from './lib/target-environment.js'
 
 const {positionals, values} = parseArgs({allowPositionals: true, options: {
   input: {type: 'string', default: 'data/dropt/epidropt-2026'}, target: {type: 'string'},
@@ -20,7 +23,7 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
-if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign [--input dossier] [--target local|testing] [--apply]')
+if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign [--input dossier] [--target local|testing|prod] [--apply]')
 if (operation === 'enable-logins' && !['non-realimente', 'all'].includes(values['login-scope'])) throw new Error('--login-scope non-realimente|all obligatoire.')
 if (values['login-scope'] && operation !== 'enable-logins') throw new Error('--login-scope est réservé à enable-logins.')
 if (values['allow-email-aliases'] && operation !== 'enable-logins') throw new Error('--allow-email-aliases est réservé à enable-logins.')
@@ -49,6 +52,10 @@ async function writePrivate(filename, value) {
 
 try {
   getTransactionTimeoutMs(values['transaction-timeout-seconds'])
+  if (operation !== 'prepare' || values.target === 'prod') {
+    assertDroptTargetOptions({operation, target: values.target, targetEnv: values['target-env'], tunnelPort: values['tunnel-port'],
+      apply: values.apply, againstReport: values['against-report']})
+  }
   if (operation === 'prepare') {
     const files = Object.fromEntries(Object.entries(dataset?.files ?? {
       epidropt: 'raw/Prelevement_Epidropt_20_08_2026.xlsx', rives: 'raw/ExportTableEpiDropt.xlsx'
@@ -73,25 +80,25 @@ try {
     await writePrivate(manifestPath, manifest)
     console.log(JSON.stringify({source: inputs.epidropt, manifestHash: manifest.manifestHash, counts: Object.fromEntries(['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].map(key => [key, manifest[key].length]))}))
   } else {
-    if (!['local', 'testing'].includes(values.target)) throw new Error('Cible explicite local ou testing obligatoire ; production interdite.')
-    if (['review', 'rebuild', 'recompute-rebuild'].includes(operation) && values.target !== 'testing') throw new Error('La correction en ligne est réservée à testing.')
     if (values['target-env']) {
-      const configuration = parseEnv(await readFile(values['target-env'], 'utf8'))
+      const configuration = await readTargetEnvironment(values['target-env'])
       if (!configuration.DATABASE_URL) throw new Error('DATABASE_URL absente du fichier cible.')
       process.env.DATABASE_URL = configuration.DATABASE_URL
-      // Do not inherit a permissive local flag when explicitly targeting testing.
+      // Do not inherit a permissive local flag when explicitly targeting a remote environment.
       process.env.MULTIPLE_EXPLOITATIONS_ENABLED = configuration.MULTIPLE_EXPLOITATIONS_ENABLED === 'true' ? 'true' : 'false'
     }
     if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL doit être chargée explicitement, sans argument de commande.')
-    const url = new URL(process.env.DATABASE_URL)
+    const url = values.target === 'prod' ? getDroptProdDatabaseUrl(process.env.DATABASE_URL) : new URL(process.env.DATABASE_URL)
     if (values['tunnel-port']) {
       const port = Number(values['tunnel-port'])
-      if (values.target !== 'testing' || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Tunnel réservé à testing sur un port local explicite.')
+      if (!['testing', 'prod'].includes(values.target) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Tunnel réservé à testing ou prod sur un port local explicite.')
       const {TESTING_DATABASE_ENDPOINT} = await import('../network/testing-database-target.js')
-      url.hostname = TESTING_DATABASE_ENDPOINT.host
-      url.port = TESTING_DATABASE_ENDPOINT.port
+      if (values.target === 'testing') {
+        url.hostname = TESTING_DATABASE_ENDPOINT.host
+        url.port = TESTING_DATABASE_ENDPOINT.port
+      }
       url.searchParams.set('sslmode', 'verify-full')
-      url.searchParams.set('sslrootcert', path.resolve('deploy/certs/testing/postgres-ca.pem'))
+      url.searchParams.set('sslrootcert', path.resolve(`deploy/certs/${values.target}/postgres-ca.pem`))
       const {getPostgresConnectionOptions} = await import('../../db/connection-options.js')
       const {InstrumentedPool} = await import('../../db/instrumented-pool.js')
       const {ssl} = getPostgresConnectionOptions(url.toString())
@@ -103,24 +110,26 @@ try {
       const {TESTING_DATABASE_ENDPOINT} = await import('../network/testing-database-target.js')
       if (decodeURIComponent(url.pathname.slice(1)) !== 'testing-partageons-leau-api' || decodeURIComponent(url.username) !== 'testing-partageons-leau-api' || url.hostname !== TESTING_DATABASE_ENDPOINT.host || url.port !== TESTING_DATABASE_ENDPOINT.port || url.searchParams.get('sslmode') !== 'verify-full') throw new Error('La cible ne correspond pas au PostgreSQL privé testing avec TLS vérifié.')
     }
-    process.env.APP_ENV = values.target === 'testing' ? 'testing' : 'development'
+    process.env.APP_ENV = values.target === 'local' ? 'development' : values.target
     const {prisma} = await import('../../db/prisma.js')
+    let reportPath
     try {
-      const [identity] = await prisma.$queryRaw`SELECT current_database() AS name, (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls`
-      if (identity.name !== decodeURIComponent(url.pathname.slice(1)) || (values.target === 'testing' && !identity.tls)) throw new Error('Identité ou TLS de la base incorrect.')
+      await assertDroptConnectedDatabase(prisma, {target: values.target, url})
       const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
       const {manifestHash, ...payload} = manifest
       if (digest(payload) !== manifestHash) throw new Error('Manifeste modifié ; relancer prepare.')
       const {applyManifest, verifyManifest} = await import('./lib/apply-epidropt.js')
       const report = values['against-report'] ? JSON.parse(await readFile(values['against-report'], 'utf8')) : undefined
+      if (values.target === 'prod') assertDroptProdReport(report, {operation, manifestHash, apply: values.apply})
       const stamp = new Date().toISOString().replaceAll(':', '-')
-      const reportPath = path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`))
+      reportPath = path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`))
+      const client = await getDroptOperationClient(prisma, manifest, {target: values.target, operation})
       const options = {
         apply: values.apply, activateAt: values['activate-at'], effectiveAt: values['effective-at'], serviceAccountId: values['service-account-id'],
         transactionTimeoutSeconds: values['transaction-timeout-seconds'], expectedReport: report
       }
       let result
-      if (operation === 'verify') result = await verifyManifest(prisma, manifest, {report})
+      if (operation === 'verify') result = await verifyManifest(client, manifest, {report})
       else if (operation === 'review') {
         if (options.activateAt || options.effectiveAt) throw new Error('La revue de référentiel ne doit ni activer ni recalculer les volumes.')
         const {applyReviewedManifest} = await import('./lib/apply-reviewed.js')
@@ -130,11 +139,11 @@ try {
       }
       else if (operation === 'enable-logins') {
         const {enableManifestLogins} = await import('./lib/enable-logins.js')
-        result = await enableManifestLogins(prisma, manifest, {...options, scope: values['login-scope'], allowEmailAliases: values['allow-email-aliases']})
+        result = await enableManifestLogins(client, manifest, {...options, scope: values['login-scope'], allowEmailAliases: values['allow-email-aliases']})
       } else if (operation === 'seed-campaign') {
         const {readCampaignSeedConfig, seedManifestCampaign} = await import('./lib/seed-campaign.js')
         const config = await readCampaignSeedConfig(values['campaign-config'], {actorUserId: values['actor-user-id']})
-        result = await seedManifestCampaign(prisma, manifest, config, {...options, target: values.target})
+        result = await seedManifestCampaign(client, manifest, config, {...options, target: values.target})
       }
       else if (operation === 'rebuild') {
         const {rebuildManifest} = await import('./lib/rebuild-epidropt.js')
@@ -145,10 +154,16 @@ try {
         const resume = values.resume ? JSON.parse(await readFile(values.resume, 'utf8')) : undefined
         result = await recomputeRebuiltManifest(prisma, manifest, {...options, target: values.target, report, resume,
           onProgress: progress => writePrivate(reportPath, progress)})
-      } else result = await applyManifest(prisma, manifest, options)
-      await writePrivate(reportPath, result)
+      } else result = await applyManifest(client, manifest, options)
+      await writePrivate(reportPath, values.target === 'prod' ? {...result, target: 'prod', operation} : result)
       console.log(JSON.stringify({manifestHash: result.manifestHash, applied: result.applied ?? false, counts: result.counts, issues: result.issues?.length, complete: result.complete}))
       if (result.complete === false) process.exitCode = 1
+    } catch (error) {
+      if (values.target === 'prod' && error.identityCollisions && reportPath) {
+        await writePrivate(reportPath, {target: 'prod', operation, manifestHash: error.manifestHash,
+          applied: false, complete: false, identityCollisions: error.identityCollisions})
+      }
+      throw error
     } finally {
       await prisma.$disconnect()
       await globalThis.pgPool?.end()

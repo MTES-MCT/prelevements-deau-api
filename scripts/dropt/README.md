@@ -28,7 +28,26 @@ Si `mapping/dataset.json` existe, il sélectionne les sources et paramètres pri
 
 Après examen de la simulation, `apply --apply --against-report simulation.json` exige les mêmes identités et changements. Une erreur d’exécution sur un objet annule **toute** la transaction et produit un rapport `applied: false, complete: false` ; les cas non rapprochés déjà exclus du manifeste ne constituent pas une erreur d’exécution. Un rejeu conserve les corrections manuelles. Pour les exploitations concurrentes codées, `MULTIPLE_EXPLOITATIONS_ENABLED=true` doit avoir été activé explicitement sur la cible après le rattachement des déclarations historiques.
 
-Pour testing, utiliser `--target testing --target-env .env.testing --tunnel-port PORT_LOCAL` à travers un tunnel déjà ouvert vers PostgreSQL privé. Le script contrôle la cible et vérifie le certificat TLS ; il ne prend pas en charge la production. Les secrets ne passent pas en arguments de commande.
+Pour testing, utiliser `--target testing --target-env .env.testing --tunnel-port PORT_LOCAL` à travers un tunnel déjà ouvert vers PostgreSQL privé. Le script contrôle la cible et vérifie le certificat TLS. Les secrets ne passent pas en arguments de commande.
+
+## Production : import du référentiel et campagne
+
+Seules les opérations `apply`, `verify`, `enable-logins` et `seed-campaign` acceptent `--target prod`.
+Les opérations `review`, `rebuild` et `recompute-rebuild` restent réservées à testing ; demo n’est pas une cible d’import.
+Avant toute application autorisée, disposer d’une sauvegarde restaurable et examiner la simulation privée.
+
+Le fichier `--target-env` et le port local `--tunnel-port` sont obligatoires en production. Le fichier conserve la `DATABASE_URL` native du déploiement : instance privée, base et utilisateur administrateur `prod-partageons-leau-api`, `sslmode=verify-full`, CA déployé. Ne pas remplacer son hôte par localhost. La connexion emprunte ensuite le tunnel avec `deploy/certs/prod/postgres-ca.pem` et vérifie l’identité TLS de l’instance native. Aucun hôte, rôle, nom de base ou paramètre d’URL arbitraire n’est accepté. Le nom de base, l’utilisateur connecté et TLS sont contrôlés en SQL, puis de nouveau dans chaque transaction d’écriture.
+
+```sh
+npm run import:dropt -- apply --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --manifest chemin/manifeste-valide.json --report /chemin/prive/simulation-prod.json
+# Après examen de la simulation : mêmes manifeste, options et cible.
+npm run import:dropt -- apply --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --manifest chemin/manifeste-valide.json --apply --against-report /chemin/prive/simulation-prod.json --report /chemin/prive/application-prod.json
+npm run import:dropt -- verify --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --manifest chemin/manifeste-valide.json --against-report /chemin/prive/application-prod.json --report /chemin/prive/verification-prod.json
+```
+
+Les rapports production identifient la cible et l’opération. `--apply` exige une simulation production complète, non appliquée, de la même opération et du même manifeste ; une simulation testing n’est jamais réutilisable. Les contrôles de dérive du plan et le rollback intégral restent actifs. Les transactions production sont sérialisables et vérifient avant mutation les UUID déjà présents : une identité doit correspondre à sa source ou à une référence externe explicite. Un numéro de compteur existant sans référence correspondante bloque aussi l’import. Les collisions sont consignées dans le rapport privé sans modifier les entités concernées ; elles demandent un rapprochement explicite, jamais une fusion automatique.
+
+`enable-logins` et `seed-campaign` suivent la même séquence simulation/application, avec leurs options de périmètre et configuration décrites ci-dessous. Le seed reste un brouillon sans dates ; les dates et le lancement passent ensuite par l’administration. Cet import de référentiel ne récupère pas l’historique des index de l’API Epidropt : cette ingestion et l’activation des flux restent des opérations distinctes.
 
 L’import utilise une transaction unique, limitée à 15 minutes par défaut pour couvrir les allers-retours du tunnel. `--transaction-timeout-seconds 900` permet de modifier cette limite (entier de 1 à 1800 secondes). Un dépassement annule toute la transaction, sans import partiel ; le rollback de simulation reste inchangé.
 
@@ -61,7 +80,7 @@ npm run import:dropt -- enable-logins --target local --target-env .env.local --m
 npm run import:dropt -- enable-logins --target local --target-env .env.local --manifest chemin/manifeste.json --login-scope non-realimente --apply --against-report data/dropt/epidropt-2026/reports/simulation-connexions.json
 ```
 
-Pour testing, remplacer les options de connexion comme indiqué plus haut. `--login-scope non-realimente` sélectionne les préleveurs ayant une exploitation importée active sur un PP sans `CACG` ; `all` inclut aussi le réalimenté et exige une autorisation portant sur cet ensemble. Utiliser le manifeste effectivement appliqué, pas un ancien fichier par défaut.
+Pour testing ou prod, remplacer les options de connexion comme indiqué plus haut. `--login-scope non-realimente` sélectionne les préleveurs ayant une exploitation importée active sur un PP sans `CACG` ; `all` inclut aussi le réalimenté et exige une autorisation portant sur cet ensemble. Utiliser le manifeste effectivement appliqué, pas un ancien fichier par défaut.
 
 Sur autorisation explicite, ajouter `--allow-email-aliases` aux **deux** commandes pour permettre la connexion avec toutes les adresses source d’un même préleveur. La première adresse normalisée du manifeste (tri alphabétique stable de l’import) devient l’adresse principale ; les suivantes deviennent des alias du même compte, sans créer de préleveur supplémentaire. Toutes doivent être confirmées et libres : un conflit sur une seule adresse bloque le compte entier. Un alias retiré manuellement ne sera pas rétabli au rejeu.
 
@@ -79,7 +98,7 @@ npm run import:dropt -- seed-campaign --target local --target-env .env.local --m
 # --apply --against-report data/dropt/epidropt-2026/reports/simulation-campagne.json
 ```
 
-Pour testing, utiliser les options de connexion privée décrites plus haut. Seules les cibles local et testing sont autorisées. La simulation transactionnelle ne conserve rien ; l’application exige les mêmes manifeste, configuration, cible et état. Tout conflit d’identité/email, exploitation absente ou réaffectée, ou dérive depuis la simulation annule l’ensemble. Les identités source du collecteur et de la campagne sont stables. Le rejeu préserve les identifiants de connexion, coordonnées, réponses, nom et dates modifiés manuellement, ainsi que les autres droits du collecteur ; une population modifiée exige une vérification manuelle, jamais un remplacement des réponses. Une fois les dates choisies, le lancement reste une action explicite dans l’administration.
+Pour testing ou prod, utiliser les options de connexion privée décrites plus haut. La simulation transactionnelle ne conserve rien ; l’application exige les mêmes manifeste, configuration, cible et état. Tout conflit d’identité/email, exploitation absente ou réaffectée, ou dérive depuis la simulation annule l’ensemble. Les identités source du collecteur et de la campagne sont stables. Le rejeu préserve les identifiants de connexion, coordonnées, réponses, nom et dates modifiés manuellement, ainsi que les autres droits du collecteur ; une population modifiée exige une vérification manuelle, jamais un remplacement des réponses. Une fois les dates choisies, le lancement reste une action explicite dans l’administration.
 
 ## Reconstruction exceptionnelle sur testing
 

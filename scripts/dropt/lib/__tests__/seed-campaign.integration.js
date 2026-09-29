@@ -187,9 +187,12 @@ integration('un email principal, alias, contact partagé ou réservation n’est
   t.is(await prisma.collectionCampaign.count({where: {sourceId: CAMPAIGN_SOURCE_ID}}), 0)
 })
 
-integration('aucun administrateur implicite et aucune cible production', async t => {
+integration('aucun administrateur implicite, demo refusée et simulation prod explicite', async t => {
   const input = await setup(t)
-  await t.throwsAsync(() => preview(input, {target: 'prod'}), {message: /production interdite/})
+  await t.throwsAsync(() => preview(input, {target: 'demo'}), {message: /Cible explicite/})
+  const productionPreview = await preview(input, {target: 'prod'})
+  t.is(productionPreview.target, 'prod')
+  t.false(productionPreview.applied)
   await prisma.user.update({where: {id: input.actor.id}, data: {role: 'INSTRUCTOR'}})
   await t.throwsAsync(() => preview(input), {message: /administrateur actif/})
   await prisma.user.update({where: {id: input.actor.id}, data: {role: 'ADMIN', deletedAt: new Date()}})
@@ -202,6 +205,7 @@ integration('l’application exige une simulation du même manifeste, configurat
   await t.throwsAsync(() => preview(input, {apply: true}), {message: /Simulation de campagne compatible/})
   const expectedReport = await preview(input)
   await t.throwsAsync(() => preview(input, {apply: true, expectedReport, target: 'testing'}), {message: /Simulation de campagne compatible/})
+  await t.throwsAsync(() => preview(input, {apply: true, expectedReport, target: 'prod'}), {message: /Simulation de campagne compatible/})
   await t.throwsAsync(() => preview({...input, config: {...input.config, name: 'Autre'}}, {apply: true, expectedReport}), {message: /Simulation de campagne compatible/})
   const altered = structuredClone(input.manifest)
   altered.points[0].data.name = 'ALTÉRÉ'
