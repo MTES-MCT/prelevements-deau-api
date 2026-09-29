@@ -404,7 +404,7 @@ test('un arrêt à vide ne déclenche ni SQL ni migration', async t => {
     }
   })
   await service.stop()
-  t.pass()
+  t.false(service.server.listening)
 })
 
 test('un arrêt pendant une migration termine la commande sans déclarer de succès', async t => {

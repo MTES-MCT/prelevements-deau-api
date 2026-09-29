@@ -1,11 +1,11 @@
 const EXPECTED_DATABASE_NAME = 'prelevements_demo'
 const EXPECTED_DATABASE_USER = 'demo_admin'
-const EXPECTED_DATABASE_PORT = '17063'
 const EXPECTED_SSL_MODE = 'verify-full'
 const EXPECTED_SSL_ROOT_CERT = '/usr/local/share/ca-certificates/scw-postgres-ca.crt'
-const EXPECTED_DATABASE_HOSTS = new Set([
-  '163.172.7.73',
-  'rw-ea5a07db-05df-4869-9e57-fa5f5c6c81cc.rdb.fr-par.scw.cloud'
+export const DEMO_DATABASE_ENDPOINTS = Object.freeze([
+  Object.freeze({host: '163.172.7.73', port: '17063'}),
+  Object.freeze({host: 'rw-ea5a07db-05df-4869-9e57-fa5f5c6c81cc.rdb.fr-par.scw.cloud', port: '17063'}),
+  Object.freeze({host: '172.16.12.2', port: '5432'})
 ])
 const ALLOWED_SEARCH_PARAMETERS = new Set(['sslmode', 'sslrootcert'])
 
@@ -70,12 +70,13 @@ export function validateDemoAdminDatabaseUrl(databaseUrl) {
     throw new Error('Refus : DATABASE_URL doit contenir le mot de passe de migration.')
   }
 
-  if (!EXPECTED_DATABASE_HOSTS.has(parsedDatabaseUrl.hostname.toLowerCase())) {
+  const endpoint = DEMO_DATABASE_ENDPOINTS.find(candidate => candidate.host === parsedDatabaseUrl.hostname.toLowerCase())
+  if (!endpoint) {
     throw new Error('Refus : DATABASE_URL ne cible pas l’instance PostgreSQL demo attendue.')
   }
 
-  if (parsedDatabaseUrl.port !== EXPECTED_DATABASE_PORT) {
-    throw new Error(`Refus : le port PostgreSQL demo doit être ${EXPECTED_DATABASE_PORT}.`)
+  if (parsedDatabaseUrl.port !== endpoint.port) {
+    throw new Error(`Refus : le port PostgreSQL demo doit être ${endpoint.port}.`)
   }
 
   if (parsedDatabaseUrl.searchParams.get('sslmode') !== EXPECTED_SSL_MODE) {

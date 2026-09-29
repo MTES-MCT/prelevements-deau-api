@@ -101,7 +101,7 @@ const IRRIGATION_SEASONALITY = Object.freeze([
 ])
 
 const PERIOD_CACHE = new Map()
-let locationReferencesCache
+const locationReferencesCache = new Map()
 
 function pad(value, length) {
   return String(value).padStart(length, '0')
@@ -315,9 +315,10 @@ function decodeHistoricalCoordinates(encodedGeometry) {
   return coordinates.every(Number.isFinite) ? coordinates : null
 }
 
-function loadLocationReferences() {
-  if (locationReferencesCache) {
-    return locationReferencesCache
+function loadLocationReferences(historicalPointsUrl) {
+  const cacheKey = String(historicalPointsUrl)
+  if (locationReferencesCache.has(cacheKey)) {
+    return locationReferencesCache.get(cacheKey)
   }
 
   const departments = JSON.parse(readFileSync(DEPARTMENTS_URL, 'utf8'))
@@ -333,7 +334,7 @@ function loadLocationReferences() {
     throw new Error(`Géométrie de référence ${SAGE_REFERENCE_CODE} absente`)
   }
 
-  const rows = parse(readFileSync(HISTORICAL_POINTS_URL), {
+  const rows = parse(readFileSync(historicalPointsUrl), {
     columns: true,
     skip_empty_lines: true
   })
@@ -357,8 +358,9 @@ function loadLocationReferences() {
     anchorPools.set(key, anchors)
   }
 
-  locationReferencesCache = {anchorPools, departmentGeometries, sageGeometry}
-  return locationReferencesCache
+  const references = {anchorPools, departmentGeometries, sageGeometry}
+  locationReferencesCache.set(cacheKey, references)
+  return references
 }
 
 function deterministicUnits(key) {
@@ -387,8 +389,8 @@ function locationCandidate({anchor, waterBodyType, radiusUnit, angleUnit}) {
   ]
 }
 
-function coordinatesFor({sourceId, departmentCode, waterBodyType, ordinal, occupiedCoordinates}) {
-  const {anchorPools, departmentGeometries, sageGeometry} = loadLocationReferences()
+function coordinatesFor({sourceId, departmentCode, waterBodyType, ordinal, occupiedCoordinates, locationReferences}) {
+  const {anchorPools, departmentGeometries, sageGeometry} = locationReferences
   const poolKey = `${departmentCode}:${waterBodyType}`
   const anchors = anchorPools.get(poolKey)
   const departmentGeometry = departmentGeometries[departmentCode]
@@ -435,7 +437,7 @@ function pointScenarioTags(sourceId) {
   return []
 }
 
-function buildPointsAndExploitations(preleveurs) {
+function buildPointsAndExploitations(preleveurs, locationReferences) {
   const points = []
   const exploitations = []
   const locationOrdinals = new Map()
@@ -478,7 +480,8 @@ function buildPointsAndExploitations(preleveurs) {
           departmentCode,
           waterBodyType,
           ordinal: locationOrdinal,
-          occupiedCoordinates
+          occupiedCoordinates,
+          locationReferences
         }),
         isCovered,
         scenarioTags: pointScenarioTags(sourceId)
@@ -804,9 +807,7 @@ function buildPersonas(preleveurs) {
   }
 }
 
-function buildZone() {
-  const {sageGeometry} = loadLocationReferences()
-
+function buildZone({sageGeometry}) {
   return {
     id: deterministicUuid('zone:sage-grivaise'),
     code: 'SAGE-DEMO-GRIVAISE',
@@ -1226,9 +1227,10 @@ export function validateGrivaiseDataset(dataset) {
   return true
 }
 
-export function buildGrivaiseDataset() {
+export function buildGrivaiseDataset({historicalPointsUrl = HISTORICAL_POINTS_URL} = {}) {
+  const locationReferences = loadLocationReferences(historicalPointsUrl)
   const preleveurs = buildPreleveurs()
-  const {points, exploitations} = buildPointsAndExploitations(preleveurs)
+  const {points, exploitations} = buildPointsAndExploitations(preleveurs, locationReferences)
   const collectorLinks = buildCollectorLinks(preleveurs, exploitations)
   const meters = buildMeters(points)
   const declarations = buildDeclarations({
@@ -1248,7 +1250,7 @@ export function buildGrivaiseDataset() {
       synthetic: true,
       specialCases: {...SPECIAL_CASES}
     },
-    zone: buildZone(),
+    zone: buildZone(locationReferences),
     personas: buildPersonas(preleveurs),
     preleveurs,
     points,

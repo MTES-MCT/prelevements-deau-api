@@ -42,6 +42,9 @@ model User {
   emailAliases       UserEmailAlias[]
   emailVerifications UserEmailVerification[]
   dataExports        DataExport[]
+  meterIngestions MeterIngestion[]
+  monthlyActivities UserMonthlyActivity[]
+  collectionCampaignsCreated CollectionCampaign[] @relation("CollectionCampaignCreator")
 
   passwordCredential        PasswordCredential?  @relation("PasswordCredentialOwner")
   passwordActivation        PasswordActivation?  @relation("PasswordActivationOwner")
@@ -130,6 +133,8 @@ enum Civility {
 }
 
 model Declarant {
+  collectionCampaigns CollectionCampaign[] @relation("CollectionCampaignCollector")
+  collectionResponses CollectionResponse[] @relation("CollectionResponsePreleveur")
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
@@ -149,6 +154,7 @@ model Declarant {
   resourceDocuments ResourceDocument[]
   resourceRules     ResourceRule[]
   contactEmails     DeclarantContactEmail[]
+  externalReferences ExternalReference[]
 
   lastDeclarationAt DateTime?
 

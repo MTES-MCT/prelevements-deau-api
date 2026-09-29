@@ -261,9 +261,10 @@ async function executeCommand(options) {
       console.log(`[demo-seed] rapport écrit: ${reportPath}`)
     } catch (reportError) {
       if (operationError) {
-        throw new Error(
+        throw new AggregateError(
+          [operationError, reportError],
           `${safeErrorMessage(operationError)} ; rapport non finalisé : ${safeErrorMessage(reportError)}`,
-          {cause: operationError}
+          {cause: reportError}
         )
       }
 

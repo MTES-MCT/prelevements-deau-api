@@ -36,6 +36,11 @@ enum PointKind {
   FICTIF
 }
 
+enum PointCollectionMode {
+  MANUAL
+  EXTERNAL
+}
+
 model PointPrelevement {
   id String @id @default(uuid()) @db.Uuid
 
@@ -44,6 +49,7 @@ model PointPrelevement {
   waterBodyType WaterBodyType
   flowType      PointFlowType
   pointKind     PointKind     @default(PHYSIQUE)
+  collectionMode PointCollectionMode?
 
   nature         PointPrelevementNature?
   withdrawalType PrelevementType?
@@ -53,12 +59,14 @@ model PointPrelevement {
   isReferencePoint                  Boolean?
   isWaterBodyConnectedToStream      Boolean?
   isWaterBodyConnectedToGroundwater Boolean?
+  reservoirNominalVolume           Float?
+  waterBodyIdentifier              String?   @db.Text
 
   coordinates Unsupported("geometry(Point,4326)")?
 
   zones      PointPrelevementZone[]
   declarants DeclarantPointPrelevement[]
-  compteurs  CompteurPointPrelevement[]
+  externalReferences ExternalReference[]
 
   chunks Chunk[]
 
@@ -129,6 +137,7 @@ model PointPrelevementZone {
 }
 
 model DeclarantPointPrelevement {
+  collectionResponses CollectionResponse[]
   id String @id @default(uuid()) @db.Uuid
 
   declarantUserId String    @db.Uuid
@@ -143,6 +152,7 @@ model DeclarantPointPrelevement {
   usageId                     String                          @db.Uuid
   usage                       SandreWaterUse                  @relation(fields: [usageId], references: [id], onDelete: Restrict)
   pointPrelevementNameAliases String[]                        @default([])
+  countingCode                String?                         @db.Text
 
   abandonReason String? @db.Text
   comment       String? @db.Text
@@ -155,11 +165,13 @@ model DeclarantPointPrelevement {
   mostRecentAvailableDate DateTime?
 
   connectors          DeclarantPointPrelevementConnector[]
+  meterAllocations    MeterAllocation[]
   collecteurs         DeclarantCollecteurExploitation[]
   secondaryUsageLinks DeclarantPointPrelevementSecondaryUsage[]
   documents           ResourceDocument[]
   documentLinks       ResourceDocumentExploitation[]
   rules               ResourceRuleExploitation[]
+  chunks              Chunk[]
 
   @@unique([sourceId])
   @@index([declarantUserId, pointPrelevementId], map: "DPP_declarant_point_idx")
@@ -170,6 +182,16 @@ model DeclarantPointPrelevement {
   @@index([endDate])
   @@index([usageId])
   @@index([pointPrelevementNameAliases], type: Gin)
+}
+
+// Serializes changes to the identity/period of a declarant-point pair, including
+// concurrent inserts when that pair has no exploitation yet.
+model ExploitationIdentityLock {
+  declarantUserId    String @db.Uuid
+  pointPrelevementId String @db.Uuid
+  revision          BigInt @default(0)
+
+  @@id([declarantUserId, pointPrelevementId])
 }
 
 model DeclarantPointPrelevementSecondaryUsage {

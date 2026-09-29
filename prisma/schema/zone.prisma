@@ -4,6 +4,13 @@ enum ZoneType {
   SAGE
 }
 
+enum ZoneManagedResourceType {
+  SUPERFICIELLE
+  SOUTERRAIN
+  TRANSITION
+  MIXTE
+}
+
 model Zone {
   id String @id @default(uuid()) @db.Uuid
 
@@ -11,6 +18,7 @@ model Zone {
   type        ZoneType
   name        String                                     @db.Text
   coordinates Unsupported("geometry(MultiPolygon,4326)")
+  managedResourceType ZoneManagedResourceType?
 
   instructorZones       InstructorZone[]
   declarantZones        DeclarantZone[]

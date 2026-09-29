@@ -1,12 +1,17 @@
-FROM node:24-bookworm-slim AS builder
+FROM node:24.21.0-alpine3.24@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS base
+RUN apk upgrade --no-cache
+WORKDIR /app
+COPY package.json ./
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
+
+FROM base AS builder
 WORKDIR /app
 
 ENV NODE_ENV=development
 
-RUN apt-get update && apt-get install -y --no-install-recommends openssl \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache openssl
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY prisma ./prisma
 
 RUN npm ci --no-audit --no-fund
@@ -15,13 +20,15 @@ RUN npx prisma generate --schema=./prisma/schema
 ENV NODE_ENV=production
 RUN npm prune --omit=dev
 
-FROM node:24-bookworm-slim AS runner
+FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates openssl
+
+# API, worker and private migrations run directly with Node; package managers are build-only.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY package.json package-lock.json prisma.config.ts ./
