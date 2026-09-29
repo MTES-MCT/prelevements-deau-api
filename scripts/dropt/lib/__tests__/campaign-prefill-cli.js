@@ -9,10 +9,11 @@ import {randomUUID} from 'node:crypto'
 import {fileURLToPath} from 'node:url'
 import ExcelJS from 'exceljs'
 import {CAMPAIGN_PREFILL_HEADERS} from '../campaign-prefill-source.js'
+import {PROD_DATABASE_ENDPOINT} from '../../../network/prod-database-target.js'
 
 const cwd = fileURLToPath(new URL('../../../../', import.meta.url))
 const execute = promisify(execFile)
-const run = args => execute(process.execPath, ['scripts/dropt/import-epidropt.js', ...args], {
+const run = (args, nodeArgs = []) => execute(process.execPath, [...nodeArgs, 'scripts/dropt/import-epidropt.js', ...args], {
   cwd, env: {...process.env, DATABASE_URL: 'deliberately-invalid-no-database-connection'}, timeout: 15_000
 })
 
@@ -64,4 +65,86 @@ test('prepare rejects reports inside Git and never accepts --apply', async t => 
   t.regex(error.stderr, /hors de tout dépôt Git/)
   await t.throwsAsync(stat(inGit), {code: 'ENOENT'})
   await t.throwsAsync(run(['prepare-prefill', '--prefill-file', filename, '--report', path.join(directory, 'forbidden.json'), '--apply']))
+})
+
+test('prod rejects every operation other than campaign prefill and verification before reading any input', async t => {
+  for (const operation of ['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill']) {
+    const error = await t.throwsAsync(run([operation, '--target', 'prod']))
+    t.regex(error.stderr, /prod est réservée à prefill-campaign et verify-prefill-campaign/)
+  }
+})
+
+test('both prod campaign operations require an explicit environment file and tunnel', async t => {
+  for (const operation of ['prefill-campaign', 'verify-prefill-campaign']) {
+    for (const connection of [[], ['--target-env', '/must-not-read'], ['--tunnel-port', '15432']]) {
+      const error = await t.throwsAsync(run([operation, '--target', 'prod', ...connection]))
+      t.regex(error.stderr, /--target-env et --tunnel-port sont obligatoires pour prod/)
+    }
+  }
+})
+
+test('prod validates original database identity and TLS before constructing the tunnel', async t => {
+  const {directory, filename} = await sourceFile(t)
+  const base = `postgresql://prod-partageons-leau-api:synthetic-password@${PROD_DATABASE_ENDPOINT.host}:${PROD_DATABASE_ENDPOINT.port}/prod-partageons-leau-api`
+    + '?sslmode=verify-full&sslrootcert=/usr/local/share/ca-certificates/scw-postgres-ca.crt'
+  const invalid = [
+    base.replace('/prod-partageons-leau-api?', '/testing-partageons-leau-api?'),
+    base.replace('://prod-partageons-leau-api:', '://testing-partageons-leau-api:'),
+    base.replace(PROD_DATABASE_ENDPOINT.host, 'localhost'),
+    base.replace(`:${PROD_DATABASE_ENDPOINT.port}/`, ':15432/'),
+    base.replace('verify-full', 'disable'),
+    base.replace('/usr/local/share/ca-certificates/scw-postgres-ca.crt', '/tmp/untrusted.crt'),
+    `${base}&sslmode=disable`, `${base}&host=localhost`, `${base}&sslaccept=accept_invalid_certs`
+  ]
+  const configuration = path.join(directory, 'synthetic.env')
+  const args = ['prefill-campaign', '--target', 'prod', '--target-env', configuration, '--prefill-file', filename,
+    '--campaign-id', randomUUID(), '--actor-user-id', randomUUID(), '--report', path.join(directory, 'rejected.json')]
+  for (const value of invalid) {
+    await writeFile(configuration, `DATABASE_URL=${value}\n`, {mode: 0o600})
+    const error = await t.throwsAsync(run([...args, '--tunnel-port', '15432']))
+    t.regex(error.stderr, /Refus :/)
+    t.false(error.stderr.includes('synthetic-password'))
+  }
+  await writeFile(configuration, `DATABASE_URL=${base}\n`, {mode: 0o600})
+  for (const port of ['0', '5432.5', '65536']) {
+    const error = await t.throwsAsync(run([...args, '--tunnel-port', port]))
+    t.regex(error.stderr, /port local explicite/)
+  }
+  await t.throwsAsync(stat(path.join(directory, 'rejected.json')), {code: 'ENOENT'})
+})
+
+test('prod verifies the connected identity and strict endpoint TLS before dispatch without real connections', async t => {
+  const {directory, filename} = await sourceFile(t)
+  const configuration = path.join(directory, 'synthetic.env')
+  const preload = path.join(directory, 'synthetic-client.mjs')
+  await writeFile(configuration, `DATABASE_URL=postgresql://prod-partageons-leau-api:synthetic-password@${PROD_DATABASE_ENDPOINT.host}:${PROD_DATABASE_ENDPOINT.port}/prod-partageons-leau-api?sslmode=verify-full&sslrootcert=/usr/local/share/ca-certificates/scw-postgres-ca.crt\n`, {mode: 0o600})
+  const args = ['prefill-campaign', '--target', 'prod', '--target-env', configuration, '--tunnel-port', '15432',
+    '--prefill-file', filename, '--campaign-id', randomUUID(), '--actor-user-id', randomUUID(), '--report', path.join(directory, 'rejected.json')]
+  const valid = {databaseName: 'prod-partageons-leau-api', databaseUser: 'prod-partageons-leau-api', tls: true}
+  for (const [identity, expected] of [
+    [{...valid, databaseName: 'testing-partageons-leau-api'}, /nom de base/],
+    [{...valid, databaseUser: 'testing-partageons-leau-api'}, /utilisateur/],
+    [{...valid, tls: false}, /\(TLS\)/],
+    [valid, /SYNTHETIC_PREFILL_REACHED/]
+  ]) {
+    await writeFile(preload, `
+      globalThis.prisma = {
+        async $queryRawUnsafe() {
+          const {host, port, ssl} = globalThis.pgPool.options
+          if (process.env.APP_ENV !== 'prod' || host !== '127.0.0.1' || port !== 15432
+            || ssl.rejectUnauthorized !== true || !ssl.ca.includes('BEGIN CERTIFICATE')
+            || ssl.checkServerIdentity('localhost', {subjectaltname: ${JSON.stringify(`IP Address:${PROD_DATABASE_ENDPOINT.host}`)}})) {
+            throw new Error('SYNTHETIC_UNSAFE_CONNECTION')
+          }
+          return [${JSON.stringify(identity)}]
+        },
+        async $transaction() { throw new Error('SYNTHETIC_PREFILL_REACHED') },
+        async $disconnect() {}
+      }
+    `, {mode: 0o600})
+    const error = await t.throwsAsync(run(args, ['--import', preload]))
+    t.regex(error.stderr, expected)
+    t.false(error.stderr.includes('synthetic-password'))
+  }
+  await t.throwsAsync(stat(path.join(directory, 'rejected.json')), {code: 'ENOENT'})
 })
