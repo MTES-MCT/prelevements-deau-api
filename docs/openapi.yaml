@@ -7,6 +7,7 @@ servers:
   - url: http://localhost:5000/api
     description: Local
 tags:
+  - name: Campagnes
   - name: Administration
   - name: Compte
   - name: Auth
@@ -20,6 +21,369 @@ tags:
   - name: Stats
   - name: Zones
 paths:
+  /campaigns:
+    get:
+      tags: [Campagnes]
+      operationId: listCollectionCampaigns
+      summary: Lister les campagnes accessibles
+      description: Session humaine. Administrateur, collecteur désigné ou préleveur ciblé. Pagination page et pageSize, limitée à 200.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Campagnes]
+      operationId: createCollectionCampaign
+      summary: Créer une campagne en brouillon
+      description: Administrateur hors impersonation. Les exploitations sélectionnées doivent déjà être accessibles au collecteur.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionCampaignInput'}
+      responses:
+        '201':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/summary:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionCampaignSummary
+      summary: Résumer les campagnes pour la navigation
+      description: Résumé limité aux campagnes accessibles à la session humaine.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/candidates:
+    get:
+      tags: [Campagnes]
+      operationId: listCollectionCampaignCandidates
+      summary: Sélectionner les exploitations ciblées
+      description: Administrateur. Filtres q, collecteurUserId, usageId, page et pageSize. selectAll=true retourne selectedIds, dans la limite de 5000.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionCampaign
+      summary: Consulter une campagne
+      description: Retourne campaign, progress et permissions. Les exploitationIds sont réservés aux administrateurs.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Campagnes]
+      operationId: updateCollectionCampaign
+      summary: Modifier une campagne
+      description: Administrateur hors impersonation. Type immuable, population et collecteur figés après lancement, campagne archivée en lecture seule.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionCampaignPatch'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Campagnes]
+      operationId: deleteCollectionCampaign
+      summary: Supprimer un brouillon inutilisé
+      description: Administrateur hors impersonation. Suppression refusée dès qu’une réponse a commencé ou que la campagne a été lancée.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/open:
+    post:
+      tags: [Campagnes]
+      operationId: openCollectionCampaign
+      summary: Ouvrir ou rouvrir une campagne
+      description: Administrateur hors impersonation. Dates obligatoires, fermeture au plus tôt le 31 octobre 2026.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/close:
+    post:
+      tags: [Campagnes]
+      operationId: closeCollectionCampaign
+      summary: Fermer immédiatement la saisie
+      description: Administrateur hors impersonation. Les déclarations et réponses soumises restent consultables.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/archive:
+    post:
+      tags: [Campagnes]
+      operationId: archiveCollectionCampaign
+      summary: Archiver une campagne
+      description: Administrateur hors impersonation. Ne supprime ni réponses, ni déclarations, ni volumes.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses:
+    get:
+      tags: [Campagnes]
+      operationId: listCollectionResponses
+      summary: Suivre les réponses accessibles
+      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le collecteur ne reçoit que submittedData.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/results:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionResults
+      summary: Consulter les résultats soumis
+      description: Administrateur ou collecteur désigné disposant des délégations. Les volumes demandés ne sont pas des consommations.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/export:
+    get:
+      tags: [Campagnes]
+      operationId: exportCollectionResults
+      summary: Exporter les résultats soumis
+      description: CSV complet indépendamment de la page affichée. Administrateur ou collecteur désigné. Cellules protégées contre les formules.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Résultats exportés
+          content:
+            text/csv:
+              schema: {type: string}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/{responseId}:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionResponse
+      summary: Consulter le contexte du formulaire
+      description: Retourne campagne, réponse, exploitation, compteurs documentaires, usages et sous-usages avec leurs liens parentId, et permissions. Aucun accès aux index physiques globaux.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: responseId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      tags: [Campagnes]
+      operationId: saveCollectionResponseDraft
+      summary: Enregistrer le brouillon
+      description: Session humaine du préleveur propriétaire et campagne ouverte, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Conflit 409 si revision obsolète. Aucun effet sur les déclarations publiées.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: responseId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionResponseWrite'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/responses/{responseId}/submit:
+    post:
+      tags: [Campagnes]
+      operationId: submitCollectionResponse
+      summary: Soumettre ou corriger une réponse
+      description: Session humaine du préleveur propriétaire, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Tous les champs sont requis sauf commentaire. Envoi à partir du 31 octobre 2026. Déclaration stable et publication atomique ou en attente de validation.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: responseId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionResponseWrite'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/meters/{compteurId}/review:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectionMeterReview
+      summary: Préparer la validation d’un compteur
+      description: Administrateur uniquement. Retourne bénéficiaires, périodes, contradictions et expectedHash pour la validation.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: compteurId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
+  /campaigns/{campaignId}/meters/{compteurId}/approve:
+    post:
+      tags: [Campagnes]
+      operationId: approveCollectionMeter
+      summary: Valider la publication des volumes
+      description: Administrateur hors impersonation. Répartition historique explicitement confirmée, 100 % par saison et aucun écrasement de flux fournisseur.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: compteurId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionMeterApproval'}
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionEnvelope'}
+        default: {$ref: '#/components/responses/Error'}
   /healthz:
     get:
       operationId: getHealth
@@ -243,6 +607,41 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/UserSession'}
+        default: {$ref: '#/components/responses/Error'}
+  /users/me/activity:
+    post:
+      tags: [Compte, Stats]
+      operationId: recordMyMonthlyActivity
+      summary: Enregistrer un usage du service pendant le mois courant
+      description: >-
+        Signal idempotent réservé à une session humaine. Le serveur détermine le mois Europe/Paris
+        et l'utilisateur réel, y compris pendant une impersonation. Les comptes de service sont
+        refusés. Aucun identifiant, rôle, date ou détail de navigation ne peut être fourni.
+        La première activité du mois est conservée ; aucun effet sur les données métier.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '200':
+          description: Activité mensuelle enregistrée ou déjà connue
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [month]
+                properties:
+                  month: {type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$', example: '2026-09'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /users/me/profile:
     patch:
@@ -724,7 +1123,11 @@ paths:
       tags: [Declarations]
       operationId: createDeclaration
       summary: Créer une déclaration avec fichiers
-      description: Crée une déclaration déposée par un déclarant et stocke les fichiers associés.
+      description: >-
+        Crée une déclaration déposée par un déclarant et stocke les fichiers associés.
+        Le modèle PE accepte une colonne facultative code_comptage (ou « Code comptage »).
+        Les anciens formats restent acceptés ; les lignes ambiguës sont conservées
+        pour rapprochement, sans attribution arbitraire à une exploitation.
       requestBody:
         required: true
         content:
@@ -749,14 +1152,16 @@ paths:
       tags: [Declarations]
       operationId: createQuickDeclaration
       summary: Créer une saisie rapide
-      description: Crée une déclaration rapide depuis des index ou volumes saisis dans le formulaire.
+      description: >-
+        Crée une déclaration rapide depuis des index ou volumes. Chaque entrée
+        désigne une exploitation par son UUID, ou par le PP et son code comptage.
+        Un ancien payload sans identité est accepté seulement si l'exploitation
+        correspondante est unique. Une ambiguïté renvoie 409, sans sélection arbitraire.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              additionalProperties: true
+            schema: {$ref: '#/components/schemas/QuickDeclarationInput'}
       responses:
         '201':
           description: Déclaration créée
@@ -764,12 +1169,33 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Declaration'}
         default: {$ref: '#/components/responses/Error'}
+  /declarations/quick/conflicts:
+    post:
+      tags: [Declarations]
+      operationId: previewQuickDeclarationConflicts
+      summary: Prévisualiser les conflits d'une saisie rapide
+      description: Applique les mêmes règles d'identité et de droits que l'écriture ; les conflits sont limités à l'exploitation choisie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuickDeclarationInput'}
+      responses:
+        '200':
+          description: Conflits de volumes existants sur la période ; les index sont traités par le calculateur.
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        default: {$ref: '#/components/responses/Error'}
   /declarations/quick/context:
     get:
       tags: [Declarations]
       operationId: getQuickDeclarationContext
       summary: Contexte de saisie rapide
-      description: Retourne les points, usages et périodes utiles à la saisie rapide.
+      description: >-
+        Retourne les points, usages et périodes utiles à la saisie rapide. Deux
+        exploitations d'un même PP sont deux choix distincts, portant exploitationId,
+        countingCode et leur propre dernier index.
       responses:
         '200':
           description: Contexte disponible
@@ -918,6 +1344,10 @@ paths:
                     - type: string
                       format: uuid
                     - type: 'null'
+                exploitationId:
+                  description: Exploitation cible autorisée ; nécessaire si plusieurs exploitations correspondent au PP et à la période. Null lors du retrait de l'association.
+                  type: [string, 'null']
+                  format: uuid
       responses:
         '200': {description: Rapprochement enregistré}
         '409':
@@ -1006,6 +1436,10 @@ paths:
                   enum: [PENDING, REJECTED, VALIDATED]
                 instructionComment:
                   type: [string, 'null']
+                exploitationId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Identité cible vérifiée avec le préleveur, le PP, le code déclaré et la période. Omission acceptée si la correspondance est unique ; ne déverrouille pas une association automatique.
                 pointPrelevementId:
                   description: Identifiant du point cible, ou `null` pour retirer une association manuelle.
                   oneOf:
@@ -1517,8 +1951,8 @@ paths:
     get:
       tags: [Stats]
       operationId: getStats
-      summary: Statistiques publiques
-      description: Retourne les statistiques agrégées affichées par le front.
+      summary: Statistiques historiques (session requise)
+      description: Ancien contrat conservé pour compatibilité. La page publique utilise désormais /stats/public.
       responses:
         '200':
           description: Statistiques
@@ -1527,6 +1961,43 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+        default: {$ref: '#/components/responses/Error'}
+  /stats/public:
+    get:
+      tags: [Stats]
+      operationId: getPublicStats
+      summary: Statistiques publiques mensuelles de Partageons l'eau
+      description: >-
+        Accessible sans session, même en présence d'un token expiré. Retourne uniquement des agrégats,
+        sans identité de préleveur ni détail du journal d'audit. Les données métier sont rattachées au
+        mois des mesures et non à celui du dépôt. Le référentiel des préleveurs recensés est le référentiel
+        actuel. activeUsers compte les utilisateurs réels ayant consulté le service, même avec une
+        session persistante. L'historique antérieur à cette collecte est une borne basse incomplète
+        issue des connexions réussies ; le mois de démarrage reste partiel. connections conserve
+        l'ancien indicateur de connexions réussies pour compatibilité. publicVisitors expose séparément
+        les visiteurs uniques mensuels du site vitrine, et publicVisitors.combined ceux de l’union
+        site institutionnel et application de production ; leur indisponibilité ne bloque pas les données métier.
+        Le mois sélectionné s'applique aux territoires et aux canaux, pas aux séries des six derniers mois terminés.
+        Les deux découpages
+        géographiques ne s'additionnent pas. La méthodologie interne est documentée dans docs/public-stats.md.
+        Les calculs sont conservés une heure en cache. Limite de 60 requêtes par minute et par adresse IP.
+      security: []
+      parameters:
+        - in: query
+          name: month
+          description: Mois terminé au format AAAA-MM, à partir de janvier 1900. Par défaut, le dernier mois terminé dans le fuseau Europe/Paris.
+          schema:
+            type: string
+            pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+            example: '2026-08'
+      responses:
+        '200':
+          description: Statistiques agrégées du mois et six mois d'activité, de connexions et de visiteurs du site et de l’application
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicStatsResponse'}
+        '400': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /admin/dashboard:
     get:
@@ -1812,6 +2283,40 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DashboardWaterResources'}
         default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/resource-settings:
+    get:
+      tags: [Zones]
+      operationId: getZoneResourceSettings
+      summary: Consulter le type de ressource gérée par un SAGE
+      description: Attribut propre à PE, réservé aux SAGE. Nécessite une session humaine et le droit zone.detail.read. Les autres types de zones sont refusés.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+      responses:
+        '200':
+          description: Type de ressource et capacité de modification
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneResourceSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Zones]
+      operationId: updateZoneResourceSettings
+      summary: Modifier le type de ressource gérée par un SAGE
+      description: Réservé à un administrateur global ou à un gestionnaire actif réunissant zone.agent.create, zone.agent.update et zone.agent.remove, hors impersonation. Ne modifie que cet attribut et ne réaffecte pas automatiquement les points existants.
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ZoneResourceSettingsInput'}
+      responses:
+        '200':
+          description: Attribut modifié
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneResourceSettings'}
+        default: {$ref: '#/components/responses/Error'}
   /zones/{zoneId}/monitoring-stations:
     get:
       tags: [Zones]
@@ -1891,6 +2396,7 @@ paths:
       summary: Rechercher des séries
       description: Liste les métadonnées de séries accessibles à l'instructeur.
       parameters:
+        - $ref: '#/components/parameters/ExploitationFilter'
         - in: query
           name: pointIds
           schema: {type: string}
@@ -1950,8 +2456,27 @@ paths:
       description: >-
         Agrège les valeurs de séries sur un périmètre UUID. Les cumuls sont répartis
         uniformément sur leur période source semi-ouverte avant l'agrégation demandée ;
-        cette transformation sert uniquement à l'affichage.
+        cette transformation sert uniquement à l'affichage. Avec meterId, retourne
+        exclusivement pour ADMIN les index physiques canoniques de ce compteur,
+        sans agrégation, répartition ni création de mesures. Le compteur doit être
+        relié aux points, préleveur et collecteur demandés via ses affectations.
+        Cet historique global reste lisible avant activation de la collecte ; il
+        n'est pas attribué historiquement aux exploitations. Les dates de cette
+        branche désignent des jours Europe/Paris, bornes inclusives.
+        Les volumes METER sont limités aux affectations consultables par l'acteur,
+        y compris lorsqu'un point est partagé. Leurs intervalles exacts sont
+        répartis sur les jours Europe/Paris, en tenant compte des changements
+        d'heure. Les mesures calendaires hors METER conservent leur interprétation.
+        Avec view=chart, la réponse omet uniquement metadata.points et exactPeriods.
+        Les valeurs, dates, compteurs, avertissements et autres métadonnées sont
+        inchangés, y compris exactVolumesEstimated. Sans view, le contrat habituel
+        est conservé.
       parameters:
+        - $ref: '#/components/parameters/ExploitationFilter'
+        - in: query
+          name: view
+          description: Vue graphique allégée, sans liste des points ni périodes exactes détaillées. Aucun effet sur les valeurs, options d'agrégation ou droits d'accès.
+          schema: {type: string, enum: [chart]}
         - in: query
           name: metricTypeCode
           required: true
@@ -1972,11 +2497,11 @@ paths:
           schema: {type: string, format: date}
         - in: query
           name: aggregationFrequency
-          description: Résolution temporelle de la série retournée.
+          description: Résolution temporelle. Avec meterId, seule instantaneous est admise (valeur implicite).
           schema:
             type: string
             default: 1 day
-            enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year]
+            enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year, instantaneous]
         - in: query
           name: spatialOperator
           schema:
@@ -1984,9 +2509,22 @@ paths:
             enum: [sum, mean, min, max]
         - in: query
           name: temporalOperator
+          description: Avec meterId, seul raw est admis (valeur implicite). raw est interdit sans meterId.
           schema:
             type: string
-            enum: [sum, mean, min, max]
+            enum: [sum, mean, min, max, raw]
+        - in: query
+          name: meterId
+          description: Compteur physique (ADMIN uniquement). Exige metricTypeCode=index et interdit sourceId et spatialOperator.
+          schema: {type: string, format: uuid}
+        - in: query
+          name: cursor
+          description: Avec meterId uniquement, identifiant du dernier relevé de la page précédente, dans le même compteur et la même fenêtre.
+          schema: {type: string, format: uuid}
+        - in: query
+          name: limit
+          description: Taille d'une page d'index physiques ; interdit sans meterId. Le client doit suivre nextCursor pour obtenir toute la série.
+          schema: {type: integer, minimum: 1, maximum: 5000, default: 1000}
         - in: query
           name: pointIds
           schema: {type: string}
@@ -2012,8 +2550,29 @@ paths:
       tags: [Series]
       operationId: getAggregatedSeriesOptions
       summary: Options d'agrégation
-      description: Retourne les métriques et opérateurs disponibles sur un périmètre.
+      description: >-
+        Retourne les métriques et opérateurs disponibles sur un périmètre.
+        Avec includeMeterReadings=true, ADMIN reçoit aussi une option distincte
+        par compteur physique possédant des relevés canoniques, sans doublon lié
+        aux affectations. Les autres rôles, les scopes sourceId et les clients
+        sans ce paramètre conservent les options ordinaires inchangées.
+        Les options issues de volumes METER sont toujours limitées aux affectations
+        consultables par l'acteur, avec les mêmes filtres que les valeurs agrégées.
+        Avec view=chart, retourne uniquement parameters, avec les mêmes options et
+        métadonnées. Sans view, la liste points reste présente.
       parameters:
+        - $ref: '#/components/parameters/ExploitationFilter'
+        - in: query
+          name: view
+          description: Omet uniquement la liste points ; les paramètres, fenêtres temporelles, compteurs de séries et droits restent inchangés.
+          schema: {type: string, enum: [chart]}
+        - in: query
+          name: includeExploitationIndexes
+          description: Distingue les index ordinaires par exploitation et code comptage ; les options de volumes restent regroupées. Ne modifie pas les droits d'accès.
+          schema: {type: boolean, default: false}
+        - in: query
+          name: includeMeterReadings
+          schema: {type: boolean, default: false}
         - in: query
           name: pointIds
           schema: {type: string}
@@ -2032,8 +2591,392 @@ paths:
           content:
             application/json:
               schema:
+                $ref: '#/components/schemas/AggregatedSeriesOptionsResponse'
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/declarants/{declarantId}/context:
+    get:
+      operationId: getServiceAccountDeclarantContext
+      summary: Lire le contexte des connecteurs d'un déclarant
+      description: Chaque exploitation conserve son UUID id, son countingCode facultatif et ses propres connecteurs, même si plusieurs exploitations concernent le même PP.
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: path, name: declarantId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      responses:
+        '200':
+          description: Contexte autorisé du compte de service.
+          content:
+            application/json:
+              schema:
                 type: object
-                additionalProperties: true
+                properties:
+                  success: {type: boolean}
+                  exploitations:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                      properties:
+                        id: {$ref: '#/components/schemas/Uuid'}
+                        countingCode: {$ref: '#/components/schemas/CountingCode'}
+                        point: {type: object, additionalProperties: true}
+                        connectors: {type: array, items: {type: object, additionalProperties: true}}
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/connectors/ingest:
+    post:
+      operationId: ingestServiceAccountConnectorOutput
+      summary: Ingérer les séries normalisées d'un connecteur classique
+      description: >-
+        L'identité fournie reste subordonnée au connecteur, au préleveur et au PP
+        autorisés. Les champs exploitationId et countingCode facultatifs des
+        métriques doivent correspondre à la même exploitation ; ils ne permettent
+        pas de rediriger un connecteur vers un autre bénéficiaire.
+        Les compteurs physiques utilisent le transport meter-readings distinct.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connector, metadata, data]
+              additionalProperties: true
+              properties:
+                connector: {type: string}
+                metadata:
+                  type: object
+                  required: [point_id, declarant_id, context_id]
+                  additionalProperties: true
+                  properties:
+                    point_id: {$ref: '#/components/schemas/Uuid'}
+                    declarant_id: {$ref: '#/components/schemas/Uuid'}
+                    context_id: {type: string}
+                    connector_id: {$ref: '#/components/schemas/Uuid'}
+                    exploitation_id: {$ref: '#/components/schemas/Uuid'}
+                    counting_code: {$ref: '#/components/schemas/CountingCode'}
+                data:
+                  type: object
+                  additionalProperties: true
+                  properties:
+                    exploitationId: {$ref: '#/components/schemas/Uuid'}
+                    countingCode: {$ref: '#/components/schemas/CountingCode'}
+                    metrics:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: true
+                        properties:
+                          exploitationId: {$ref: '#/components/schemas/Uuid'}
+                          countingCode: {$ref: '#/components/schemas/CountingCode'}
+      responses:
+        '200': {description: "Résultat d'ingestion, pouvant signaler des données ignorées selon la politique de conflit."}
+        '409': {description: Identité contradictoire ou conflit métier.}
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/declarations/{declarationId}/ingest:
+    post:
+      operationId: ingestServiceAccountDeclarationSeries
+      summary: Ingérer les séries normalisées d'un fichier de déclaration
+      description: >-
+        Chaque série porte son identité facultative. Les observations ambiguës
+        restent non rapprochées avec le code déclaré et leur diagnostic ; les
+        autres lignes du fichier peuvent être importées.
+      security: [{BearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/DeclarationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                errors: {type: array, items: {}}
+                data:
+                  type: object
+                  required: [conflictPolicy, series]
+                  properties:
+                    conflictPolicy: {type: string}
+                    series:
+                      type: array
+                      items: {$ref: '#/components/schemas/NormalizedDeclarationSeries'}
+      responses:
+        '200': {description: Résultat du traitement ; consulter imported et les diagnostics de rapprochement.}
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/meter-streams:
+    get:
+      operationId: getMeterStreamContext
+      summary: Lister les flux compteurs autorisés d’un fournisseur et périmètre
+      description: Réservé à un compte de service. Les identifiants de fournisseur et de périmètre sont opaques et obligatoires ; seuls ses flux activés sont retournés.
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: query, name: provider, required: true, schema: {type: string, minLength: 1, maxLength: 100}}
+        - {in: query, name: scope, required: true, schema: {type: string, minLength: 1, maxLength: 250}}
+      responses:
+        '200':
+          description: Flux autorisés, sans index physique brut
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider, scope, streams]
+                properties:
+                  provider: {type: string}
+                  scope: {type: string}
+                  streams:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, externalId, compteurId, activatedAt, lastSuccessAt, lastReadingAt]
+                      properties:
+                        id: {$ref: '#/components/schemas/Uuid'}
+                        externalId: {type: string}
+                        compteurId: {$ref: '#/components/schemas/Uuid'}
+                        activatedAt: {type: string, format: date-time}
+                        lastSuccessAt: {type: [string, 'null'], format: date-time}
+                        lastReadingAt: {type: [string, 'null'], format: date-time}
+        default: {$ref: '#/components/responses/Error'}
+  /service-accounts/meter-readings/ingestions:
+    post:
+      operationId: ingestMeterReadings
+      summary: Ingérer un lot normalisé d’observations physiques
+      description: Compte de service explicitement autorisé sur les flux du fournisseur/périmètre. LIVE uniquement. Le producteur interprète dates locales et codes qualité ; les lignes fournisseur non normalisées sont refusées. L’accusé durable et le checkpoint ne sont retournés qu’après commit atomique.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MeterIngestionInput'}
+      responses:
+        '200':
+          description: Lot persisté ou replay exact d’un lot déjà persisté
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeterIngestionResult'}
+        '409': {description: Identifiant de lot déjà utilisé avec un autre contenu ou un autre déposant}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/meter-readings/ingestions:
+    post:
+      operationId: ingestMeterReadingsAsAdmin
+      summary: Ingérer un lot normalisé LIVE ou OFFLINE en administration
+      description: Réservé à un administrateur hors impersonation. Même protocole générique que pour un compte de service ; les observations OFFLINE ne remplacent jamais des observations LIVE.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MeterIngestionInput'}
+      responses:
+        '200':
+          description: Lot persisté atomiquement
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeterIngestionResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations:
+    post:
+      tags: [Declarants]
+      operationId: createExploitation
+      summary: Créer une exploitation
+      description: >-
+        Lie un préleveur à un PP, avec au plus un code comptage textuel. Deux codes
+        distincts peuvent distinguer des exploitations du même couple lorsque la
+        capacité est activée. Un code absent ne contourne pas les contrôles de
+        chevauchement ; les permissions territoriales restent requises.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ExploitationWriteInput'
+                - required: [declarantUserId, pointPrelevementId, usageId, status]
+      responses:
+        '200':
+          description: Exploitation créée.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Exploitation'}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations/{exploitationId}:
+    parameters:
+      - {in: path, name: exploitationId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    get:
+      tags: [Declarants]
+      operationId: getExploitation
+      summary: Lire une exploitation
+      description: Retourne l'exploitation et son code comptage, sous les contrôles d'accès existants.
+      responses:
+        '200':
+          description: Exploitation autorisée.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Exploitation'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      tags: [Declarants]
+      operationId: updateExploitation
+      summary: Modifier une exploitation
+      description: Une correction de code conserve l'UUID et l'historique ; expectedCountingCode est requis pour un changement effectif et protège des modifications concurrentes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExploitationWriteInput'}
+      responses:
+        '200':
+          description: Exploitation modifiée.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Exploitation'}
+        '409': {description: "Modification concurrente, chevauchement de comptage ou déplacement interdit d'un historique."}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [Declarants]
+      operationId: deleteExploitation
+      summary: Supprimer une exploitation sans historique
+      description: Une exploitation portant des déclarations ou des affectations de compteurs ne peut pas être supprimée ; elle doit être clôturée.
+      responses:
+        '200': {description: Exploitation supprimée.}
+        '409': {description: Historique à préserver ; suppression refusée.}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations/{exploitationId}/meter-allocations:
+    get:
+      operationId: getExploitationMeterAllocations
+      summary: Consulter les affectations physiques d’une exploitation
+      description: Suit les droits de lecture de l’exploitation. Ne donne pas accès aux index globaux d’un compteur partagé. sync.available indique l’existence d’un flux sans interprétation du fournisseur.
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: path, name: exploitationId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      responses:
+        '200':
+          description: Affectations, disponibilité et état de synchronisation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [meterAllocations]
+                properties:
+                  meterAllocations:
+                    type: array
+                    items: {$ref: '#/components/schemas/MeterAllocationSummary'}
+        default: {$ref: '#/components/responses/Error'}
+  /meters/allocation-targets:
+    get:
+      operationId: searchMeterAllocationTargets
+      summary: Rechercher les exploitations pour une répartition de compteur
+      description: Administrateur uniquement. Retourne au plus 25 exploitations non supprimées et actives ou sans statut renseigné.
+      parameters:
+        - {in: query, name: search, required: true, schema: {type: string, minLength: 2, maxLength: 100}}
+      responses:
+        '200':
+          description: Exploitations candidates ; les dates et l’usage sont également vérifiés lors de l’enregistrement.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {$ref: '#/components/schemas/Uuid'}
+                        label: {type: string}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations/{exploitationId}/meters/{meterId}/allocation-settings:
+    parameters:
+      - {in: path, name: exploitationId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      - {in: path, name: meterId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    get:
+      operationId: getMeterAllocationSettings
+      summary: Lire la répartition complète d’un compteur
+      description: Administrateur uniquement. Le compteur doit être rattaché à l’exploitation. Les parts hors plateforme sont incluses ; les index physiques ne sont pas retournés.
+      parameters:
+        - {in: query, name: streamId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      responses:
+        '200':
+          description: Répartition et jeton de concurrence
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeterAllocationSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: updateMeterAllocationSettings
+      summary: Modifier les rattachements et pourcentages à une date d’effet
+      description: >-
+        Administrateur hors impersonation uniquement. La répartition complète doit totaliser exactement 100 %,
+        avec au moins une exploitation active. La date d’effet est un jour Europe/Paris, au plus tôt le lendemain
+        du dernier début de version ou de l’activation. Les anciennes versions et identités des rattachements
+        restent conservées ; un changement de bénéficiaire crée un nouveau rattachement. Ne modifie ni
+        l’activation du flux, ni les mesures ordinaires. Les intervalles sans répartition complète ou traversant
+        la date de changement restent bloqués. Les conflits de recalcul sont retournés sans annuler la répartition.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [streamId, expectedVersion, effectiveDate, reason, allocations]
+              properties:
+                streamId: {$ref: '#/components/schemas/Uuid'}
+                expectedVersion: {type: string, pattern: '^[a-f0-9]{64}$'}
+                effectiveDate: {type: string, format: date, description: Année comprise entre 1900 et 2100.}
+                reason: {type: string, minLength: 3, maxLength: 500}
+                allocations:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [exploitationId, percentage]
+                    properties:
+                      key: {type: string, minLength: 1, maxLength: 500, description: Clé existante ; omise pour une nouvelle part.}
+                      exploitationId: {type: [string, 'null'], format: uuid, description: null désigne explicitement une part hors plateforme.}
+                      percentage: {type: string, pattern: '^\d{1,3}(?:\.\d{1,4})?$', description: De 0 à 100 avec au plus quatre décimales.}
+                      additive: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Nouvelle répartition et bilan du recalcul
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeterAllocationSettings'}
+        '409': {description: Répartition modifiée depuis sa lecture ; rechargement obligatoire.}
+        default: {$ref: '#/components/responses/Error'}
+  /exploitations/{exploitationId}/meters/{meterId}/readings:
+    get:
+      operationId: getExploitationMeterReadings
+      summary: Consulter les observations physiques canoniques paginées
+      description: Administrateur uniquement, même si un autre acteur peut consulter l’exploitation. Le compteur doit lui être affecté et le curseur doit appartenir au même compteur. Aucun code qualité fournisseur n’est interprété par l’API.
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: path, name: exploitationId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {in: path, name: meterId, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {in: query, name: cursor, schema: {$ref: '#/components/schemas/Uuid'}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: Observations de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  nextCursor: {type: [string, 'null'], format: uuid}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, observedAt, index, quality, origin, admissible]
+                      properties:
+                        id: {$ref: '#/components/schemas/Uuid'}
+                        observedAt: {type: string, format: date-time}
+                        index: {type: [string, 'null']}
+                        quality: {type: [string, 'null'], description: Annotation opaque du producteur}
+                        origin: {type: [string, 'null']}
+                        admissible: {type: boolean}
         default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
@@ -2042,6 +2985,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
   parameters:
+    ExploitationFilter:
+      in: query
+      name: exploitationId
+      description: Filtre les données de cette exploitation sans élargir les droits sur les points ou les compteurs partagés.
+      schema: {$ref: '#/components/schemas/Uuid'}
     AdminAgentId:
       in: path
       name: agentId
@@ -2071,6 +3019,7 @@ components:
       in: path
       name: pointId
       required: true
+      description: UUID du point. Un ancien UUID fusionné par un alias PE explicite désigne le point conservé ; ses droits d’accès restent applicables. Un retrait sans cible reste introuvable.
       schema: {$ref: '#/components/schemas/Uuid'}
     SeriesId:
       in: path
@@ -2234,6 +3183,444 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    CollectionCampaignInput:
+      type: object
+      additionalProperties: false
+      required: [name, collecteurUserId, exploitationIds]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        type: {type: string, const: DROPT_INDEX_NEEDS_2026_2027}
+        opensOn: {type: [string, 'null'], format: date}
+        closesOn: {type: [string, 'null'], format: date}
+        collecteurUserId: {$ref: '#/components/schemas/Uuid'}
+        exploitationIds:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Uuid'}
+        sourceId: {type: string, maxLength: 250}
+    CollectionCampaignPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        type: {type: string, const: DROPT_INDEX_NEEDS_2026_2027}
+        opensOn: {type: [string, 'null'], format: date}
+        closesOn: {type: [string, 'null'], format: date}
+        collecteurUserId: {$ref: '#/components/schemas/Uuid'}
+        exploitationIds:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/Uuid'}
+    CollectionPeriod:
+      type: object
+      additionalProperties: false
+      description: Champs agricoles et mesures. Tous sont obligatoires à la soumission selon la section, mais peuvent manquer dans un brouillon. Les nombres positifs ou nuls acceptent quatre décimales.
+      properties:
+        usageId: {$ref: '#/components/schemas/Uuid'}
+        surface: {type: [string, number, 'null']}
+        crops:
+          description: >-
+            Libellés d’assolement sélectionnés, sans dépendance entre catégories et sous-catégories.
+            Chaque libellé est nettoyé des espaces en début et fin, non vide et limité à 3000 caractères.
+            Un tableau vide est autorisé dans un brouillon ; la soumission exige au moins un libellé.
+            Les anciennes chaînes libres restent acceptées, non vides à la soumission.
+            null et la chaîne vide sont réservés aux brouillons. Le CSV joint les libellés avec une virgule et une espace.
+          oneOf:
+            - type: array
+              maxItems: 100
+              uniqueItems: true
+              items: {type: string, minLength: 1, maxLength: 3000}
+            - type: [string, 'null']
+              maxLength: 3000
+        indexStart: {type: [string, number, 'null']}
+        indexEnd: {type: [string, number, 'null']}
+        flow: {type: [string, number, 'null']}
+        volume: {type: [string, number, 'null']}
+    CollectionForm:
+      type: object
+      additionalProperties: false
+      description: >-
+        Les usages et sous-usages du référentiel sont acceptés. Lors de la soumission,
+        les trois index de chaque compteur doivent être croissants ou identiques dans l’ordre chronologique.
+        Les incohérences retournent les champs concernés dans data.fields et data.validationErrors.
+        Un brouillon peut rester incomplet ou contenir des index à corriger, sans publication des volumes.
+      properties:
+        meters:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              compteurId: {type: [string, 'null'], format: uuid}
+              serialNumber: {type: [string, 'null'], maxLength: 100}
+              offSeason: {$ref: '#/components/schemas/CollectionPeriod'}
+              season: {$ref: '#/components/schemas/CollectionPeriod'}
+        needs:
+          type: object
+          additionalProperties: false
+          description: Besoins futurs pour l’étiage 2027 et le hors étiage du 1er novembre 2027 au 31 mai 2028. Les périodes d’index historiques restent inchangées.
+          properties:
+            offSeason:
+              $ref: '#/components/schemas/CollectionPeriod'
+              description: Hors étiage 2027–2028, du 1er novembre 2027 au 31 mai 2028.
+            season:
+              $ref: '#/components/schemas/CollectionPeriod'
+              description: Étiage 2027.
+        comment: {type: string, maxLength: 20000}
+    CollectionResponseWrite:
+      type: object
+      additionalProperties: false
+      required: [revision, data]
+      properties:
+        revision: {type: integer, minimum: 0}
+        data: {$ref: '#/components/schemas/CollectionForm'}
+    CollectionMeterApproval:
+      type: object
+      required: [expectedHash, confirmHistorical, allocations]
+      properties:
+        expectedHash: {type: string}
+        confirmHistorical: {type: boolean, const: true}
+        canonicalResponseId: {$ref: '#/components/schemas/Uuid'}
+        allocations:
+          type: array
+          items:
+            type: object
+            required: [exploitationId, offSeasonPercentage, seasonPercentage]
+            properties:
+              exploitationId: {$ref: '#/components/schemas/Uuid'}
+              offSeasonPercentage: {type: [number, string]}
+              seasonPercentage: {type: [number, string]}
+              additive: {type: boolean}
+    CollectionEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean, const: true}
+        data:
+          type: object
+          additionalProperties: true
+          description: >-
+            Ressource ou liste paginée avec droits explicites. Les brouillons ne sont jamais exposés au collecteur.
+            Les dates sont ISO et les états de réponse et de publication sont distincts.
+            Chaque réponse expose volumes (offSeason, season, total, publicationStatus, partial).
+            Les nombres sont des m³ effectivement publiés ; null signifie absence de volume publié et ne vaut pas zéro.
+            Les résultats exposent totals.publishedVolumes et les volumes demandés séparément.
+    MeterAllocationSettings:
+      type: object
+      required: [meter, stream, expectedVersion, minEffectiveDate, allocations]
+      properties:
+        meter:
+          type: object
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            serialNumber: {type: [string, 'null']}
+            identifier: {type: [string, 'null']}
+        stream:
+          type: object
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            provider: {type: string}
+            enabled: {type: boolean}
+        expectedVersion: {type: string, pattern: '^[a-f0-9]{64}$'}
+        minEffectiveDate: {type: string, format: date}
+        allocations:
+          type: array
+          items:
+            type: object
+            properties:
+              key: {type: string}
+              exploitationId: {type: [string, 'null'], format: uuid}
+              exploitationLabel: {type: [string, 'null']}
+              percentage: {type: string}
+              additive: {type: boolean}
+              inScope: {type: boolean}
+              unresolved: {type: boolean, description: Part locale sans exploitation résolue ; ne doit pas être assimilée à une part hors plateforme.}
+        recalculation:
+          type: object
+          properties:
+            published: {type: integer, minimum: 0}
+            conflicts: {type: integer, minimum: 0}
+            issues: {type: array, items: {type: string}}
+    MeterIngestionInput:
+      type: object
+      additionalProperties: false
+      required: [provider, scope, batchId, windowStart, windowEnd, fetchedAt, complete, readings]
+      properties:
+        provider: {type: string, minLength: 1, maxLength: 100}
+        scope: {type: string, minLength: 1, maxLength: 250}
+        batchId: {type: string, minLength: 1, maxLength: 250}
+        windowStart: {type: string, format: date-time, description: Borne incluse avec offset explicite}
+        windowEnd: {type: string, format: date-time, description: 'Borne incluse supérieure au début, au plus 32 jours après et pas après fetchedAt'}
+        fetchedAt: {type: string, format: date-time, description: Instant de récupération réutilisé à l’identique pour un retry}
+        complete: {type: boolean, const: true}
+        mode: {type: string, enum: [LIVE, OFFLINE], default: LIVE}
+        preserveOrdinary: {type: boolean, default: false, description: Protection supplémentaire interdisant tout remplacement de volume ordinaire par ce lot ; conservée dans son accusé durable.}
+        streamIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items: {type: string, format: uuid}
+          description: Périmètre facultatif de rejeu. Tous les flux doivent appartenir au fournisseur, au périmètre et au compte autorisés. Les autres flux et leurs checkpoints ne sont pas modifiés.
+        readings:
+          type: array
+          maxItems: 50000
+          items:
+            type: object
+            additionalProperties: false
+            required: [externalId, observedAt, index, status]
+            description: VALID exige identifiant, instant et index non nulls. Les anomalies source sont enveloppées en INVALID, jamais envoyées sous leur format fournisseur brut.
+            properties:
+              externalId: {type: [string, 'null'], minLength: 1, maxLength: 250}
+              observedAt: {type: [string, 'null'], format: date-time, description: 'Instant normalisé avec offset explicite, secondes et millisecondes conservées'}
+              index: {type: [string, 'null'], pattern: '^\d{1,16}(?:\.\d{1,4})?$'}
+              status: {type: string, enum: [VALID, INVALID]}
+              reason: {type: [string, 'null'], maxLength: 250}
+              quality: {type: [string, 'null'], maxLength: 250, description: Annotation opaque non interprétée par l’API}
+              origin: {type: [string, 'null'], maxLength: 250}
+              raw: {description: 'JSON original optionnel, y compris une primitive ou null'}
+    MeterIngestionResult:
+      type: object
+      required: [persisted, ingestionId, counts, checkpoint]
+      properties:
+        persisted: {type: boolean, const: true}
+        ingestionId: {$ref: '#/components/schemas/Uuid'}
+        checkpoint: {type: string, format: date-time, description: Exactement la borne windowEnd du lot persisté}
+        counts:
+          type: object
+          required: [received, accepted, blocked, unknownMeters, unchanged, published, conflicts]
+          properties:
+            received: {type: integer, minimum: 0}
+            accepted: {type: integer, minimum: 0}
+            blocked: {type: integer, minimum: 0}
+            unknownMeters: {type: integer, minimum: 0}
+            unchanged: {type: integer, minimum: 0, description: Indicateur non exclusif de déduplication}
+            published: {type: integer, minimum: 0}
+            conflicts: {type: integer, minimum: 0}
+        quarantine:
+          type: array
+          items:
+            type: object
+            properties:
+              externalId: {type: [string, 'null']}
+              reason: {type: string}
+    MeterAllocationSummary:
+      type: object
+      required: [id, compteur, provider, percentage, startDate, endDate, status, sync, capabilities]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        compteur:
+          type: object
+          required: [id, serialNumber]
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            serialNumber: {type: [string, 'null']}
+        provider: {type: string, description: 'Identifiant opaque, ne détermine pas les capacités'}
+        percentage: {type: [string, 'null']}
+        startDate: {type: [string, 'null'], format: date-time}
+        endDate: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [ACTIVE, INCOMPLETE, DISABLED, ENDED]}
+        sync:
+          type: object
+          required: [available, state, lastSuccessAt, lastReadingAt]
+          properties:
+            available: {type: boolean}
+            streamId: {type: [string, 'null'], format: uuid}
+            state: {type: string, enum: [DISABLED, PENDING, SUCCESS, ERROR]}
+            lastSuccessAt: {type: [string, 'null'], format: date-time}
+            lastReadingAt: {type: [string, 'null'], format: date-time}
+        capabilities:
+          type: object
+          required: [canReadGlobalReadings]
+          properties:
+            canReadGlobalReadings: {type: boolean}
+            canEditAllocations: {type: boolean, description: Modification réservée à un administrateur en présence d’un flux.}
+    PublicStatsProfile:
+      type: object
+      additionalProperties: false
+      required: [key, label, count, reportingCount]
+      properties:
+        key:
+          type: string
+          enum: [AGRICULTURE, INDUSTRY, DRINKING_WATER, OTHER, UNKNOWN]
+        label: {type: string}
+        count: {type: integer, minimum: 0}
+        reportingCount:
+          type: integer
+          minimum: 0
+          description: Préleveurs de ce profil ayant au moins une donnée admissible sur le mois, dédupliqués.
+    PublicStatsTerritory:
+      type: object
+      additionalProperties: false
+      required: [id, name, deploymentMonth, pointsCount, preleveursCount, reportingPreleveursCount, reportingRate, profiles]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        name: {type: string}
+        deploymentMonth:
+          type: [string, 'null']
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          description: Mois métier de déploiement confirmé, null tant qu'il n'est pas renseigné.
+        pointsCount: {type: integer, minimum: 0}
+        preleveursCount: {type: integer, minimum: 0}
+        reportingPreleveursCount: {type: integer, minimum: 0}
+        reportingRate:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: Pourcentage, ou null si aucun préleveur recensé.
+        profiles:
+          type: array
+          items: {$ref: '#/components/schemas/PublicStatsProfile'}
+    PublicStatsChannel:
+      type: object
+      additionalProperties: false
+      required: [key, label, count, percentage]
+      properties:
+        key:
+          type: string
+          enum: [DIRECT, THIRD_PARTY, MIXED, UNKNOWN]
+        label: {type: string}
+        count: {type: integer, minimum: 0}
+        percentage: {type: [number, 'null'], minimum: 0, maximum: 100}
+    PublicStatsConnectionsMonth:
+      type: object
+      additionalProperties: false
+      required: [month, administration, declarants, total, status]
+      properties:
+        month: {type: string, example: '2026-08'}
+        administration: {type: [integer, 'null'], minimum: 0}
+        declarants: {type: [integer, 'null'], minimum: 0}
+        total: {type: [integer, 'null'], minimum: 0}
+        status:
+          type: string
+          enum: [available, partial, unavailable]
+          description: Les compteurs indisponibles sont null. Le premier mois connu du journal est partiel.
+    PublicVisitorMonth:
+      type: object
+      additionalProperties: false
+      required: [month, uniqueVisitors, status]
+      properties:
+        month: {type: string, example: '2026-08'}
+        uniqueVisitors: {type: [integer, 'null'], minimum: 0}
+        status:
+          type: string
+          enum: [complete, unavailable]
+          description: Indisponible implique un compteur null, jamais un zéro fabriqué.
+    PublicStatsResponse:
+      type: object
+      additionalProperties: false
+      required: [month, generatedAt, availableMonths, totals, territories, channels, connections, activeUsers, publicVisitors]
+      properties:
+        month: {type: string, example: '2026-08'}
+        generatedAt: {type: string, format: date-time}
+        availableMonths:
+          type: array
+          items: {type: string, example: '2026-08'}
+        totals:
+          type: object
+          additionalProperties: false
+          required: [pointsCount, preleveursCount, sageCount, departmentCount]
+          properties:
+            pointsCount: {type: integer, minimum: 0}
+            preleveursCount: {type: integer, minimum: 0}
+            sageCount: {type: integer, minimum: 0}
+            departmentCount: {type: integer, minimum: 0}
+        territories:
+          type: object
+          additionalProperties: false
+          required: [SAGE, DEPARTEMENT]
+          properties:
+            SAGE:
+              type: array
+              items: {$ref: '#/components/schemas/PublicStatsTerritory'}
+            DEPARTEMENT:
+              type: array
+              items: {$ref: '#/components/schemas/PublicStatsTerritory'}
+        channels:
+          type: array
+          items: {$ref: '#/components/schemas/PublicStatsChannel'}
+        publicVisitors:
+          type: object
+          additionalProperties: false
+          required: [website, months, fetchedAt]
+          properties:
+            website: {type: string, format: uri, example: 'https://partageonsleau.beta.gouv.fr/'}
+            fetchedAt: {type: [string, 'null'], format: date-time}
+            combined:
+              type: object
+              additionalProperties: false
+              description: >
+                Visiteurs uniques de l’union du site institutionnel et de l’application, calculés par Matomo
+                sur son identifiant de site partagé, jamais par addition des deux audiences.
+                Les champs historiques de publicVisitors restent limités au site institutionnel.
+              required: [websites, months, fetchedAt]
+              properties:
+                websites:
+                  type: array
+                  minItems: 2
+                  maxItems: 2
+                  items: {type: string, format: uri}
+                  example: ['https://partageonsleau.beta.gouv.fr/', 'https://app.partageonsleau.beta.gouv.fr/']
+                fetchedAt: {type: [string, 'null'], format: date-time}
+                months:
+                  type: array
+                  minItems: 6
+                  maxItems: 6
+                  items: {$ref: '#/components/schemas/PublicVisitorMonth'}
+            months:
+              type: array
+              minItems: 6
+              maxItems: 6
+              items: {$ref: '#/components/schemas/PublicVisitorMonth'}
+        connections:
+          type: object
+          additionalProperties: false
+          required: [months, availableSince]
+          properties:
+            availableSince: {type: [string, 'null'], format: date-time}
+            months:
+              type: array
+              minItems: 6
+              maxItems: 6
+              items: {$ref: '#/components/schemas/PublicStatsConnectionsMonth'}
+        activeUsers:
+          type: object
+          additionalProperties: false
+          required: [months, availableSince, collectionStartedAt]
+          properties:
+            availableSince:
+              type: [string, 'null']
+              format: date-time
+              description: Début de l'historique connu, éventuellement incomplet.
+            collectionStartedAt:
+              type: [string, 'null']
+              format: date-time
+              description: Premier signal d'usage réel reçu, conservé indépendamment des comptes.
+            months:
+              type: array
+              minItems: 6
+              maxItems: 6
+              items:
+                type: object
+                additionalProperties: false
+                required: [month, administration, declarants, total, status]
+                properties:
+                  month: {type: string, example: '2026-08'}
+                  administration: {type: [integer, 'null'], minimum: 0}
+                  declarants: {type: [integer, 'null'], minimum: 0}
+                  total: {type: [integer, 'null'], minimum: 0}
+                  status:
+                    type: string
+                    enum: [available, partial, unavailable]
+                    description: >-
+                      Historique antérieur et mois de démarrage partiels, mois suivants complets.
+                      Une absence de mesure est indisponible (compteurs null), pas un zéro mesuré.
     Uuid:
       type: string
       format: uuid
@@ -3364,6 +4751,37 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         type: {type: string}
         name: {type: string}
+        metadata:
+          type: object
+          additionalProperties: true
+          properties:
+            calculationStrategy: {type: string}
+            periodStart:
+              type: string
+              format: date-time
+              description: Pour METER, début exact des valeurs visibles non rejetées, exprimé en UTC.
+            periodEnd:
+              type: string
+              format: date-time
+              description: Pour METER, fin exacte exclusive des valeurs visibles non rejetées, exprimée en UTC.
+        chunks:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              metadata:
+                type: object
+                additionalProperties: true
+                properties:
+                  periodStart:
+                    type: string
+                    format: date-time
+                    description: Pour METER, début exact des valeurs de ce chunk autorisé.
+                  periodEnd:
+                    type: string
+                    format: date-time
+                    description: Pour METER, fin exacte exclusive des valeurs de ce chunk autorisé.
     PointPrelevement:
       type: object
       additionalProperties: true
@@ -3397,6 +4815,21 @@ components:
         isReferencePoint: {type: [boolean, 'null']}
         isWaterBodyConnectedToStream: {type: [boolean, 'null']}
         isWaterBodyConnectedToGroundwater: {type: [boolean, 'null']}
+        reservoirNominalVolume:
+          type: [number, 'null']
+          exclusiveMinimum: 0
+          description: >-
+            Volume nominal de la retenue en m³, décimales admises. Facultatif et
+            descriptif, sans effet sur les volumes prélevés. Conservé uniquement
+            pour une origine PLAN_EAU ; remis à null si l’origine n’est plus PLAN_EAU.
+        waterBodyIdentifier:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 100
+          description: >-
+            Référence libre et non unique du plan d’eau. Les zéros initiaux sont
+            conservés. Facultatif, conservé uniquement pour une origine PLAN_EAU ;
+            remis à null si l’origine n’est plus PLAN_EAU.
     PointPrelevementMapSummary:
       type: object
       additionalProperties: false
@@ -3497,12 +4930,100 @@ components:
           properties:
             exploitations: {type: boolean}
             declarants: {type: boolean}
+    CountingCode:
+      type: [string, 'null']
+      maxLength: 255
+      description: Code comptage textuel facultatif, zéros initiaux conservés. Distinct du numéro de série du compteur ; non unique globalement. Une chaîne vide est normalisée en absence de code.
+    ExploitationWriteInput:
+      type: object
+      additionalProperties: true
+      properties:
+        declarantUserId: {$ref: '#/components/schemas/Uuid'}
+        pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+        status: {type: string, enum: [EN_ACTIVITE, NON_RENSEIGNE, ABANDONNEE, TERMINEE]}
+        usageId: {$ref: '#/components/schemas/Uuid'}
+        startDate: {type: [string, 'null'], format: date}
+        endDate: {type: [string, 'null'], format: date}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
+        expectedCountingCode:
+          allOf: [{$ref: '#/components/schemas/CountingCode'}]
+          description: Valeur observée avant correction ; null si aucun code n'était renseigné. À fournir en édition lorsqu'on change effectivement le code.
+    QuickDeclarationInput:
+      type: object
+      additionalProperties: false
+      required: [entries]
+      properties:
+        type: {type: string, maxLength: 120}
+        declarantUserId: {$ref: '#/components/schemas/Uuid'}
+        preleveurUserId: {$ref: '#/components/schemas/Uuid'}
+        targetDeclarantUserId: {$ref: '#/components/schemas/Uuid'}
+        measurementType: {type: string, enum: [INDEX, VOLUME, VOLUME_PRELEVE, VOLUME_REJETE], default: INDEX}
+        readingDate: {type: string, format: date, description: Date requise pour une saisie d'index.}
+        periodStartDate: {type: string, format: date}
+        periodEndDate: {type: string, format: date, description: Dernier jour inclus pour les volumes.}
+        comment: {type: string, maxLength: 20000}
+        aotDecreeNumber: {type: string, maxLength: 255}
+        pointUsageNames:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [pointPrelevementId, usageName]
+            properties:
+              pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+              usageName: {type: [string, 'null'], maxLength: 200}
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            additionalProperties: false
+            required: [pointPrelevementId]
+            allOf:
+              - anyOf: [{required: [index]}, {required: [value]}]
+              - anyOf: [{required: [usageId]}, {required: [usage]}]
+            properties:
+              pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+              exploitationId: {$ref: '#/components/schemas/Uuid'}
+              countingCode: {$ref: '#/components/schemas/CountingCode'}
+              index: {type: number, minimum: 0}
+              value: {type: number, minimum: 0}
+              usageId: {$ref: '#/components/schemas/Uuid'}
+              usage: {type: string}
+    NormalizedDeclarationSeries:
+      type: object
+      additionalProperties: true
+      properties:
+        pointPrelevement: {type: string}
+        exploitationId: {$ref: '#/components/schemas/Uuid'}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
+        parameter: {type: string}
+        frequency: {type: string}
+        unit: {type: string}
+        metadata: {type: object, additionalProperties: true}
+        minDate: {type: string}
+        maxDate: {type: string}
+        data:
+          type: array
+          items:
+            type: object
+            required: [date, value]
+            properties:
+              date: {type: string}
+              periodStart: {type: string, format: date-time}
+              periodEnd: {type: string, format: date-time}
+              value: {type: number}
     Exploitation:
       type: object
       additionalProperties: true
       required: [id, status, usageId, usage, secondaryUsages]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
+        expectedCountingCode:
+          allOf: [{$ref: '#/components/schemas/CountingCode'}]
+          description: Précondition d'édition du code, non nécessaire pour une lecture.
         status: {type: string}
         usageId: {$ref: '#/components/schemas/Uuid'}
         usage: {$ref: '#/components/schemas/WaterUse'}
@@ -3557,6 +5078,8 @@ components:
         id: {type: string}
         metricTypeCode: {type: string}
         pointId: {$ref: '#/components/schemas/Uuid'}
+        exploitationId: {type: [string, 'null'], format: uuid}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
         unit: {type: string}
     SeriesValue:
       type: object
@@ -3586,11 +5109,27 @@ components:
         metricTypeCode: {type: string}
         frequency:
           type: string
-          enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year]
+          enum: [15 minutes, 1 hour, 6 hours, 1 day, 1 week, 1 month, 1 quarter, 1 year, instantaneous]
+        readingSeries: {type: boolean}
+        meterId: {type: string, format: uuid}
+        scope: {type: string, const: PHYSICAL_METER}
+        timezone: {type: string, const: Europe/Paris}
+        precision: {type: integer, const: 4}
+        warning: {type: string}
+        valuesCount:
+          type: integer
+          description: Nombre de relevés de cette page pour une série physique, y compris les index inadmissibles.
         startDate: {type: [string, 'null'], format: date}
         endDate: {type: [string, 'null'], format: date}
         minDate: {type: [string, 'null']}
         maxDate: {type: [string, 'null']}
+        points:
+          type: array
+          description: Points du périmètre ; absent avec view=chart.
+          items: {type: object, additionalProperties: true}
+        exactVolumesEstimated:
+          type: boolean
+          description: Présent à true si des volumes METER exacts ont été répartis pour l'affichage, y compris avec view=chart.
         distribution: {$ref: '#/components/schemas/AggregationDistribution'}
     AggregatedSeriesResponse:
       type: object
@@ -3598,15 +5137,106 @@ components:
       required: [metadata, values]
       properties:
         metadata: {$ref: '#/components/schemas/AggregatedSeriesMetadata'}
+        nextCursor:
+          type: [string, 'null']
+          format: uuid
+          description: Présent pour les index physiques ; null à la dernière page. Aucune troncature silencieuse.
+        exactPeriods:
+          type: array
+          description: Périodes exactes METER si présentes dans le périmètre ; absent avec view=chart.
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              chunkValueId: {$ref: '#/components/schemas/Uuid'}
+              pointPrelevementId: {type: [string, 'null'], format: uuid}
+              compteurId: {type: [string, 'null'], format: uuid}
+              periodStart: {type: string, format: date-time}
+              periodEnd: {type: string, format: date-time}
+              value: {type: string}
+              unit: {type: [string, 'null']}
+              calculationStrategy: {type: string, const: METER}
+        values:
+          type: array
+          items:
+            oneOf:
+              - type: object
+                additionalProperties: false
+                required: [date, value]
+                properties:
+                  date: {type: string}
+                  value: {type: number}
+              - $ref: '#/components/schemas/MeterReadingSeriesDay'
+    AggregatedSeriesOptionsResponse:
+      type: object
+      additionalProperties: true
+      required: [parameters]
+      properties:
+        points:
+          type: array
+          description: Toujours présent sans view ; absent avec view=chart.
+          items: {type: object, additionalProperties: true}
+        parameters:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              id: {type: string, description: 'Index physique : index:meter:<UUID>. Avec includeExploitationIndexes, les index ordinaires portent une identité par exploitation.'}
+              exploitationId: {$ref: '#/components/schemas/Uuid'}
+              countingCode: {$ref: '#/components/schemas/CountingCode'}
+              name: {type: string}
+              label: {type: string}
+              readingSeries: {type: boolean}
+              meterId: {type: string, format: uuid}
+              meter:
+                type: object
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  serialNumber: {type: [string, 'null']}
+                  identifier: {type: [string, 'null']}
+              precision: {type: integer}
+              temporalOperators: {type: array, items: {type: string}, description: '[raw] pour les index physiques.'}
+              availableFrequencies: {type: array, items: {type: string}, description: '[instantaneous] pour les index physiques.'}
+              minDate: {type: [string, 'null'], format: date}
+              maxDate: {type: [string, 'null'], format: date}
+    MeterReadingSeriesDay:
+      type: object
+      additionalProperties: false
+      required: [date, values]
+      properties:
+        date: {type: string, format: date, description: Jour du relevé en Europe/Paris.}
         values:
           type: array
           items:
             type: object
             additionalProperties: false
-            required: [date, value]
+            required: [readingId, observedAt, time, value, index, admissible, quality, origin, reason]
             properties:
-              date: {type: string}
-              value: {type: number}
+              readingId: {type: string, format: uuid}
+              observedAt: {type: string, format: date-time, description: "Instant exact canonique, référence pour l'ordre et les changements d'heure."}
+              time: {type: string, description: "Heure Europe/Paris HH:mm:ss, affichage uniquement."}
+              value: {type: [string, 'null'], description: Index décimal à quatre décimales ; null si inadmissible pour interrompre la courbe.}
+              index: {type: [string, 'null'], description: "Index exact conservé de la révision courante, même lorsqu'il est inadmissible."}
+              admissible: {type: boolean}
+              quality: {type: [string, 'null'], description: Qualité opaque fournie par le producteur.}
+              origin: {type: [string, 'null']}
+              reason: {type: [string, 'null']}
+    ZoneResourceSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [managedResourceType]
+      properties:
+        managedResourceType:
+          type: string
+          enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION, MIXTE]
+          description: Ressource gérée par le SAGE. MIXTE accepte tous les milieux.
+    ZoneResourceSettings:
+      type: object
+      required: [data, canEdit]
+      properties:
+        data: {$ref: '#/components/schemas/ZoneResourceSettingsInput'}
+        canEdit: {type: boolean}
     ZoneMonitoringStationInput:
       type: object
       additionalProperties: false

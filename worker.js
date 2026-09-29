@@ -7,7 +7,10 @@ import * as Sentry from '@sentry/node'
 
 import {startWorkers} from './lib/queues/workers.js'
 import {startScheduler} from './lib/queues/scheduler.js'
-import {waitForRedis} from './lib/queues/redis.js'
+import {waitForRedis, closeRedis} from './lib/queues/redis.js'
+import {closeQueues} from './lib/queues/config.js'
+import {createWorkerShutdown} from './lib/queues/shutdown.js'
+import {prisma} from './db/prisma.js'
 
 Sentry.setTag('service', process.env.SENTRY_SERVICE?.trim() || 'worker')
 
@@ -50,7 +53,34 @@ server.listen(8080, () => {
 })
 
 await startScheduler()
-startWorkers()
+const workers = startWorkers()
+
+const shutdown = createWorkerShutdown({
+  workers,
+  async stopAccepting() {
+    ready = false
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve())
+      server.closeIdleConnections()
+    })
+  },
+  closeQueues,
+  closeRedis,
+  async closeDatabase() {
+    await prisma.$disconnect()
+    await globalThis.pgPool?.end()
+  },
+  flushTelemetry: () => Sentry.flush(2000)
+})
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    shutdown().catch(error => {
+      console.error('Arrêt du worker impossible:', error)
+      process.exitCode = 1
+    })
+  })
+}
 
 ready = true
 console.log('Workers started')

@@ -146,7 +146,7 @@ function parseCommuneOverrides() {
         .map(([name, code]) => [normalizeName(name), String(code)])
     )
   } catch (error) {
-    throw new Error(`BVTECH_COMMUNE_CODE_OVERRIDES doit être un JSON objet valide : ${error.message}`)
+    throw new Error(`BVTECH_COMMUNE_CODE_OVERRIDES doit être un JSON objet valide : ${error.message}`, {cause: error})
   }
 }
 
@@ -250,7 +250,7 @@ function extractEmails(value) {
     return []
   }
 
-  return [...normalized.matchAll(/[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+/g)]
+  return [...normalized.matchAll(/(?<![\w.!#$%&'*+/=?^`{|}~-])[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+/g)]
     .map(match => normalizeEmail(match[0]))
 }
 

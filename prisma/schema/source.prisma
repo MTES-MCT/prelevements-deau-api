@@ -35,6 +35,7 @@ model Source {
   apiImport   ApiImport? @relation(fields: [apiImportId], references: [id], onDelete: Cascade)
 
   chunks Chunk[]
+  meterPublication MeterPublication?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -53,7 +54,19 @@ enum ChunkInstructionStatus {
   AUTOMATICALLY_VALIDATED
 }
 
+enum ChunkCalculationStrategy {
+  GENERIC
+  METER
+}
+
 model Chunk {
+  compteurId String? @db.Uuid
+  compteur Compteur? @relation(fields: [compteurId], references: [id], onDelete: Restrict)
+  calculationStrategy ChunkCalculationStrategy @default(GENERIC)
+  // Campaign receipts for shared meters must not calculate the physical volume twice.
+  autoCalculateVolumes Boolean @default(true)
+  exploitationId String? @db.Uuid
+  exploitation DeclarantPointPrelevement? @relation(fields: [exploitationId], references: [id], onDelete: Restrict)
   id String @id @default(uuid()) @db.Uuid
 
   sourceId String @db.Uuid
@@ -110,6 +123,8 @@ model Chunk {
   @@index([submittedByDeclarantUserId])
   @@index([collecteurUserId])
   @@index([pointPrelevementId, flowType])
+  @@index([pointPrelevementId, compteurId, calculationStrategy])
+  @@index([exploitationId])
 }
 
 enum ChunkValueKind {
@@ -118,6 +133,7 @@ enum ChunkValueKind {
 }
 
 model ChunkValue {
+  meterContributions MeterVolumeContribution[]
   id String @id @default(uuid()) @db.Uuid
 
   chunkId String @db.Uuid

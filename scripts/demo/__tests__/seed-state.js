@@ -1,6 +1,6 @@
 import test from 'ava'
 
-import {buildGrivaiseDataset} from '../lib/grivaise-dataset.js'
+import {buildGrivaiseDataset} from './__helpers__/grivaise-dataset.js'
 import {
   buildExpectedOwnedContentDigests,
   buildExpectedOwnedContentRecords

@@ -60,7 +60,7 @@ function fixture(options = {}) {
     state: operation?.state ?? 'idle', operation, database: ledger()
   })
   const calls = []
-  const json = (value, status = 200) => new Response(JSON.stringify(value), {status})
+  const json = (value, status = 200) => Response.json(value, {status})
 
   const fetch = async (input, request = {}) => {
     const url = new URL(input)
@@ -94,6 +94,14 @@ function fixture(options = {}) {
         if (id === MIGRATION_ID && options.businessDrift) {
           containers[DEMO.apiId].environment_variables.KEEP_CONTAINER = 'modified concurrently'
         }
+
+        if (id === MIGRATION_ID && options.environmentLost) {
+          delete containers[MIGRATION_ID].environment_variables.KEEP_CONTAINER
+        }
+
+        if (id === DEMO.workerId && options.settingsDrift) {
+          containers[DEMO.workerId].max_scale = 999
+        }
       }
 
       return json(containers[id])
@@ -126,6 +134,10 @@ function fixture(options = {}) {
       }
 
       if (url.pathname === '/status') {
+        if (options.wrongRelease && containers[MIGRATION_ID].environment_variables.MIGRATION_RELEASE_SHA === RELEASE) {
+          return json({...migrationStatus(), release: OLD_RELEASE})
+        }
+
         return json(migrationStatus())
       }
 
@@ -149,6 +161,10 @@ function fixture(options = {}) {
 
         return json(migrationStatus(), options.migrationFailure ? 503 : 200)
       }
+    }
+
+    if (options.workerUnhealthy && url.pathname === '/health') {
+      return json({}, 503)
     }
 
     return json({ok: true})
@@ -179,6 +195,7 @@ test('migration puis API et worker utilisent le même digest sans réécrire les
     APP_ENV: 'demo', KEEP_CONTAINER: 'unchanged', MIGRATION_RELEASE_SHA: RELEASE
   })
   t.true(patches.slice(1).every(call => !Object.hasOwn(call.body, 'environment_variables')))
+  t.true(patches.slice(1).every(call => Object.keys(call.body).length === 1))
   const posts = fake.calls.filter(call => call.method === 'POST')
   t.is(posts.length, 1)
   t.deepEqual(posts[0].body, {expectedRelease: RELEASE})
@@ -373,11 +390,36 @@ test('le workflow demo bloque sur le service privé et transmet le digest du bui
   const workflow = await readFile(new URL('../../.github/workflows/deploy-demo.yml', import.meta.url), 'utf8')
   t.true(workflow.includes('branches: ["demo"]'))
   t.regex(workflow, /cancel-in-progress: false/)
-  t.regex(workflow, /Generate Prisma client and run tests\n\s+timeout-minutes: 10/)
-  t.regex(workflow, /npm test -- --concurrency=3 --timeout=2m/)
+  t.regex(workflow, /needs: quality/)
+  t.regex(workflow, /uses: \.\/\.github\/workflows\/quality\.yml/)
+  t.true(workflow.indexOf('Scan exact candidate image before any deployment') < workflow.indexOf('run: node deploy/network/ci-demo-deploy.js'))
+  t.regex(workflow, /run: bash \.github\/scripts\/smoke-image\.sh "\$IMAGE_REF"\n/)
+  t.true(workflow.indexOf('Smoke test native modules from the scanned image') < workflow.indexOf('run: node deploy/network/ci-demo-deploy.js'))
   t.regex(workflow, /id: build/)
-  t.regex(workflow, /@\${{ steps\.build\.outputs\.digest }}/)
+  t.regex(workflow, /@\$\{\{ steps\.build\.outputs\.digest \}\}/)
   t.regex(workflow, /run: node deploy\/network\/ci-demo-deploy\.js/)
   t.notRegex(workflow, /jobs definition start|SCW_JOB_DEFINITION_ID|continue-on-error/)
-  t.true(workflow.indexOf('Publish demo-latest after successful deployment') > workflow.indexOf('run: node deploy/network/ci-demo-deploy.js'))
+  t.true(workflow.indexOf('Publish environment alias only after verified deployment') > workflow.indexOf('run: node deploy/network/ci-demo-deploy.js'))
+})
+
+test('une mauvaise release après mise à jour bloque avant toute migration', async t => {
+  const fake = fixture({wrongRelease: true})
+  await t.throwsAsync(deployDemo(configuration(), fake), {message: /release attendue/})
+  t.false(fake.calls.some(call => call.method === 'POST'))
+})
+
+test('une variable de migration perdue bloque avant toute exécution', async t => {
+  const fake = fixture({environmentLost: true})
+  await t.throwsAsync(deployDemo(configuration(), fake), {message: /variables ordinaires/})
+  t.false(fake.calls.some(call => call.method === 'POST'))
+})
+
+test('les réglages métier sont conservés et toute dérive est détectée', async t => {
+  const fake = fixture({settingsDrift: true})
+  await t.throwsAsync(deployDemo(configuration(), fake), {message: /configuration du conteneur/})
+})
+
+test('la santé du worker est requise avant publication du succès', async t => {
+  const fake = fixture({workerUnhealthy: true})
+  await t.throwsAsync(deployDemo(configuration(), fake), {message: /sonde worker/})
 })
