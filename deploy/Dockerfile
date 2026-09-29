@@ -27,6 +27,9 @@ ENV NODE_ENV=production
 
 RUN apk add --no-cache ca-certificates openssl
 
+# API, worker and private migrations run directly with Node; package managers are build-only.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY package.json package-lock.json prisma.config.ts ./
 COPY api.js instrument.js worker.js ./
