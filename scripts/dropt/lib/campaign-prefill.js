@@ -3,6 +3,7 @@ import {digest} from './epidropt.js'
 import {getTransactionTimeoutMs} from './import-options.js'
 import {validateCollectionResponseData, COLLECTION_CAMPAIGN_TYPE} from '../../../lib/validation/collection-campaigns.js'
 import {getCompatibleMetricTypeCodes} from '../../../lib/constants/metric-type-codes.js'
+import {CAMPAIGN_READING_DATES} from '../../../lib/services/campaign-readings.js'
 
 const clean = value => String(value ?? '').trim()
 const stateHash = value => digest(JSON.parse(JSON.stringify(value)))
@@ -49,6 +50,7 @@ function indexSources(record) {
 function mapSourceRecords(records, responses, issues) {
   const byResponse = new Map()
   const byMeter = new Map()
+  const matchedRecordCounts = new Map()
   const names = new Map(responses.map(response => [response.id, pointNames(response.exploitation)]))
   for (const record of records) {
     // A rejected duplicate can name several meters. Map each original row's
@@ -68,12 +70,13 @@ function mapSourceRecords(records, responses, issues) {
       continue
     }
     const response = candidates[0]
+    matchedRecordCounts.set(response.id, (matchedRecordCounts.get(response.id) ?? 0) + 1)
     if (!record.eligible) continue
     const group = byResponse.get(response.id) ?? []
     group.push({record, meter: matchMeter(record, response)})
     byResponse.set(response.id, group)
   }
-  return {byResponse, byMeter}
+  return {byResponse, byMeter, matchedRecordCounts}
 }
 
 function mergeField(destination, key, value) {
@@ -107,8 +110,12 @@ function observedReadingIssue(record, meter, response, observations) {
   return own ? 'existing_index_preserved' : null
 }
 
-function addIndexProposal(data, {record, meter}, {response, byMeter, observations, issues}) {
+function addIndexProposal(data, {record, meter}, {response, byMeter, observations, issues, allowAnonymous}) {
   if (!record.reading) return false
+  if (!meter && allowAnonymous) {
+    data.meters.push({compteurId: null, serialNumber: null, offSeason: {indexStart: record.reading.index}, season: {}})
+    return false
+  }
   const issue = !meter ? 'unresolved_meter' : byMeter.get(meter.id)?.size > 1 ? 'mapped_meter_index_conflict'
     : observedReadingIssue(record, meter, response, observations)
   if (issue) {
@@ -123,23 +130,35 @@ function addIndexProposal(data, {record, meter}, {response, byMeter, observation
   return mergeField(target.offSeason, 'indexStart', record.reading.index)
 }
 
+function canProposeAnonymousMeter(response, records, context) {
+  // One source row can propose an unanswered meter, never establish its physical
+  // identity. Existing (even deleted) allocations and other source evidence must
+  // not be replaced with an anonymous meter.
+  return records.length === 1 && context.matchedRecordCounts.get(response.id) === 1
+    && records[0].sourceRows.length === 1 && !records[0].identity.serialNumber
+    && response.exploitation.meterAllocations.length === 0
+    && !context.observations.some(value => value.chunk.exploitationId === response.exploitationId
+      && value.chunk.preleveurUserId === response.preleveurUserId)
+}
+
 function proposalEntry(response, matches, context) {
   const {issues, useIds, sourceSha256} = context
   const records = matches.map(match => match.record)
   const rows = sourceRows(records)
   if (!untouched(response)) return {responseId: response.id, action: 'PRESERVED_RESPONSE', rows}
   const data = {meters: [], needs: {season: {}, offSeason: {}}, comment: ''}
+  const allowAnonymous = canProposeAnonymousMeter(response, records, context)
   let conflicting = false
   for (const match of matches) {
     conflicting = addNeedsProposal(data.needs, match.record, useIds, issues) || conflicting
-    conflicting = addIndexProposal(data, match, {...context, response}) || conflicting
+    conflicting = addIndexProposal(data, match, {...context, response, allowAnonymous}) || conflicting
   }
   const authorizations = new Set(records.map(record => record.metadata.noAuthorizedOffSeasonUsage))
   if (conflicting || authorizations.size > 1) {
     issues.push({code: 'conflicting_response_proposals', sourceRows: rows})
     return {responseId: response.id, action: 'EXCLUDED_CONFLICT', rows}
   }
-  data.meters.sort((a, b) => a.compteurId.localeCompare(b.compteurId))
+  data.meters.sort((a, b) => (a.compteurId ?? '').localeCompare(b.compteurId ?? ''))
   const hasData = data.meters.length || Object.values(data.needs).some(period => Object.keys(period).length)
   const noAuthorizedOffSeasonUsage = records[0].metadata.noAuthorizedOffSeasonUsage === true
   if (!hasData && !noAuthorizedOffSeasonUsage) return {responseId: response.id, action: 'EMPTY', rows}
@@ -156,8 +175,8 @@ function proposalEntry(response, matches, context) {
 // counting code alone proves ownership. Never invent a meter from a source row.
 export function buildCampaignPrefillPlan(source, responses, usages, observations = []) {
   const issues = [...source.issues]
-  const {byResponse, byMeter} = mapSourceRecords(source.records, responses, issues)
-  const context = {issues, byMeter, observations, sourceSha256: source.source.sha256, useIds: new Map(usages.map(usage => [usage.code, usage.id]))}
+  const {byResponse, byMeter, matchedRecordCounts} = mapSourceRecords(source.records, responses, issues)
+  const context = {issues, byMeter, matchedRecordCounts, observations, sourceSha256: source.source.sha256, useIds: new Map(usages.map(usage => [usage.code, usage.id]))}
   const entries = responses.flatMap(response => {
     const matches = byResponse.get(response.id)
     return matches ? [proposalEntry(response, matches, context)] : []
@@ -179,7 +198,7 @@ async function snapshot(tx, campaignId, actorUserId) {
   }}}})
   const usages = await tx.sandreWaterUse.findMany({select: {id: true, code: true}, orderBy: {code: 'asc'}})
   const observations = responses.length ? await tx.chunkValue.findMany({where: {valueKind: 'DECLARED',
-    metricTypeCode: {in: getCompatibleMetricTypeCodes('index')}, periodStart: new Date('2025-10-31T00:00:00Z'),
+    metricTypeCode: {in: getCompatibleMetricTypeCodes('index')}, periodStart: new Date(`${CAMPAIGN_READING_DATES[0]}T00:00:00Z`),
     chunk: {calculationStrategy: 'GENERIC', instructionStatus: {not: 'REJECTED'}, source: {status: 'COMPLETED'},
       OR: responses.map(response => ({exploitationId: response.exploitationId, preleveurUserId: response.preleveurUserId}))}},
   select: {id: true, value: true, chunk: {select: {compteurId: true, exploitationId: true, preleveurUserId: true}}}, orderBy: {id: 'asc'}}) : []

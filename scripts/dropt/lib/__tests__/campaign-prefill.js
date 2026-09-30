@@ -64,6 +64,45 @@ test('missing serial resolves only a single current meter', t => {
   t.is(buildCampaignPrefillPlan(input, [current], usages).entries[0].prefillData.meters.length, 0)
 })
 
+test('one exact source row without a serial or allocation proposes an anonymous answer, preserving provenance and replay', t => {
+  const current = response()
+  current.exploitation.meterAllocations = []
+  const original = record()
+  const input = source([record({identity: {...original.identity, serialNumber: null}})])
+  const before = structuredClone(input)
+  const plan = buildCampaignPrefillPlan(input, [current], usages)
+  t.deepEqual(plan.entries[0].prefillData.meters, [{compteurId: null, serialNumber: null, offSeason: {indexStart: '100'}, season: {}}])
+  t.deepEqual(plan.entries[0].prefillMetadata, {version: 1, sourceSha256: input.source.sha256, rows: [2], noAuthorizedOffSeasonUsage: false})
+  t.false(plan.issues.some(issue => issue.code === 'unresolved_meter'))
+  t.deepEqual(input, before)
+  t.is(input.records[0].reading.date, '2025-10-31')
+  Object.assign(current, {prefillData: plan.entries[0].prefillData, prefillMetadata: plan.entries[0].prefillMetadata})
+  t.is(buildCampaignPrefillPlan(input, [current], usages).counts.ALREADY_APPLIED, 1)
+  current.prefillData = {...current.prefillData, meters: []}
+  t.is(buildCampaignPrefillPlan(input, [current], usages).counts.PRESERVED_PREFILL, 1)
+})
+
+test('an anonymous proposal never replaces ambiguous source evidence, an unmatched serial, an allocation or an observation', t => {
+  const original = record()
+  const anonymous = record({identity: {...original.identity, serialNumber: null}})
+  const cases = [
+    {records: [record()]},
+    {records: [{...anonymous, sourceRows: [2, 3]}]},
+    {records: [anonymous, {...anonymous, sourceRows: [3]}]},
+    {records: [anonymous, {...anonymous, eligible: false, reading: null, sourceRows: [3]}]},
+    {records: [anonymous], allocations: [{compteur: {id: randomUUID(), deletedAt: new Date()}}]},
+    {records: [anonymous], observed: true},
+    {records: [{...anonymous, reading: null}]}
+  ]
+  for (const item of cases) {
+    const current = response()
+    current.exploitation.meterAllocations = item.allocations ?? []
+    const observations = item.observed ? [{value: '100', chunk: {compteurId: null, exploitationId: current.exploitationId, preleveurUserId: current.preleveurUserId}}] : []
+    const plan = buildCampaignPrefillPlan(source(item.records), [current], usages, observations)
+    t.deepEqual(plan.entries[0].prefillData.meters, [])
+  }
+})
+
 test('mapped meter conflicts include excluded source records and zero evidence', t => {
   const current = response()
   const excluded = record({eligible: false, reading: null, sourceRows: [3], indexEvidenceValues: ['0', '101']})
