@@ -13,7 +13,7 @@ const integration = enabled ? test.serial : test.skip
 test.before(() => { if (enabled) requireDisposableDatabase() })
 test.after.always(async () => { await prisma.$disconnect(); await globalThis.pgPool?.end() })
 
-async function fixture({existingMeter = true} = {}) {
+async function fixture({existingMeter = true, sourceSerial} = {}) {
   const admin = await prisma.user.create({data: {role: 'ADMIN'}})
   const farmer = await prisma.user.create({data: {role: 'DECLARANT', declarant: {create: {declarantRole: 'PRELEVEUR', preleveurType: 'IRRIGANT', siret: '00000000000001'}}}})
   const collector = await prisma.user.create({data: {role: 'DECLARANT', declarant: {create: {declarantRole: 'COLLECTEUR'}}}})
@@ -26,20 +26,21 @@ async function fixture({existingMeter = true} = {}) {
   const response = await prisma.collectionResponse.create({data: {campaignId: campaign.id, exploitationId: exploitation.id, preleveurUserId: farmer.id}})
   const cells = Array(25).fill(null)
   Object.assign(cells, {1: point.name, 2: '00000000000001', 3: 1000, 4: 10, 5: 2, 6: 999999, 7: 3, 8: 20,
-    11: 100, 13: 200, 16: 0, 17: 'SYNTHETIC-COUNT', 19: meter?.serialNumber ?? null, 20: 50, 21: 123, 22: 'Irrigation', 23: 'Irrigation'})
+    11: 100, 13: 200, 16: 0, 17: 'SYNTHETIC-COUNT', 19: sourceSerial ?? meter?.serialNumber ?? null, 20: 50, 21: 123, 22: 'Irrigation', 23: 'Irrigation'})
   const source = {...parseCampaignPrefillRows([CAMPAIGN_PREFILL_HEADERS, cells]), source: {sha256: 'a'.repeat(64)}}
   return {admin, farmer, campaign, response, source, meter, point, exploitation, usage,
     options: {campaignId: campaign.id, actorUserId: admin.id, target: 'local'}}
 }
 
-integration('an anonymous source proposal survives draft reload and only creates one physical meter on submission', async t => {
-  const f = await fixture({existingMeter: false})
+for (const withSerial of [false, true]) integration(`an unallocated source proposal (${withSerial ? 'with' : 'without'} serial) survives draft reload and only creates one physical meter on submission`, async t => {
+  const serialNumber = withSerial ? `Source-${randomUUID()}` : null
+  const f = await fixture({existingMeter: false, sourceSerial: serialNumber})
   await prisma.collectionCampaign.update({where: {id: f.campaign.id}, data: {status: 'OPEN', opensOn: new Date('2026-09-01Z'), closesOn: new Date('2027-12-31Z')}})
   const meterCount = await prisma.compteur.count()
   const sourceCount = await prisma.source.count()
   const simulation = await prefillCampaign(prisma, f.source, f.options)
   const applied = await prefillCampaign(prisma, f.source, {...f.options, apply: true, expectedReport: simulation})
-  t.deepEqual(applied.entries[0].prefillData.meters, [{compteurId: null, serialNumber: null, offSeason: {indexStart: '123'}, season: {}}])
+  t.deepEqual(applied.entries[0].prefillData.meters, [{compteurId: null, serialNumber, offSeason: {indexStart: '123'}, season: {}}])
   t.true((await verifyCampaignPrefill(prisma, f.source, {...f.options, expectedReport: applied})).complete)
   t.is((await prefillCampaign(prisma, f.source, f.options)).counts.ALREADY_APPLIED, 1)
   const initial = await getAuthorizedCampaignResponseContext(f.farmer, f.campaign.id, f.response.id)
@@ -64,13 +65,52 @@ integration('an anonymous source proposal survives draft reload and only creates
   const submitted = await submit(1)
   t.is(submitted.response.publicationStatus, 'PUBLISHED')
   t.truthy(submitted.response.submittedData.meters[0].compteurId)
-  t.is(submitted.response.submittedData.meters[0].serialNumber, null)
+  t.is(submitted.response.submittedData.meters[0].serialNumber, serialNumber)
   t.is(await prisma.compteur.count(), meterCount + 1)
   t.is(await prisma.meterAllocation.count({where: {exploitationId: f.exploitation.id}}), 1)
   t.is((await submit(1)).response.revision, 2)
   t.is(await prisma.compteur.count(), meterCount + 1)
   t.is((await prisma.collectionResponse.findUnique({where: {id: f.response.id}})).prefillMetadata.sourceSha256, f.source.source.sha256)
   t.is(f.source.records[0].reading.date, '2025-10-31')
+})
+
+integration('a physical serial created after simulation blocks application, including deleted or differently cased meters', async t => {
+  for (const deletedAt of [null, new Date()]) {
+    const serial = `Source-${randomUUID()}`
+    const f = await fixture({existingMeter: false, sourceSerial: serial})
+    const simulation = await prefillCampaign(prisma, f.source, f.options)
+    t.is(simulation.entries[0].prefillData.meters[0].serialNumber, serial)
+    await prisma.compteur.create({data: {serialNumber: serial.toLowerCase(), deletedAt}})
+    await t.throwsAsync(prefillCampaign(prisma, f.source, {...f.options, apply: true, expectedReport: simulation}), {message: /État modifié/})
+    t.is((await prisma.collectionResponse.findUnique({where: {id: f.response.id}})).prefillData, null)
+    t.deepEqual((await prefillCampaign(prisma, f.source, f.options)).entries[0].prefillData.meters, [])
+  }
+})
+
+integration('a new external physical serial suppresses only the stale proposal without exposing its owner or identity', async t => {
+  const serial = `Source-${randomUUID()}`
+  const f = await fixture({existingMeter: false, sourceSerial: serial})
+  const simulation = await prefillCampaign(prisma, f.source, f.options)
+  await prefillCampaign(prisma, f.source, {...f.options, apply: true, expectedReport: simulation})
+  const other = await fixture({sourceSerial: 'SYNTHETIC-NON-MATCH'})
+  await prisma.compteur.update({where: {id: other.meter.id}, data: {serialNumber: serial.toLowerCase()}})
+  const context = await getAuthorizedCampaignResponseContext(f.admin, f.campaign.id, f.response.id)
+  t.deepEqual(context.meters, [])
+  t.deepEqual(context.data.meters, [])
+  t.false(JSON.stringify(context).includes(other.meter.id))
+  t.false(JSON.stringify(context).includes(other.farmer.id))
+  t.is((await prisma.collectionResponse.findUnique({where: {id: f.response.id}})).prefillData.meters[0].serialNumber, serial)
+})
+
+integration('a new allocation prevents an unallocated serial proposal from overriding the current meter', async t => {
+  const serial = `Source-${randomUUID()}`
+  const f = await fixture({existingMeter: false, sourceSerial: serial})
+  const simulation = await prefillCampaign(prisma, f.source, f.options)
+  await prefillCampaign(prisma, f.source, {...f.options, apply: true, expectedReport: simulation})
+  const known = await prisma.compteur.create({data: {serialNumber: `Known-${randomUUID()}`}})
+  await prisma.meterAllocation.create({data: {sourceId: randomUUID(), provider: 'test', scope: 'test', compteurId: known.id, exploitationId: f.exploitation.id}})
+  const context = await getAuthorizedCampaignResponseContext(f.admin, f.campaign.id, f.response.id)
+  t.deepEqual(context.data.meters, [{compteurId: known.id, serialNumber: known.serialNumber, offSeason: {}, season: {}}])
 })
 
 integration('source provenance stays on October 31 while exact November 1 observations take precedence over the proposal', async t => {
@@ -97,8 +137,8 @@ integration('source provenance stays on October 31 while exact November 1 observ
   t.deepEqual(readings.map(row => [row.periodStart.toISOString().slice(0, 10), row.value.toString()]), [['2025-10-31', '111'], ['2025-11-01', '456']])
 })
 
-integration('a new own observation suppresses an anonymous proposal without exposing another beneficiary history', async t => {
-  const f = await fixture({existingMeter: false})
+for (const withSerial of [false, true]) integration(`a new own observation suppresses an unallocated proposal (${withSerial ? 'with' : 'without'} serial) without exposing another beneficiary history`, async t => {
+  const f = await fixture({existingMeter: false, sourceSerial: withSerial ? `Source-${randomUUID()}` : null})
   const simulation = await prefillCampaign(prisma, f.source, f.options)
   await prefillCampaign(prisma, f.source, {...f.options, apply: true, expectedReport: simulation})
   const other = await prisma.user.create({data: {role: 'DECLARANT', declarant: {create: {preleveurType: 'IRRIGANT'}}}})
