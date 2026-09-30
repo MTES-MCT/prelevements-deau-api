@@ -203,13 +203,16 @@ paths:
       tags: [Campagnes]
       operationId: listCollectionResponses
       summary: Suivre les réponses accessibles
-      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le collecteur ne reçoit que submittedData.
+      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le collecteur ne reçoit que les données soumises. Avec view=summary, draftData et submittedData sont omis ; hasDraft et le statut sont conservés, submittedNeeds est limité à season/offSeason.flow/volume et les volumes de compteurs ne sont pas calculés. Le format détaillé reste celui par défaut.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
           in: path
           required: true
           schema: {$ref: '#/components/schemas/Uuid'}
+        - name: view
+          in: query
+          schema: {type: string, enum: [detailed, summary], default: detailed}
       responses:
         '200':
           description: Opération réussie
@@ -222,13 +225,16 @@ paths:
       tags: [Campagnes]
       operationId: getCollectionResults
       summary: Consulter les résultats soumis
-      description: Administrateur ou collecteur désigné disposant des délégations. Les volumes demandés ne sont pas des consommations.
+      description: Administrateur ou collecteur désigné disposant des délégations. Les volumes demandés ne sont pas des consommations. Avec view=summary, draftData et submittedData sont omis au profit de hasDraft et submittedNeeds limité à season/offSeason.flow/volume ; les volumes individuels et totaux sont conservés. Le format détaillé reste celui par défaut ; les exports sont inchangés.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
           in: path
           required: true
           schema: {$ref: '#/components/schemas/Uuid'}
+        - name: view
+          in: query
+          schema: {type: string, enum: [detailed, summary], default: detailed}
       responses:
         '200':
           description: Opération réussie
@@ -1385,7 +1391,11 @@ paths:
       tags: [Sources]
       operationId: listMySources
       summary: Lister les sources instructeur
-      description: Retourne les sources visibles par l'instructeur connecté.
+      description: Retourne les sources visibles par l'instructeur connecté ou l'administrateur. La projection optionnelle summary conserve les résumés, dates, totaux et bénéficiaires autorisés (y compris METER), sans les champs détaillés inutiles à la liste. Sans view, le contrat historique reste inchangé.
+      parameters:
+        - name: view
+          in: query
+          schema: {type: string, enum: [summary]}
       responses:
         '200':
           description: Liste des sources
@@ -2153,9 +2163,25 @@ paths:
       description: >-
         Retourne les indicateurs du périmètre accessible. Le corpus cartographique
         historique reste inclus par défaut et peut être omis pour accélérer le rendu
-        initial, puis chargé séparément avec /dashboard/map.
+        initial, puis chargé séparément avec /dashboard/map. Le paramètre sections
+        limite les calculs et la réponse aux blocs demandés. Les métadonnées scope,
+        zones, selectedZoneCodes et unknownZoneCodes sont toujours présentes.
       parameters:
         - $ref: '#/components/parameters/DashboardZones'
+        - in: query
+          name: sections
+          description: >-
+            Blocs séparés par des virgules. Sans ce paramètre, tous les blocs sont
+            retournés. context retourne uniquement les métadonnées de périmètre.
+            Les points et activityPoints accompagnent uniquement la section metrics.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            items:
+              type: string
+              enum: [context, metrics, registeredPrelevements, volumesByUsage]
         - in: query
           name: periodType
           schema: {type: string, enum: [week, month]}
@@ -2170,8 +2196,11 @@ paths:
           schema: {type: string}
         - in: query
           name: includePoints
-          description: Inclut les points des cartes dans la réponse. Vaut true par défaut pour préserver le contrat historique.
-          schema: {type: boolean, default: true}
+          description: >-
+            Inclut les points des cartes lorsque metrics est demandé. Vaut true
+            sans sections pour préserver le contrat historique, false lorsque
+            sections est fourni. false conserve les tableaux de points vides.
+          schema: {type: boolean}
       responses:
         '200':
           description: Indicateurs territoriaux
@@ -5392,7 +5421,10 @@ components:
     DashboardTerritory:
       type: object
       additionalProperties: true
-      required: [scope, zones, selectedZoneCodes, unknownZoneCodes, metrics, registeredPrelevements, volumesByUsage, points, activityPoints]
+      description: >-
+        Sans sections, tous les champs sont présents. Avec sections, seuls les blocs
+        demandés sont ajoutés aux quatre métadonnées de périmètre obligatoires.
+      required: [scope, zones, selectedZoneCodes, unknownZoneCodes]
       properties:
         scope: {type: string, enum: [TERRITORY, DECLARANT, COLLECTOR]}
         zones:
