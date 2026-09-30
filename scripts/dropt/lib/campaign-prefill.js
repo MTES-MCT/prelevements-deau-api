@@ -4,6 +4,7 @@ import {getTransactionTimeoutMs} from './import-options.js'
 import {validateCollectionResponseData, COLLECTION_CAMPAIGN_TYPE} from '../../../lib/validation/collection-campaigns.js'
 import {getCompatibleMetricTypeCodes} from '../../../lib/constants/metric-type-codes.js'
 import {CAMPAIGN_READING_DATES} from '../../../lib/services/campaign-readings.js'
+import {campaignSerialKey, findAbsentCampaignSerialNumbers} from '../../../lib/services/campaign-meter-proposals.js'
 
 const clean = value => String(value ?? '').trim()
 const stateHash = value => digest(JSON.parse(JSON.stringify(value)))
@@ -50,6 +51,7 @@ function indexSources(record) {
 function mapSourceRecords(records, responses, issues) {
   const byResponse = new Map()
   const byMeter = new Map()
+  const bySerial = new Map()
   const matchedRecordCounts = new Map()
   const names = new Map(responses.map(response => [response.id, pointNames(response.exploitation)]))
   for (const record of records) {
@@ -57,6 +59,12 @@ function mapSourceRecords(records, responses, issues) {
     // evidence before checking eligibility, not all values to its first serial.
     for (const evidence of indexSources(record)) {
       if (evidence.indexEvidence == null) continue
+      const serial = campaignSerialKey(evidence.identity.serialNumber)
+      if (serial) {
+        const values = bySerial.get(serial) ?? new Set()
+        values.add(evidence.indexEvidence)
+        bySerial.set(serial, values)
+      }
       const owners = matchResponses(evidence.identity, responses, names)
       const meter = owners.length === 1 ? matchMeter(evidence, owners[0]) : null
       if (!meter) continue
@@ -76,7 +84,7 @@ function mapSourceRecords(records, responses, issues) {
     group.push({record, meter: matchMeter(record, response)})
     byResponse.set(response.id, group)
   }
-  return {byResponse, byMeter, matchedRecordCounts}
+  return {byResponse, byMeter, bySerial, matchedRecordCounts}
 }
 
 function mergeField(destination, key, value) {
@@ -110,14 +118,15 @@ function observedReadingIssue(record, meter, response, observations) {
   return own ? 'existing_index_preserved' : null
 }
 
-function addIndexProposal(data, {record, meter}, {response, byMeter, observations, issues, allowAnonymous}) {
+function addIndexProposal(data, {record, meter}, {response, byMeter, bySerial, observations, issues, allowUnallocated}) {
   if (!record.reading) return false
-  if (!meter && allowAnonymous) {
-    data.meters.push({compteurId: null, serialNumber: null, offSeason: {indexStart: record.reading.index}, season: {}})
+  if (!meter && allowUnallocated) {
+    data.meters.push({compteurId: null, serialNumber: record.identity.serialNumber ?? null, offSeason: {indexStart: record.reading.index}, season: {}})
     return false
   }
-  const issue = !meter ? 'unresolved_meter' : byMeter.get(meter.id)?.size > 1 ? 'mapped_meter_index_conflict'
-    : observedReadingIssue(record, meter, response, observations)
+  const issue = !meter ? (bySerial.get(campaignSerialKey(record.identity.serialNumber))?.size > 1 ? 'source_serial_index_conflict' : 'unresolved_meter')
+    : byMeter.get(meter.id)?.size > 1 ? 'mapped_meter_index_conflict'
+      : observedReadingIssue(record, meter, response, observations)
   if (issue) {
     issues.push({code: issue, sourceRows: record.sourceRows})
     return false
@@ -130,12 +139,15 @@ function addIndexProposal(data, {record, meter}, {response, byMeter, observation
   return mergeField(target.offSeason, 'indexStart', record.reading.index)
 }
 
-function canProposeAnonymousMeter(response, records, context) {
+function canProposeUnallocatedMeter(response, records, context) {
   // One source row can propose an unanswered meter, never establish its physical
   // identity. Existing (even deleted) allocations and other source evidence must
-  // not be replaced with an anonymous meter.
+  // not be replaced with a proposed meter. A source serial requires explicit
+  // evidence that it does not already identify any physical meter.
+  const serial = campaignSerialKey(records[0]?.identity.serialNumber)
   return records.length === 1 && context.matchedRecordCounts.get(response.id) === 1
-    && records[0].sourceRows.length === 1 && !records[0].identity.serialNumber
+    && records[0].sourceRows.length === 1
+    && (!serial || (context.absentSerialNumbers.has(serial) && context.bySerial.get(serial)?.size === 1))
     && response.exploitation.meterAllocations.length === 0
     && !context.observations.some(value => value.chunk.exploitationId === response.exploitationId
       && value.chunk.preleveurUserId === response.preleveurUserId)
@@ -147,11 +159,11 @@ function proposalEntry(response, matches, context) {
   const rows = sourceRows(records)
   if (!untouched(response)) return {responseId: response.id, action: 'PRESERVED_RESPONSE', rows}
   const data = {meters: [], needs: {season: {}, offSeason: {}}, comment: ''}
-  const allowAnonymous = canProposeAnonymousMeter(response, records, context)
+  const allowUnallocated = canProposeUnallocatedMeter(response, records, context)
   let conflicting = false
   for (const match of matches) {
     conflicting = addNeedsProposal(data.needs, match.record, useIds, issues) || conflicting
-    conflicting = addIndexProposal(data, match, {...context, response, allowAnonymous}) || conflicting
+    conflicting = addIndexProposal(data, match, {...context, response, allowUnallocated}) || conflicting
   }
   const authorizations = new Set(records.map(record => record.metadata.noAuthorizedOffSeasonUsage))
   if (conflicting || authorizations.size > 1) {
@@ -173,10 +185,12 @@ function proposalEntry(response, matches, context) {
 
 // Match the three independent identities exactly. Neither a shared point nor a
 // counting code alone proves ownership. Never invent a meter from a source row.
-export function buildCampaignPrefillPlan(source, responses, usages, observations = []) {
+export function buildCampaignPrefillPlan(source, responses, usages, observations = [], {absentSerialNumbers = []} = {}) {
   const issues = [...source.issues]
-  const {byResponse, byMeter, matchedRecordCounts} = mapSourceRecords(source.records, responses, issues)
-  const context = {issues, byMeter, matchedRecordCounts, observations, sourceSha256: source.source.sha256, useIds: new Map(usages.map(usage => [usage.code, usage.id]))}
+  const {byResponse, byMeter, bySerial, matchedRecordCounts} = mapSourceRecords(source.records, responses, issues)
+  const context = {issues, byMeter, bySerial, matchedRecordCounts, observations,
+    absentSerialNumbers: new Set(absentSerialNumbers.map(campaignSerialKey).filter(Boolean)),
+    sourceSha256: source.source.sha256, useIds: new Map(usages.map(usage => [usage.code, usage.id]))}
   const entries = responses.flatMap(response => {
     const matches = byResponse.get(response.id)
     return matches ? [proposalEntry(response, matches, context)] : []
@@ -185,7 +199,7 @@ export function buildCampaignPrefillPlan(source, responses, usages, observations
     .map(action => [action, entries.filter(entry => entry.action === action).length]))}
 }
 
-async function snapshot(tx, campaignId, actorUserId) {
+async function snapshot(tx, campaignId, actorUserId, source) {
   const actor = await tx.user.findUnique({where: {id: actorUserId}, select: {id: true, role: true, deletedAt: true}})
   requireCondition(actor?.role === 'ADMIN' && !actor.deletedAt, 'Un administrateur actif est requis pour le préremplissage.')
   const campaign = await tx.collectionCampaign.findUnique({where: {id: campaignId}})
@@ -202,7 +216,8 @@ async function snapshot(tx, campaignId, actorUserId) {
     chunk: {calculationStrategy: 'GENERIC', instructionStatus: {not: 'REJECTED'}, source: {status: 'COMPLETED'},
       OR: responses.map(response => ({exploitationId: response.exploitationId, preleveurUserId: response.preleveurUserId}))}},
   select: {id: true, value: true, chunk: {select: {compteurId: true, exploitationId: true, preleveurUserId: true}}}, orderBy: {id: 'asc'}}) : []
-  return {actor, campaign, responses, usages, observations}
+  const absentSerialNumbers = await findAbsentCampaignSerialNumbers(tx, source.records.map(record => record.identity.serialNumber))
+  return {actor, campaign, responses, usages, observations, absentSerialNumbers}
 }
 
 function assertReport(report, source, options, applied) {
@@ -221,8 +236,8 @@ export async function prefillCampaign(client, source, {campaignId, actorUserId, 
     // Same lock as manual draft/submission: inspect and write one immutable plan.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('collection-campaign'), hashtext(${campaignId}))`
     await tx.$queryRaw`SELECT id FROM "CollectionCampaign" WHERE id = ${campaignId}::uuid FOR UPDATE`
-    const state = await snapshot(tx, campaignId, actorUserId)
-    const plan = buildCampaignPrefillPlan(source, state.responses, state.usages, state.observations)
+    const state = await snapshot(tx, campaignId, actorUserId, source)
+    const plan = buildCampaignPrefillPlan(source, state.responses, state.usages, state.observations, state)
     const planHash = stateHash({state, plan, sourceSha256: source.source.sha256, campaignId, actorUserId, target})
     requireCondition(!expectedReport || expectedReport.planHash === planHash, 'État modifié depuis la simulation ; relancer le préremplissage sans --apply.')
     if (apply) {
@@ -242,7 +257,7 @@ export async function prefillCampaign(client, source, {campaignId, actorUserId, 
 export async function verifyCampaignPrefill(client, source, {campaignId, actorUserId, target, expectedReport} = {}) {
   assertTarget(target)
   assertReport(expectedReport, source, {campaignId, actorUserId, target}, true)
-  const {responses} = await snapshot(client, campaignId, actorUserId)
+  const {responses} = await snapshot(client, campaignId, actorUserId, source)
   const byId = new Map(responses.map(response => [response.id, response]))
   const issues = []
   const expected = expectedReport.entries.filter(entry => ['PREFILL', 'ALREADY_APPLIED'].includes(entry.action))

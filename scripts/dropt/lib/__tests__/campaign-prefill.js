@@ -82,6 +82,59 @@ test('one exact source row without a serial or allocation proposes an anonymous 
   t.is(buildCampaignPrefillPlan(input, [current], usages).counts.PRESERVED_PREFILL, 1)
 })
 
+test('an unallocated source serial requires explicit global absence evidence and keeps its source spelling', t => {
+  const current = response()
+  current.exploitation.meterAllocations = []
+  const original = record()
+  const input = source([record({identity: {...original.identity, serialNumber: 'Source-Meter'}})])
+  const before = structuredClone(input)
+  for (const evidence of [undefined, {}, {absentSerialNumbers: []}, {absentSerialNumbers: ['OTHER']}]) {
+    t.deepEqual(buildCampaignPrefillPlan(input, [current], usages, [], evidence).entries[0].prefillData.meters, [])
+  }
+  const proof = {absentSerialNumbers: ['source-meter']}
+  const plan = buildCampaignPrefillPlan(input, [current], usages, [], proof)
+  t.deepEqual(plan.entries[0].prefillData.meters, [{compteurId: null, serialNumber: 'Source-Meter', offSeason: {indexStart: '100'}, season: {}}])
+  t.deepEqual(input, before)
+  Object.assign(current, {prefillData: plan.entries[0].prefillData, prefillMetadata: plan.entries[0].prefillMetadata})
+  t.is(buildCampaignPrefillPlan(input, [current], usages, [], proof).counts.ALREADY_APPLIED, 1)
+})
+
+test('unallocated serials retain exclusions for allocations, observed zero, multiple rows and started answers', t => {
+  const input = source([record()])
+  const proof = {absentSerialNumbers: ['SYNTHETIC-METER']}
+  for (const deletedAt of [null, new Date()]) {
+    const current = response()
+    current.exploitation.meterAllocations = [{compteur: {id: randomUUID(), serialNumber: 'OTHER', deletedAt}}]
+    t.deepEqual(buildCampaignPrefillPlan(input, [current], usages, [], proof).entries[0].prefillData.meters, [])
+  }
+  const current = response()
+  current.exploitation.meterAllocations = []
+  const observations = [{value: '0', chunk: {compteurId: null, exploitationId: current.exploitationId, preleveurUserId: current.preleveurUserId}}]
+  t.deepEqual(buildCampaignPrefillPlan(input, [current], usages, observations, proof).entries[0].prefillData.meters, [])
+  t.deepEqual(buildCampaignPrefillPlan(source([record({sourceRows: [2, 3]})]), [current], usages, [], proof).entries[0].prefillData.meters, [])
+  current.draftData = {comment: 'Déjà saisi'}
+  t.is(buildCampaignPrefillPlan(input, [current], usages, [], proof).counts.PRESERVED_RESPONSE, 1)
+})
+
+test('case-insensitive source serial contradictions include rejected and zero evidence on other points', t => {
+  const current = response()
+  current.exploitation.meterAllocations = []
+  const original = record()
+  for (const value of ['0', '-1', '101']) {
+    const conflicting = record({eligible: false, reading: null, sourceRows: [3], indexEvidenceValues: [value],
+      identity: {...original.identity, pointOugc: 'OTHER-POINT', serialNumber: 'synthetic-meter'}})
+    const plan = buildCampaignPrefillPlan(source([original, conflicting]), [current], usages, [], {absentSerialNumbers: ['SYNTHETIC-METER']})
+    t.deepEqual(plan.entries[0].prefillData.meters, [])
+    t.true(plan.issues.some(issue => issue.code === 'source_serial_index_conflict'))
+  }
+  // A rejected merged record must contribute every original identity, not only
+  // the first row's serial. The second original row has contradictory evidence.
+  const merged = record({eligible: false, reading: null, sourceRows: [3, 4], identity: {...original.identity, pointOugc: 'OTHER-POINT', serialNumber: 'OTHER'},
+    indexSources: [{identity: {...original.identity, serialNumber: 'OTHER'}, indexEvidence: '100'},
+      {identity: {...original.identity, serialNumber: 'synthetic-meter'}, indexEvidence: '0'}]})
+  t.deepEqual(buildCampaignPrefillPlan(source([original, merged]), [current], usages, [], {absentSerialNumbers: ['SYNTHETIC-METER']}).entries[0].prefillData.meters, [])
+})
+
 test('an anonymous proposal never replaces ambiguous source evidence, an unmatched serial, an allocation or an observation', t => {
   const original = record()
   const anonymous = record({identity: {...original.identity, serialNumber: null}})
