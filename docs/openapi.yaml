@@ -2589,12 +2589,19 @@ paths:
         consultables par l'acteur, avec les mêmes filtres que les valeurs agrégées.
         Avec view=chart, retourne uniquement parameters, avec les mêmes options et
         métadonnées. Sans view, la liste points reste présente.
+        Avec view=chart et detail=summary, exclut les index ordinaires et physiques
+        du chargement initial. detailsDeferred indique qu'un chargement complet
+        des options peut être demandé, sans accorder de droit supplémentaire.
       parameters:
         - $ref: '#/components/parameters/ExploitationFilter'
         - in: query
           name: view
           description: Omet uniquement la liste points ; les paramètres, fenêtres temporelles, compteurs de séries et droits restent inchangés.
           schema: {type: string, enum: [chart]}
+        - in: query
+          name: detail
+          description: Réservé à view=chart ; summary diffère le chargement des options d'index, même si includeMeterReadings ou includeExploitationIndexes est demandé.
+          schema: {type: string, enum: [summary]}
         - in: query
           name: includeExploitationIndexes
           description: Distingue les index ordinaires par exploitation et code comptage ; les options de volumes restent regroupées. Ne modifie pas les droits d'accès.
@@ -5225,6 +5232,9 @@ components:
       additionalProperties: true
       required: [parameters]
       properties:
+        detailsDeferred:
+          type: boolean
+          description: Présent uniquement avec detail=summary ; true indique que les options détaillées n'ont pas encore été chargées, pas qu'elles existent nécessairement.
         points:
           type: array
           description: Toujours présent sans view ; absent avec view=chart.
