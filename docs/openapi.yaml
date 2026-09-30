@@ -203,7 +203,7 @@ paths:
       tags: [Campagnes]
       operationId: listCollectionResponses
       summary: Suivre les réponses accessibles
-      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le collecteur ne reçoit que les données soumises. Avec view=summary, draftData et submittedData sont omis ; hasDraft et le statut sont conservés, submittedNeeds est limité à season/offSeason.flow/volume et les volumes de compteurs ne sont pas calculés. Le format détaillé reste celui par défaut.
+      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le collecteur ne reçoit que les données soumises. Avec view=summary, draftData et submittedData sont omis ; hasDraft et le statut sont conservés, submittedNeeds est limité à season/offSeason.flow/volume et les volumes de compteurs ne sont pas calculés. point.coordinates contient un Point GeoJSON en longitude/latitude ou null, uniquement pour les réponses autorisées de la page. Le format détaillé reste celui par défaut.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -316,7 +316,7 @@ paths:
       tags: [Campagnes]
       operationId: submitCollectionResponse
       summary: Soumettre ou corriger une réponse
-      description: Session humaine du préleveur propriétaire, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Tous les champs sont requis sauf commentaire. Envoi à partir du 31 octobre 2026. Déclaration stable et publication atomique ou en attente de validation.
+      description: Session humaine du préleveur propriétaire, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Le numéro de compteur et le commentaire sont facultatifs. Envoi possible dès l’ouverture de la campagne, y compris avant le 31 octobre 2026 ; les index conservent les dates de relevé prévues par la campagne. Déclaration stable et publication atomique ou en attente de validation.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -3276,7 +3276,12 @@ components:
       description: >-
         Les usages et sous-usages du référentiel sont acceptés. Lors de la soumission,
         les trois index de chaque compteur doivent être croissants ou identiques dans l’ordre chronologique.
+        Les relevés sont datés du 1er novembre 2025, du 31 mai 2026 et du 31 octobre 2026.
+        L’index du 31 mai est commun à la fin du hors étiage et au début du calcul de l’étiage,
+        sans quatrième relevé. Les périodes civiles sont du 1er novembre au 31 mai puis du 1er juin au 31 octobre.
         Les incohérences retournent les champs concernés dans data.fields et data.validationErrors.
+        Le numéro de compteur est facultatif, y compris à la soumission. Le compteur reste identifié
+        par son compteurId serveur lors des corrections ; un numéro absent ne rattache jamais un compteur tiers.
         Un brouillon peut rester incomplet ou contenir des index à corriger, sans publication des volumes.
       properties:
         meters:
@@ -3287,13 +3292,13 @@ components:
             additionalProperties: false
             properties:
               compteurId: {type: [string, 'null'], format: uuid}
-              serialNumber: {type: [string, 'null'], maxLength: 100}
+              serialNumber: {type: [string, 'null'], maxLength: 100, description: Facultatif ; absent ou vide est normalisé en null. Un numéro connu est conservé si le champ est omis ; un numéro encore inconnu peut être complété sans collision.}
               offSeason: {$ref: '#/components/schemas/CollectionPeriod'}
               season: {$ref: '#/components/schemas/CollectionPeriod'}
         needs:
           type: object
           additionalProperties: false
-          description: Besoins futurs pour l’étiage 2027 et le hors étiage du 1er novembre 2027 au 31 mai 2028. Les périodes d’index historiques restent inchangées.
+          description: Besoins futurs pour l’étiage 2027 et le hors étiage du 1er novembre 2027 au 31 mai 2028.
           properties:
             offSeason:
               $ref: '#/components/schemas/CollectionPeriod'
