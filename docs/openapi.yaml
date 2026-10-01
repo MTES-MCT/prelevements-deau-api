@@ -203,7 +203,7 @@ paths:
       tags: [Campagnes]
       operationId: listCollectionResponses
       summary: Suivre les réponses accessibles
-      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le préleveur et le collecteur désigné encore rattaché à l’exploitation partagent la même réponse et son brouillon. Chaque réponse expose permissions.canEdit, canSubmit et respondingOnBehalf. Avec view=summary, draftData et submittedData sont omis ; hasDraft et le statut sont conservés, submittedNeeds est limité à season/offSeason.flow/volume et les volumes de compteurs ne sont pas calculés. point.coordinates contient un Point GeoJSON en longitude/latitude ou null, uniquement pour les réponses autorisées de la page. Le format détaillé reste celui par défaut.
+      description: Pagination page/pageSize, filtre q sur le nom ou nom usuel du point, sa commune, le code comptage ou la raison sociale du préleveur (sans distinction de casse), et status NOT_STARTED, DRAFT ou SUBMITTED. Le préleveur et le collecteur désigné encore rattaché à l’exploitation partagent la même réponse et son brouillon. Chaque réponse expose permissions.canEdit, canSubmit et respondingOnBehalf. Avec view=summary, draftData et submittedData sont omis ; hasDraft et le statut sont conservés, submittedNeeds est limité à season/offSeason.flow/volume et les volumes de compteurs ne sont pas calculés. point.coordinates contient un Point GeoJSON en longitude/latitude ou null, uniquement pour les réponses autorisées de la page. Le format détaillé reste celui par défaut.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
