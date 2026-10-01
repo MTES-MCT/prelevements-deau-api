@@ -153,6 +153,7 @@ model DeclarantPointPrelevement {
   usage                       SandreWaterUse                  @relation(fields: [usageId], references: [id], onDelete: Restrict)
   pointPrelevementNameAliases String[]                        @default([])
   countingCode                String?                         @db.Text
+  excludeFromQuickDeclaration Boolean                        @default(false)
 
   abandonReason String? @db.Text
   comment       String? @db.Text
