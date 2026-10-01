@@ -86,7 +86,7 @@ paths:
       tags: [Campagnes]
       operationId: getCollectionCampaign
       summary: Consulter une campagne
-      description: Retourne campaign, progress et permissions. Les exploitationIds sont réservés aux administrateurs.
+      description: Retourne campaign, progress et permissions. canRespond reste réservé au participant ; canRespondForParticipants indique que le collecteur désigné peut intervenir pendant l’ouverture, sous réserve des droits propres à chaque réponse et du rattachement actuel de l’exploitation. Les exploitationIds sont réservés aux administrateurs.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -203,7 +203,7 @@ paths:
       tags: [Campagnes]
       operationId: listCollectionResponses
       summary: Suivre les réponses accessibles
-      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le collecteur ne reçoit que les données soumises. Avec view=summary, draftData et submittedData sont omis ; hasDraft et le statut sont conservés, submittedNeeds est limité à season/offSeason.flow/volume et les volumes de compteurs ne sont pas calculés. point.coordinates contient un Point GeoJSON en longitude/latitude ou null, uniquement pour les réponses autorisées de la page. Le format détaillé reste celui par défaut.
+      description: Pagination page/pageSize, filtre q et status NOT_STARTED, DRAFT ou SUBMITTED. Le préleveur et le collecteur désigné encore rattaché à l’exploitation partagent la même réponse et son brouillon. Chaque réponse expose permissions.canEdit, canSubmit et respondingOnBehalf. Avec view=summary, draftData et submittedData sont omis ; hasDraft et le statut sont conservés, submittedNeeds est limité à season/offSeason.flow/volume et les volumes de compteurs ne sont pas calculés. point.coordinates contient un Point GeoJSON en longitude/latitude ou null, uniquement pour les réponses autorisées de la page. Le format détaillé reste celui par défaut.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -266,7 +266,7 @@ paths:
       tags: [Campagnes]
       operationId: getCollectionResponse
       summary: Consulter le contexte du formulaire
-      description: Retourne campagne, réponse, exploitation, compteurs documentaires, usages et sous-usages avec leurs liens parentId, et permissions. Pour le propriétaire ou un administrateur, prefill indique les propositions importées utilisées avant toute saisie ; leur provenance privée n’est jamais exposée. Aucun accès aux index physiques globaux.
+      description: Retourne campagne, réponse, exploitation, compteurs documentaires, usages et sous-usages avec leurs liens parentId, et permissions. Pour le propriétaire, le collecteur désigné encore rattaché à l’exploitation ou un administrateur, prefill indique les propositions importées utilisées avant toute saisie ; leur provenance privée n’est jamais exposée. Le brouillon est partagé entre préleveur et collecteur autorisé. respondingOnBehalf indique une consultation pour le participant ; canEdit et canSubmit sont faux après clôture. Aucun accès aux index physiques globaux.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -288,7 +288,7 @@ paths:
       tags: [Campagnes]
       operationId: saveCollectionResponseDraft
       summary: Enregistrer le brouillon
-      description: Session humaine du préleveur propriétaire et campagne ouverte, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Conflit 409 si revision obsolète. Aucun effet sur les déclarations publiées.
+      description: Session humaine du préleveur propriétaire ou du collecteur désigné encore rattaché à cette exploitation, et campagne ouverte. Une prise de place conserve les droits de l’identité effective et l’administrateur reste tracé dans l’audit. Le brouillon et sa revision sont communs aux deux déclarants. Conflit 409 si revision obsolète, sans écrasement. Aucun effet sur les déclarations publiées.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -316,7 +316,7 @@ paths:
       tags: [Campagnes]
       operationId: submitCollectionResponse
       summary: Soumettre ou corriger une réponse
-      description: Session humaine du préleveur propriétaire, y compris lorsqu’un administrateur prend sa place. Les droits restent ceux du préleveur. Le numéro de compteur et le commentaire sont facultatifs. Envoi possible dès l’ouverture de la campagne, y compris avant le 31 octobre 2026 ; les index conservent les dates de relevé prévues par la campagne. Déclaration stable et publication atomique ou en attente de validation.
+      description: Session humaine du préleveur propriétaire ou du collecteur désigné encore rattaché à cette exploitation. Une prise de place conserve les droits de l’identité effective et l’administrateur reste tracé dans l’audit. Le bénéficiaire reste le préleveur et l’auteur du dépôt est conservé séparément. Le numéro de compteur et le commentaire sont facultatifs. Envoi et corrections possibles dès l’ouverture et jusqu’à la clôture, y compris avant le 31 octobre 2026 ; les index conservent les dates de relevé prévues par la campagne. Déclaration stable et publication atomique ou en attente de validation. Les validations de compteurs restent réservées aux administrateurs.
       security: [{BearerAuth: []}]
       parameters:
         - name: campaignId
@@ -1163,6 +1163,8 @@ paths:
         désigne une exploitation par son UUID, ou par le PP et son code comptage.
         Un ancien payload sans identité est accepté seulement si l'exploitation
         correspondante est unique. Une ambiguïté renvoie 409, sans sélection arbitraire.
+        Une exploitation exclue de la saisie rapide renvoie 403, y compris pour
+        corriger une déclaration existante. Les réponses aux campagnes ne sont pas concernées.
       requestBody:
         required: true
         content:
@@ -1180,7 +1182,7 @@ paths:
       tags: [Declarations]
       operationId: previewQuickDeclarationConflicts
       summary: Prévisualiser les conflits d'une saisie rapide
-      description: Applique les mêmes règles d'identité et de droits que l'écriture ; les conflits sont limités à l'exploitation choisie.
+      description: Applique les mêmes règles d'identité, de droits et d'exclusion de la saisie rapide que l'écriture ; les conflits sont limités à l'exploitation choisie.
       requestBody:
         required: true
         content:
@@ -1202,6 +1204,7 @@ paths:
         Retourne les points, usages et périodes utiles à la saisie rapide. Deux
         exploitations d'un même PP sont deux choix distincts, portant exploitationId,
         countingCode et leur propre dernier index.
+        Les exploitations avec excludeFromQuickDeclaration à true ne sont pas proposées.
       responses:
         '200':
           description: Contexte disponible
@@ -3325,7 +3328,7 @@ components:
       type: [object, 'null']
       additionalProperties: false
       description: >-
-        Présent à la racine du contexte de réponse, réservé au propriétaire et aux administrateurs (null pour le collecteur).
+        Présent à la racine du contexte de réponse, accessible au propriétaire, au collecteur désigné encore rattaché à l’exploitation et aux administrateurs.
         Ne contient ni provenance ni données sources. Les propositions ne deviennent un brouillon qu’à l’enregistrement explicite.
       required: [active, noAuthorizedOffSeasonUsage]
       properties:
@@ -3363,7 +3366,10 @@ components:
           properties:
             prefill: {$ref: '#/components/schemas/CollectionPrefillContext'}
           description: >-
-            Ressource ou liste paginée avec droits explicites. Les brouillons ne sont jamais exposés au collecteur.
+            Ressource ou liste paginée avec droits explicites. Le préleveur et le collecteur désigné encore rattaché à l’exploitation partagent le brouillon ; la vue summary n’en expose jamais le contenu.
+            Les permissions de campagne ajoutent canRespondForParticipants sans modifier canRespond.
+            Chaque réponse expose permissions.canEdit et canSubmit (écriture autorisée maintenant), et respondingOnBehalf (collecteur autorisé agissant pour le participant, y compris en lecture seule).
+            Le contexte détaillé reprend ces trois indicateurs dans ses permissions de premier niveau. Ces droits sont calculés côté serveur et revérifiés à chaque écriture.
             Le détail d’une réponse ajoute prefill ; prefillData et prefillMetadata ne sont jamais exposés, même dans les listes administrateur.
             Sans saisie, data combine les propositions autorisées avec les observations exactes existantes, prioritaires y compris à zéro.
             Un conflit entre observations n’est jamais résolu par une proposition importée. Les compteurs sans rattachement actuel sont ignorés.
@@ -5005,6 +5011,9 @@ components:
         startDate: {type: [string, 'null'], format: date}
         endDate: {type: [string, 'null'], format: date}
         countingCode: {$ref: '#/components/schemas/CountingCode'}
+        excludeFromQuickDeclaration:
+          type: boolean
+          description: Exclut uniquement cette exploitation de la saisie rapide du préleveur et de ses collecteurs, sans effet sur les campagnes ou les imports. Faux à la création si absent ; inchangé à la modification si absent. Soumis aux droits habituels de création ou modification de l'exploitation.
         expectedCountingCode:
           allOf: [{$ref: '#/components/schemas/CountingCode'}]
           description: Valeur observée avant correction ; null si aucun code n'était renseigné. À fournir en édition lorsqu'on change effectivement le code.
@@ -5081,6 +5090,10 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         countingCode: {$ref: '#/components/schemas/CountingCode'}
+        excludeFromQuickDeclaration:
+          type: boolean
+          default: false
+          description: Exploitation exclue de la saisie rapide uniquement. Les campagnes et les données historiques ne sont pas affectées.
         expectedCountingCode:
           allOf: [{$ref: '#/components/schemas/CountingCode'}]
           description: Précondition d'édition du code, non nécessaire pour une lecture.
