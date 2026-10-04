@@ -1,4 +1,4 @@
-import {parseArgs, parseEnv} from 'node:util'
+import {parseArgs} from 'node:util'
 import {readFile, writeFile, mkdir, rename, access, link, unlink} from 'node:fs/promises'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
@@ -7,7 +7,9 @@ import process from 'node:process'
 import {createHash, randomUUID} from 'node:crypto'
 import {readWorkbook, EPIDROPT_SHEETS, RIVES_SHEETS, buildManifest, digest} from './lib/epidropt.js'
 import {getTransactionTimeoutMs} from './lib/import-options.js'
-import {PROD_DATABASE_ENDPOINT, validateProdAdminDatabaseUrl, assertConnectedProdAdminDatabase} from '../network/prod-database-target.js'
+import {assertDroptTargetOptions, getDroptProdDatabaseUrl, assertDroptProdReport, assertDroptConnectedDatabase} from './lib/production-target.js'
+import {getDroptOperationClient} from './lib/production-identities.js'
+import {readTargetEnvironment} from './lib/target-environment.js'
 
 const {positionals, values} = parseArgs({allowPositionals: true, options: {
   input: {type: 'string', default: 'data/dropt/epidropt-2026'}, target: {type: 'string'},
@@ -25,10 +27,10 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
 }})
 const operation = positionals[0]
 const prefillOperation = ['prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)
-if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign [--input dossier] [--target local|testing|prod] [--apply] ; prod réservé à prefill-campaign et verify-prefill-campaign.')
+if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign [--input dossier] [--target local|testing|prod] [--apply]')
 if (values.target === 'prod') {
-  if (!['prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('La cible prod est réservée à prefill-campaign et verify-prefill-campaign.')
-  if (!values['target-env'] || !values['tunnel-port']) throw new Error('--target-env et --tunnel-port sont obligatoires pour prod.')
+  assertDroptTargetOptions({operation, target: values.target, targetEnv: values['target-env'], tunnelPort: values['tunnel-port'],
+    apply: values.apply, againstReport: values['against-report']})
 }
 if (prefillOperation && (!values['prefill-file'] || !values.report)) throw new Error('--prefill-file et --report hors Git sont obligatoires pour le préremplissage.')
 if (prefillOperation && operation !== 'prepare-prefill' && (!values['campaign-id'] || !values['actor-user-id'])) throw new Error('--campaign-id et --actor-user-id sont obligatoires.')
@@ -66,14 +68,11 @@ async function writePrivate(filename, value) {
   } else await rename(temporary, filename)
 }
 
-async function assertConnectedTarget(client, url) {
-  if (values.target === 'prod') return assertConnectedProdAdminDatabase(client)
-  const [identity] = await client.$queryRaw`SELECT current_database() AS name, (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls`
-  if (identity.name !== decodeURIComponent(url.pathname.slice(1)) || (values.target === 'testing' && !identity.tls)) throw new Error('Identité ou TLS de la base incorrect.')
-}
-
 try {
   getTransactionTimeoutMs(values['transaction-timeout-seconds'])
+  if (!['prepare', 'prepare-prefill'].includes(operation) && values.target !== 'prod') {
+    assertDroptTargetOptions({operation, target: values.target})
+  }
   if (prefillOperation) {
     if (path.extname(values.report).toLowerCase() !== '.json') throw new Error('Le rapport privé doit être un nouveau fichier .json.')
     try {
@@ -118,27 +117,23 @@ try {
     await writePrivate(manifestPath, manifest)
     console.log(JSON.stringify({source: inputs.epidropt, manifestHash: manifest.manifestHash, counts: Object.fromEntries(['points', 'declarants', 'exploitations', 'meters', 'allocations', 'issues'].map(key => [key, manifest[key].length]))}))
   } else {
-    if (!['local', 'testing', 'prod'].includes(values.target)) throw new Error('Cible explicite local, testing ou prod obligatoire ; prod est réservé au préremplissage.')
-    if (['review', 'rebuild', 'recompute-rebuild'].includes(operation) && values.target !== 'testing') throw new Error('La correction en ligne est réservée à testing.')
     if (values['target-env']) {
-      const configuration = parseEnv(await readFile(values['target-env'], 'utf8'))
+      const configuration = await readTargetEnvironment(values['target-env'])
       if (!configuration.DATABASE_URL) throw new Error('DATABASE_URL absente du fichier cible.')
       process.env.DATABASE_URL = configuration.DATABASE_URL
-      // Do not inherit a permissive local flag when explicitly targeting testing.
+      // Do not inherit a permissive local flag when explicitly targeting a remote environment.
       process.env.MULTIPLE_EXPLOITATIONS_ENABLED = configuration.MULTIPLE_EXPLOITATIONS_ENABLED === 'true' ? 'true' : 'false'
     }
     if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL doit être chargée explicitement, sans argument de commande.')
-    const url = new URL(process.env.DATABASE_URL)
-    // Validate the original deployment URL before changing its certificate path
-    // for the local tunnel. Never turn a different target or weak TLS into prod.
-    if (values.target === 'prod') validateProdAdminDatabaseUrl(url.toString())
+    const url = values.target === 'prod' ? getDroptProdDatabaseUrl(process.env.DATABASE_URL) : new URL(process.env.DATABASE_URL)
     if (values['tunnel-port']) {
       const port = Number(values['tunnel-port'])
       if (!['testing', 'prod'].includes(values.target) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Tunnel réservé à testing ou prod sur un port local explicite.')
       const {TESTING_DATABASE_ENDPOINT} = await import('../network/testing-database-target.js')
-      const endpoint = values.target === 'prod' ? PROD_DATABASE_ENDPOINT : TESTING_DATABASE_ENDPOINT
-      url.hostname = endpoint.host
-      url.port = endpoint.port
+      if (values.target === 'testing') {
+        url.hostname = TESTING_DATABASE_ENDPOINT.host
+        url.port = TESTING_DATABASE_ENDPOINT.port
+      }
       url.searchParams.set('sslmode', 'verify-full')
       url.searchParams.set('sslrootcert', path.resolve(`deploy/certs/${values.target}/postgres-ca.pem`))
       const {getPostgresConnectionOptions} = await import('../../db/connection-options.js')
@@ -154,8 +149,9 @@ try {
     }
     process.env.APP_ENV = values.target === 'local' ? 'development' : values.target
     const {prisma} = await import('../../db/prisma.js')
+    let reportPath
     try {
-      await assertConnectedTarget(prisma, url)
+      await assertDroptConnectedDatabase(prisma, {target: values.target, url})
       let manifest
       if (!prefillOperation) {
         manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
@@ -164,8 +160,10 @@ try {
       }
       const {applyManifest, verifyManifest} = await import('./lib/apply-epidropt.js')
       const report = values['against-report'] ? JSON.parse(await readFile(values['against-report'], 'utf8')) : undefined
+      if (values.target === 'prod' && !prefillOperation) assertDroptProdReport(report, {operation, manifestHash: manifest.manifestHash, apply: values.apply})
       const stamp = new Date().toISOString().replaceAll(':', '-')
-      const reportPath = path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`))
+      reportPath = path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`))
+      const client = prefillOperation ? prisma : await getDroptOperationClient(prisma, manifest, {target: values.target, operation})
       const options = {
         apply: values.apply, activateAt: values['activate-at'], effectiveAt: values['effective-at'], serviceAccountId: values['service-account-id'],
         transactionTimeoutSeconds: values['transaction-timeout-seconds'], expectedReport: report
@@ -179,7 +177,7 @@ try {
         result = operation === 'verify-prefill-campaign'
           ? await verifyCampaignPrefill(prisma, source, prefillOptions)
           : await prefillCampaign(prisma, source, prefillOptions)
-      } else if (operation === 'verify') result = await verifyManifest(prisma, manifest, {report})
+      } else if (operation === 'verify') result = await verifyManifest(client, manifest, {report})
       else if (operation === 'review') {
         if (options.activateAt || options.effectiveAt) throw new Error('La revue de référentiel ne doit ni activer ni recalculer les volumes.')
         const {applyReviewedManifest} = await import('./lib/apply-reviewed.js')
@@ -189,11 +187,11 @@ try {
       }
       else if (operation === 'enable-logins') {
         const {enableManifestLogins} = await import('./lib/enable-logins.js')
-        result = await enableManifestLogins(prisma, manifest, {...options, scope: values['login-scope'], allowEmailAliases: values['allow-email-aliases']})
+        result = await enableManifestLogins(client, manifest, {...options, scope: values['login-scope'], allowEmailAliases: values['allow-email-aliases']})
       } else if (operation === 'seed-campaign') {
         const {readCampaignSeedConfig, seedManifestCampaign} = await import('./lib/seed-campaign.js')
         const config = await readCampaignSeedConfig(values['campaign-config'], {actorUserId: values['actor-user-id']})
-        result = await seedManifestCampaign(prisma, manifest, config, {...options, target: values.target})
+        result = await seedManifestCampaign(client, manifest, config, {...options, target: values.target})
       }
       else if (operation === 'rebuild') {
         const {rebuildManifest} = await import('./lib/rebuild-epidropt.js')
@@ -204,10 +202,16 @@ try {
         const resume = values.resume ? JSON.parse(await readFile(values.resume, 'utf8')) : undefined
         result = await recomputeRebuiltManifest(prisma, manifest, {...options, target: values.target, report, resume,
           onProgress: progress => writePrivate(reportPath, progress)})
-      } else result = await applyManifest(prisma, manifest, options)
-      await writePrivate(reportPath, result)
+      } else result = await applyManifest(client, manifest, options)
+      await writePrivate(reportPath, values.target === 'prod' && !prefillOperation ? {...result, target: 'prod', operation} : result)
       console.log(JSON.stringify({manifestHash: result.manifestHash, applied: result.applied ?? false, counts: result.counts, issues: result.issues?.length, complete: result.complete}))
       if (result.complete === false) process.exitCode = 1
+    } catch (error) {
+      if (values.target === 'prod' && error.identityCollisions && reportPath) {
+        await writePrivate(reportPath, {target: 'prod', operation, manifestHash: error.manifestHash,
+          applied: false, complete: false, identityCollisions: error.identityCollisions})
+      }
+      throw error
     } finally {
       await prisma.$disconnect()
       await globalThis.pgPool?.end()

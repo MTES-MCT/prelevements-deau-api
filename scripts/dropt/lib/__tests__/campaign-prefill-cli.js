@@ -67,10 +67,10 @@ test('prepare rejects reports inside Git and never accepts --apply', async t => 
   await t.throwsAsync(run(['prepare-prefill', '--prefill-file', filename, '--report', path.join(directory, 'forbidden.json'), '--apply']))
 })
 
-test('prod rejects every operation other than campaign prefill and verification before reading any input', async t => {
-  for (const operation of ['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill']) {
+test('prod rejects preparation and destructive operations before reading any input', async t => {
+  for (const operation of ['prepare', 'review', 'rebuild', 'recompute-rebuild', 'prepare-prefill']) {
     const error = await t.throwsAsync(run([operation, '--target', 'prod']))
-    t.regex(error.stderr, /prod est réservée à prefill-campaign et verify-prefill-campaign/)
+    t.regex(error.stderr, /interdite en production|réservée à testing/)
   }
 })
 
@@ -78,7 +78,7 @@ test('both prod campaign operations require an explicit environment file and tun
   for (const operation of ['prefill-campaign', 'verify-prefill-campaign']) {
     for (const connection of [[], ['--target-env', '/must-not-read'], ['--tunnel-port', '15432']]) {
       const error = await t.throwsAsync(run([operation, '--target', 'prod', ...connection]))
-      t.regex(error.stderr, /--target-env et --tunnel-port sont obligatoires pour prod/)
+      t.regex(error.stderr, /--target-env et --tunnel-port sont obligatoires pour la production/)
     }
   }
 })
