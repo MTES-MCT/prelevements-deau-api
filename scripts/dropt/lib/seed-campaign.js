@@ -156,7 +156,7 @@ async function applyPlan(tx, config, plan, actor) {
 
 export async function seedManifestCampaign(client, manifest, input, {target, actorUserId, apply = false, expectedReport, transactionTimeoutSeconds} = {}) {
   validateManifest(manifest)
-  requireCondition(['local', 'testing'].includes(target), 'Cible explicite local ou testing obligatoire ; production interdite.')
+  requireCondition(['local', 'testing', 'prod'].includes(target), 'Cible explicite local, testing ou prod obligatoire.')
   const config = validateCampaignSeedConfig(input, {actorUserId})
   const configHash = digest(config)
   requireCondition(!(apply && !expectedReport) && (!expectedReport || (expectedReport.operation === 'seed-campaign'
