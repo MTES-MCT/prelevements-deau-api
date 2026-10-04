@@ -3285,13 +3285,18 @@ components:
       additionalProperties: false
       description: >-
         Les usages et sous-usages du référentiel sont acceptés. Lors de la soumission,
-        les trois index de chaque compteur doivent être croissants ou identiques dans l’ordre chronologique.
+        les trois index de chaque compteur doivent être croissants ou identiques dans l’ordre chronologique,
+        sauf changement de compteur explicitement signalé avec un motif non vide.
         Les relevés sont datés du 1er novembre 2025, du 31 mai 2026 et du 31 octobre 2026.
         L’index du 31 mai est commun à la fin du hors étiage et au début du calcul de l’étiage,
         sans quatrième relevé. Les périodes civiles sont du 1er novembre au 31 mai puis du 1er juin au 31 octobre.
         Les incohérences retournent les champs concernés dans data.fields et data.validationErrors.
-        Le numéro de compteur est facultatif, y compris à la soumission. Le compteur reste identifié
-        par son compteurId serveur lors des corrections ; un numéro absent ne rattache jamais un compteur tiers.
+        Le numéro de compteur est obligatoire à la soumission et facultatif en brouillon. Un numéro déjà connu
+        reste conservé si le client l’omet. Le compteur reste identifié par son compteurId serveur lors des corrections ;
+        un numéro absent ne rattache jamais un compteur tiers. Les anciens reçus restent lisibles et leur rejeu identique est sans mutation.
+        Un signalement conserve les index et la déclaration sans calculer de volume sur la période du compteur concerné,
+        même lorsque les index sont croissants. Il est informatif, sans action de validation attendue du collecteur.
+        Les contradictions avec l’historique nécessitent aussi meterChanged et meterChangeReason sans modifier cet historique.
         Un brouillon peut rester incomplet ou contenir des index à corriger, sans publication des volumes.
       properties:
         meters:
@@ -3302,7 +3307,9 @@ components:
             additionalProperties: false
             properties:
               compteurId: {type: [string, 'null'], format: uuid}
-              serialNumber: {type: [string, 'null'], maxLength: 100, description: Facultatif ; absent ou vide est normalisé en null. Un numéro connu est conservé si le champ est omis ; un numéro encore inconnu peut être complété sans collision.}
+              serialNumber: {type: [string, 'null'], maxLength: 100, description: Obligatoire à la soumission sauf numéro serveur déjà connu conservé si omis ou rejeu identique ancien ; facultatif en brouillon. Un numéro encore inconnu peut être complété sans collision et sans changer le compteurId.}
+              meterChanged: {type: boolean, description: Signalement informatif de changement de compteur ; absent équivaut à false. Obligatoire à true en cas d’index incohérents. Aucun volume automatique n’est produit sur la période concernée.}
+              meterChangeReason: {type: string, maxLength: 2000, description: 'Motif nettoyé des espaces extérieurs, obligatoire et non vide à la soumission lorsque meterChanged vaut true. Facultatif en brouillon.'}
               offSeason: {$ref: '#/components/schemas/CollectionPeriod'}
               season: {$ref: '#/components/schemas/CollectionPeriod'}
         needs:
@@ -3375,6 +3382,11 @@ components:
             Un conflit entre observations n’est jamais résolu par une proposition importée. Les compteurs sans rattachement actuel sont ignorés.
             Les dates sont ISO et les états de réponse et de publication sont distincts.
             Chaque réponse expose volumes (offSeason, season, total, publicationStatus, partial).
+            Elle expose aussi publicationStatusLabel et meterChanges (compteurId, serialNumber, meterChangeReason), y compris dans la vue summary.
+            METER_CHANGE_REPORTED dans publicationIssues est informatif. Le libellé est « Non calculé : changement de compteur signalé »
+            lorsque ce signalement est le seul motif ; le statut interne PENDING_REVIEW reste compatible mais ne demande aucune validation.
+            Un compteur signalé ne peut pas être approuvé depuis la revue des répartitions. Les autres anomalies gardent leur fonctionnement habituel.
+            Le CSV ajoute Changement de compteur signalé et Motif du changement de compteur aux lignes de bilan, en conservant les index sources.
             Les nombres sont des m³ effectivement publiés ; null signifie absence de volume publié et ne vaut pas zéro.
             Les résultats exposent totals.publishedVolumes et les volumes demandés séparément.
     MeterAllocationSettings:
