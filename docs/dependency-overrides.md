@@ -2,6 +2,25 @@
 
 Vérification du 11 septembre 2026. Aucun paquet n'est modifié après installation.
 
+## Acceptation temporaire du risque de développement (4 octobre 2026)
+
+Exception autorisée pour [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm),
+uniquement pour `braces@3.0.3` dans les dépendances de développement. Aucune version
+corrigée n'est publiée au moment de la décision. AVA, Spectral et Nodemon utilisent
+cette dépendance pour leurs motifs de fichiers ; elle n'est pas conservée dans
+l'image d'exécution, qui supprime les dépendances de développement.
+
+L'exception expire le **11 octobre 2026 à 00 h, heure de Paris**
+(`2026-10-10T22:00:00Z`). Elle n'est pas une correction du paquet. Le contrôle
+`node scripts/security/audit-dependencies.js` conserve le rapport npm brut et
+signale explicitement le risque accepté. Il vérifie les chemins du lockfile et
+les causes transitives : une autre alerte, un chemin de production, une erreur
+d'audit ou l'expiration restent bloquants. Des tests protègent ces limites.
+
+L'audit de production, le scan de l'image, les tests et les migrations restent
+inchangés et bloquants. Dès qu'une version officielle corrigée est disponible,
+mettre à jour le lockfile, retirer l'exception, puis rejouer les audits et les tests.
+
 ## Prisma 7.10.0 et deepmerge-ts
 
 Au 11 septembre 2026, Prisma 7.10.0 était la dernière version stable publiée ;
@@ -23,7 +42,8 @@ concernent la fusion des `Map` et la mutation via `deepmergeInto`, alors que Pri
 utilise `deepmerge` sur des objets de configuration ordinaires. Le correctif amont
 ne modifie pas le code de Prisma et ses 142 tests de configuration passent.
 La génération du client, les migrations et les tests locaux restent à rejouer
-à chaque évolution ; l'audit continue de bloquer sur toute vulnérabilité.
+à chaque évolution ; l'audit continue de bloquer hors exception temporaire
+explicitement documentée ci-dessus.
 
 À la publication du correctif : retirer cet override, aligner les trois paquets
 Prisma sur la même version stable, régénérer le client, rejouer les migrations

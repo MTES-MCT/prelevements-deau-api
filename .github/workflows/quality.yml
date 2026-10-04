@@ -26,11 +26,10 @@ jobs:
           npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
       - name: Install locked dependencies
         run: npm ci
-      - name: Audit all dependencies
-        run: |
-          set -o pipefail
-          mkdir -p .artifacts/security
-          npm audit --include=dev --audit-level=low --json | tee .artifacts/security/npm-audit-all.json
+      - name: Test audit policy
+        run: npx --no-install ava scripts/security/__tests__/audit-dependencies.js
+      - name: Audit all dependencies with expiring development exception
+        run: node scripts/security/audit-dependencies.js
       - name: Audit production dependencies
         if: ${{ !cancelled() }}
         run: |
