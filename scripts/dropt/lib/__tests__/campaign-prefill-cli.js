@@ -17,6 +17,50 @@ const run = (args, nodeArgs = []) => execute(process.execPath, [...nodeArgs, 'sc
   cwd, env: {...process.env, DATABASE_URL: 'deliberately-invalid-no-database-connection'}, timeout: 15_000
 })
 
+test('counting repair requires explicit authorization and a reviewed simulation before connecting', async t => {
+  const common = ['--target', 'local', '--prefill-file', '/not-read.xlsx', '--report', '/not-written.json',
+    '--campaign-id', randomUUID(), '--actor-user-id', randomUUID()]
+  const unauthorized = await t.throwsAsync(run(['repair-campaign-countings', ...common]))
+  t.regex(unauthorized.stderr, /--allow-counting-split/)
+  const unreviewed = await t.throwsAsync(run(['repair-campaign-countings', ...common, '--allow-counting-split', '--apply']))
+  t.regex(unreviewed.stderr, /--against-report/)
+  const writableVerify = await t.throwsAsync(run(['verify-campaign-countings', ...common, '--against-report', '/not-read.json', '--apply']))
+  t.regex(writableVerify.stderr, /vérification/)
+  const unrelated = await t.throwsAsync(run(['prefill-campaign', ...common, '--allow-counting-split']))
+  t.regex(unrelated.stderr, /réservé à la réparation/)
+})
+
+test('physical meter repair requires a reviewed plan and never reuses a general import input', async t => {
+  const common = ['--target', 'local', '--report', '/not-written.json', '--campaign-id', randomUUID(), '--actor-user-id', randomUUID()]
+  const missing = await t.throwsAsync(run(['repair-campaign-meters', ...common]))
+  t.regex(missing.stderr, /--reviewed-plan/)
+  const unreviewed = await t.throwsAsync(run(['repair-campaign-meters', ...common, '--reviewed-plan', '/not-read.json', '--apply']))
+  t.regex(unreviewed.stderr, /--against-report/)
+  const source = await t.throwsAsync(run(['repair-campaign-meters', ...common, '--reviewed-plan', '/not-read.json', '--prefill-file', '/not-read.xlsx']))
+  t.regex(source.stderr, /pas --prefill-file/)
+  const verification = await t.throwsAsync(run(['verify-campaign-meters', ...common, '--reviewed-plan', '/not-read.json', '--against-report', '/not-read.json', '--apply']))
+  t.regex(verification.stderr, /vérification/)
+})
+
+test('demo repairs preserve the already validated target options until reading the explicit environment', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'dropt-repair-cli-demo-'))
+  t.teardown(() => rm(directory, {recursive: true, force: true}))
+  const configuration = path.join(directory, 'synthetic.env')
+  // Stop before constructing any database client, after validating demo options.
+  await writeFile(configuration, '# Deliberately no DATABASE_URL\n', {mode: 0o600})
+  for (const operation of ['repair-campaign-countings', 'verify-campaign-countings', 'repair-campaign-meters', 'verify-campaign-meters']) {
+    const report = path.join(directory, `${operation}.json`)
+    const args = [operation, '--target', 'demo', '--target-env', configuration, '--tunnel-port', '15432',
+      '--campaign-id', randomUUID(), '--actor-user-id', randomUUID(), '--report', report]
+    if (operation.endsWith('countings')) args.push('--prefill-file', '/not-read.xlsx', '--allow-counting-split')
+    else args.push('--reviewed-plan', '/not-read.json')
+    if (operation.startsWith('verify-')) args.push('--against-report', '/not-read.json')
+    const error = await t.throwsAsync(run(args))
+    t.regex(error.stderr, /DATABASE_URL absente du fichier cible/)
+    await t.throwsAsync(stat(report), {code: 'ENOENT'})
+  }
+})
+
 async function sourceFile(t) {
   const directory = await mkdtemp(path.join(tmpdir(), 'dropt-prefill-cli-'))
   t.teardown(() => rm(directory, {recursive: true, force: true}))

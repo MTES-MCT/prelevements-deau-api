@@ -132,6 +132,31 @@ Règles de préparation :
 
 L’application verrouille la campagne comme les sauvegardes manuelles et recontrôle toutes les conditions en une transaction. Elle ne modifie que `prefillData`/`prefillMetadata` (et la date technique de modification), jamais les droits, secrets, répartitions, brouillons, révisions ou données soumises. `verify-prefill-campaign` compare les propositions enregistrées au rapport d’application sans remplacer les saisies intervenues depuis.
 
+## Corriger des comptages distincts regroupés dans une campagne
+
+`repair-campaign-countings` examine tous les groupes du classeur pour la campagne ciblée, pas une liste de points codée dans le script. Le code comptage reste distinct du numéro de série : deux index égaux ou deux numéros de série absents ne prouvent jamais un compteur unique.
+
+Après autorisation explicite, `--allow-counting-split` permet une séparation ciblée sans activer `MULTIPLE_EXPLOITATIONS_ENABLED` globalement. Les garde-fous SQL restent actifs. L'identité point/préleveur/codes doit être exacte ; une réponse commencée, un historique ou un rattachement ambigu est conservé et signalé. Le script conserve la fiche d'origine, crée les fiches manquantes et reprend les délégations du collecteur et l'exclusion de saisie rapide. Aucun compteur physique, index publié, volume, email ou secret n'est créé ou modifié.
+
+Les propositions sont reconstruites par comptage depuis ses propres lignes sources, jamais en recopiant un total sur chaque nouvelle fiche. Une série partagée ne provoque pas la création de plusieurs compteurs. Les cas nécessitant un rapprochement physique restent identifiés dans le rapport pour une revue des pièces justificatives.
+
+```sh
+npm run import:dropt -- repair-campaign-countings --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --prefill-file /chemin/prive/besoins.xlsx --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --allow-counting-split --report /chemin/prive/simulation-comptages.json
+# Même source, cible et options, après examen de la simulation :
+npm run import:dropt -- repair-campaign-countings --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --prefill-file /chemin/prive/besoins.xlsx --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --allow-counting-split --apply --against-report /chemin/prive/simulation-comptages.json --report /chemin/prive/application-comptages.json
+npm run import:dropt -- verify-campaign-countings --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --prefill-file /chemin/prive/besoins.xlsx --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --against-report /chemin/prive/application-comptages.json --report /chemin/prive/verification-comptages.json
+```
+
+Les mêmes commandes acceptent testing et, uniquement pour cette réparation, demo avec leur fichier natif et leur tunnel. Cela n'autorise pas l'import général Dropt sur demo. Chaque cible nécessite sa simulation distincte. Les rapports et la sauvegarde `.backup.json` sont écrits hors Git, en accès privé, sans écrasement. L'application vérifie le plan sous verrou et sauvegarde l'état avant la première écriture ; toute dérive annule la transaction. Le rejeu ne doit ajouter aucune fiche.
+
+Si plusieurs codes sans numéro de série répètent le même index, les comptages sont séparés mais cet index n'est pas attribué arbitrairement à chacun. La proposition porte un signalement privé `readingNeedsReview`. Un zéro source ambigu reste vide.
+
+### Rapprochement physique après revue des pièces
+
+`repair-campaign-meters` et `verify-campaign-meters` utilisent `--reviewed-plan /chemin/prive/plan.json` à la place de `--prefill-file` et de `--allow-counting-split`, avec les mêmes options de campagne, cible, rapport et simulation/application/vérification. Le plan contient les identités exactes, les empreintes et lignes justificatives, le hash du préremplissage attendu, les compteurs existants et, seulement si son existence est prouvée, la clé stable d'un compteur sans série connue. Il ne contient aucun secret et reste hors Git.
+
+Cette opération conserve les besoins et commentaires, réutilise les identités physiques existantes et ne rattache que des compteurs sans historique ni autre bénéficiaire. Les nouvelles affectations restent désactivées, sans pourcentage ni dates d'effet inventés. Les index sont seulement proposés lorsque leur association au compteur est prouvée ; jamais publiés. Les flux, mesures, volumes, réponses commencées et rattachements actifs empêchent la correction. Simulation distincte, sauvegarde avant écriture, contrôle de dérive et rejeu sans doublon restent obligatoires.
+
 ## Reconstruction exceptionnelle sur testing
 
 Préparer un manifeste distinct avec `prepare --rebuild-identities --previous-manifest ancien-manifeste.json --snapshot export-testing.json --manifest nouveau-manifeste.json` et le classeur sélectionné. Cela renouvelle les identités PP/exploitations à regrouper, tout en conservant les ancres des préleveurs et compteurs.
