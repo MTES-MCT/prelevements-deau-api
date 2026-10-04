@@ -3,13 +3,30 @@ import path from 'node:path'
 import process from 'node:process'
 import {spawnSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
-import {assertDroptTargetOptions, getDroptProdDatabaseUrl, assertDroptProdReport} from '../production-target.js'
+import {assertDroptTargetOptions, getDroptProdDatabaseUrl, getDroptDemoDatabaseUrl, assertDroptProdReport} from '../production-target.js'
 import {PROD_DATABASE_ENDPOINT, assertConnectedProdAdminDatabase} from '../../../network/prod-database-target.js'
 
 const options = {operation: 'apply', target: 'prod', targetEnv: '/synthetic/prod.env', tunnelPort: '55440'}
 const nativeUrl = () => new URL(`postgresql://prod-partageons-leau-api:synthetic-only@${PROD_DATABASE_ENDPOINT.host}:${PROD_DATABASE_ENDPOINT.port}/prod-partageons-leau-api?sslmode=verify-full&sslrootcert=/usr/local/share/ca-certificates/scw-postgres-ca.crt`)
 const manifestHash = 'a'.repeat(64)
 const report = {target: 'prod', operation: 'apply', manifestHash, complete: true, applied: false, planHash: 'b'.repeat(64)}
+
+test('la réparation explicite des comptages est autorisée sur les trois cibles sans ouvrir les autres imports demo', t => {
+  for (const target of ['testing', 'demo', 'prod']) {
+    for (const operation of ['repair-campaign-countings', 'verify-campaign-countings', 'repair-campaign-meters', 'verify-campaign-meters']) {
+      t.notThrows(() => assertDroptTargetOptions({...options, target, operation}))
+    }
+  }
+  t.throws(() => assertDroptTargetOptions({...options, target: 'demo', operation: 'apply'}))
+  t.throws(() => assertDroptTargetOptions({...options, target: 'demo', operation: 'repair-campaign-countings', apply: true}))
+  t.throws(() => assertDroptTargetOptions({...options, target: 'prod', operation: 'verify-campaign-countings', apply: true, againstReport: '/synthetic/preview.json'}))
+  t.throws(() => assertDroptTargetOptions({...options, target: 'demo', operation: 'repair-campaign-countings', tunnelPort: 'invalid'}))
+  t.throws(() => assertDroptTargetOptions({...options, target: 'demo', operation: 'verify-campaign-meters', apply: true, againstReport: '/synthetic/preview.json'}))
+  const url = 'postgresql://demo_admin:synthetic-password@172.16.12.2:5432/prelevements_demo?sslmode=verify-full&sslrootcert=/usr/local/share/ca-certificates/scw-postgres-ca.crt'
+  t.is(getDroptDemoDatabaseUrl(url).searchParams.get('sslrootcert'), path.resolve('deploy/certs/demo/postgres-ca.pem'))
+  t.throws(() => getDroptDemoDatabaseUrl(url.replace('demo_admin:', 'wrong:')))
+  t.throws(() => getDroptDemoDatabaseUrl(url.replace('172.16.12.2', 'localhost')))
+})
 
 test('production Dropt autorise seulement les opérations prévues et exige fichier, tunnel et simulation pour appliquer', t => {
   for (const operation of ['apply', 'verify', 'enable-logins', 'seed-campaign', 'prefill-campaign', 'verify-prefill-campaign']) t.notThrows(() => assertDroptTargetOptions({...options, operation}))
