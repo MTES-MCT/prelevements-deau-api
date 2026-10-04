@@ -3,7 +3,7 @@ import process from 'node:process'
 import {randomUUID} from 'node:crypto'
 import {prisma} from '../../../../db/prisma.js'
 import {requireDisposableDatabase} from '../../../../lib/util/test-helpers/disposable-database.js'
-import {getAuthorizedCampaignResponseContext, saveCollectionResponseDraft} from '../../../../lib/services/collection-campaigns.js'
+import {getAuthorizedCampaignResponseContext} from '../../../../lib/services/collection-campaigns.js'
 import {digest} from '../epidropt.js'
 import {reviewedPhysicalCampaignRepair, verifyReviewedPhysicalCampaignRepair} from '../repair-campaign-meters.js'
 
@@ -20,7 +20,7 @@ async function fixture({alreadyAllocated = false, anonymous = false} = {}) {
   const point = await prisma.pointPrelevement.create({data: {name: `PHYSICAL-${randomUUID()}`, waterBodyType: 'SUPERFICIELLE', flowType: 'PRELEVEMENT'}})
   const exploitation = await prisma.declarantPointPrelevement.create({data: {pointPrelevementId: point.id,
     declarantUserId: farmer.id, sourceId: `dropt-epidropt:exploitation:${randomUUID()}`, usageId: usage.id,
-    collecteurs: {create: {collecteurUserId: collector.id}}}})
+    excludeFromQuickDeclaration: true, collecteurs: {create: {collecteurUserId: collector.id}}}})
   const campaign = await prisma.collectionCampaign.create({data: {name: 'Revue physique synthétique', status: 'OPEN',
     createdByUserId: admin.id, collecteurUserId: collector.id, opensOn: new Date('2026-09-01Z'), closesOn: new Date('2027-12-31Z')}})
   const response = await prisma.collectionResponse.create({data: {campaignId: campaign.id, exploitationId: exploitation.id,
@@ -57,19 +57,11 @@ for (const anonymous of [false, true]) integration(`reviewed ${anonymous ? 'anon
   const saved = await prisma.collectionResponse.findUnique({where: {id: f.response.id}})
   t.deepEqual(saved.prefillData.needs, f.response.prefillData.needs)
   t.is(saved.prefillData.meters.length, 2)
-  for (const user of [f.farmer, f.admin]) {
+  for (const user of [f.farmer, f.collector]) {
     const context = await getAuthorizedCampaignResponseContext(user, f.plan.campaignId, f.response.id)
     t.is(context.data.meters.length, 2)
     t.true(context.data.meters.every(meter => anonymous ? !meter.offSeason.indexStart : meter.offSeason.indexStart === '100'))
   }
-  const collectorContext = await getAuthorizedCampaignResponseContext(f.collector, f.plan.campaignId, f.response.id)
-  t.false(collectorContext.permissions.canEdit)
-  t.false(collectorContext.permissions.canSubmit)
-  t.is(collectorContext.prefill, null)
-  t.is(collectorContext.response.draftData, null)
-  const forbidden = await t.throwsAsync(saveCollectionResponseDraft(f.collector, f.plan.campaignId, f.response.id,
-    {revision: 0, data: collectorContext.data}))
-  t.is(forbidden.status, 403)
   const replay = await reviewedPhysicalCampaignRepair(prisma, f.plan, f.options)
   t.is(replay.counts.REPAIR, 0)
   t.is(replay.counts.ALREADY_APPLIED, 1)

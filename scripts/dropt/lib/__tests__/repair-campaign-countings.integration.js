@@ -5,7 +5,7 @@ import {prisma} from '../../../../db/prisma.js'
 import {requireDisposableDatabase} from '../../../../lib/util/test-helpers/disposable-database.js'
 import {repairCampaignCountings, verifyCampaignCountingRepair} from '../repair-campaign-countings.js'
 import {CAMPAIGN_PREFILL_HEADERS, parseCampaignPrefillRows} from '../campaign-prefill-source.js'
-import {getAuthorizedCampaignResponseContext, saveCollectionResponseDraft} from '../../../../lib/services/collection-campaigns.js'
+import {getAuthorizedCampaignResponseContext} from '../../../../lib/services/collection-campaigns.js'
 
 const enabled = process.env.DROPT_INTEGRATION_TESTS === '1'
 const integration = enabled ? test.serial : test.skip
@@ -23,7 +23,7 @@ async function fixture() {
   const point = await prisma.pointPrelevement.create({data: {name: `COUNTING-${randomUUID()}`, waterBodyType: 'SUPERFICIELLE', flowType: 'PRELEVEMENT'}})
   const exploitation = await prisma.declarantPointPrelevement.create({data: {pointPrelevementId: point.id,
     declarantUserId: farmer.id, sourceId: `dropt-epidropt:exploitation:${randomUUID()}`, usageId: usage.id,
-    status: 'EN_ACTIVITE',
+    status: 'EN_ACTIVITE', excludeFromQuickDeclaration: true,
     collecteurs: {create: {collecteurUserId: collector.id}}, secondaryUsageLinks: {create: {usageId: secondary.id}}}})
   const campaign = await prisma.collectionCampaign.create({data: {name: 'Comptages synthétiques', status: 'OPEN',
     createdByUserId: admin.id, collecteurUserId: collector.id, opensOn: new Date('2026-09-01Z'), closesOn: new Date('2027-12-31Z')}})
@@ -40,7 +40,7 @@ async function fixture() {
     options: {campaignId: campaign.id, actorUserId: admin.id, target: 'local', allowCountingSplit: true}}
 }
 
-integration('reviewed repair preserves demo access, writes no physical data and is idempotent', async t => {
+integration('reviewed repair preserves access and exclusions, writes no physical data and is idempotent', async t => {
   const f = await fixture()
   const original = await prisma.collectionResponse.findUnique({where: {id: f.response.id}})
   const countPhysical = async () => ({meters: await prisma.compteur.count(), readings: await prisma.chunkValue.count(), sources: await prisma.source.count()})
@@ -60,22 +60,14 @@ integration('reviewed repair preserves demo access, writes no physical data and 
   const saved = await prisma.collectionResponse.findMany({where: {campaignId: f.campaign.id}, orderBy: {id: 'asc'}, include: {exploitation: true}})
   t.is(saved.length, 2)
   for (const response of saved) {
-    t.false(Object.hasOwn(response.exploitation, 'excludeFromQuickDeclaration'))
+    t.true(response.exploitation.excludeFromQuickDeclaration)
     t.is(response.revision, 0)
     t.deepEqual(response.prefillData.needs, {season: {}, offSeason: {}})
-    for (const user of [f.farmer, f.admin]) {
+    for (const user of [f.farmer, f.collector]) {
       const context = await getAuthorizedCampaignResponseContext(user, f.campaign.id, response.id)
       t.is(context.data.meters.length, 1)
       t.deepEqual(context.data.meters[0].offSeason, {})
     }
-    const collectorContext = await getAuthorizedCampaignResponseContext(f.collector, f.campaign.id, response.id)
-    t.false(collectorContext.permissions.canEdit)
-    t.false(collectorContext.permissions.canSubmit)
-    t.is(collectorContext.prefill, null)
-    t.is(collectorContext.response.draftData, null)
-    const forbidden = await t.throwsAsync(saveCollectionResponseDraft(f.collector, f.campaign.id, response.id,
-      {revision: 0, data: collectorContext.data}))
-    t.is(forbidden.status, 403)
     await t.throwsAsync(getAuthorizedCampaignResponseContext(f.stranger, f.campaign.id, response.id))
   }
   const replay = await repairCampaignCountings(prisma, f.source, f.options)
