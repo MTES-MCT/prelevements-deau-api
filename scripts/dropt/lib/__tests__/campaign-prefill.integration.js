@@ -32,7 +32,7 @@ async function fixture({existingMeter = true, sourceSerial} = {}) {
     options: {campaignId: campaign.id, actorUserId: admin.id, target: 'local'}}
 }
 
-for (const withSerial of [false, true]) integration(`an unallocated source proposal (${withSerial ? 'with' : 'without'} serial) survives draft reload and only creates one physical meter on submission`, async t => {
+for (const withSerial of [false, true]) integration(`an unallocated source proposal (${withSerial ? 'with' : 'without'} serial) survives draft reload and requires a number before submitting one physical meter`, async t => {
   const serialNumber = withSerial ? `Source-${randomUUID()}` : null
   const f = await fixture({existingMeter: false, sourceSerial: serialNumber})
   await prisma.collectionCampaign.update({where: {id: f.campaign.id}, data: {status: 'OPEN', opensOn: new Date('2026-09-01Z'), closesOn: new Date('2027-12-31Z')}})
@@ -62,15 +62,27 @@ for (const withSerial of [false, true]) integration(`an unallocated source propo
   data.needs.season.crops = agriculture.crops
   const submit = revision => submitCampaignResponse({user: f.farmer, campaignId: f.campaign.id, responseId: f.response.id,
     body: {revision, data}}, {now: new Date('2026-09-30T12:00:00Z')})
+  if (!withSerial) {
+    const before = await prisma.collectionResponse.findUnique({where: {id: f.response.id}})
+    const error = await t.throwsAsync(submit(1))
+    t.is(error.status, 400)
+    t.truthy(error.data.fields['meters.0.serialNumber'])
+    t.deepEqual(await prisma.collectionResponse.findUnique({where: {id: f.response.id}}), before)
+    t.is(await prisma.compteur.count(), meterCount)
+    t.is(await prisma.source.count(), sourceCount)
+    t.is(await prisma.meterAllocation.count({where: {exploitationId: f.exploitation.id}}), 0)
+    data.meters[0].serialNumber = `Completed-${randomUUID()}`
+  }
   const submitted = await submit(1)
   t.is(submitted.response.publicationStatus, 'PUBLISHED')
   t.truthy(submitted.response.submittedData.meters[0].compteurId)
-  t.is(submitted.response.submittedData.meters[0].serialNumber, serialNumber)
+  t.is(submitted.response.submittedData.meters[0].serialNumber, data.meters[0].serialNumber)
   t.is(await prisma.compteur.count(), meterCount + 1)
   t.is(await prisma.meterAllocation.count({where: {exploitationId: f.exploitation.id}}), 1)
   t.is((await submit(1)).response.revision, 2)
   t.is(await prisma.compteur.count(), meterCount + 1)
   t.is((await prisma.collectionResponse.findUnique({where: {id: f.response.id}})).prefillMetadata.sourceSha256, f.source.source.sha256)
+  t.is((await prisma.collectionResponse.findUnique({where: {id: f.response.id}})).prefillData.meters[0].serialNumber, serialNumber)
   t.is(f.source.records[0].reading.date, '2025-10-31')
 })
 
