@@ -7,7 +7,7 @@ import process from 'node:process'
 import {createHash, randomUUID} from 'node:crypto'
 import {readWorkbook, EPIDROPT_SHEETS, RIVES_SHEETS, buildManifest, digest} from './lib/epidropt.js'
 import {getTransactionTimeoutMs} from './lib/import-options.js'
-import {assertDroptTargetOptions, getDroptProdDatabaseUrl, assertDroptProdReport, assertDroptConnectedDatabase} from './lib/production-target.js'
+import {assertDroptTargetOptions, getDroptProdDatabaseUrl, getDroptDemoDatabaseUrl, assertDroptProdReport, assertDroptConnectedDatabase} from './lib/production-target.js'
 import {getDroptOperationClient} from './lib/production-identities.js'
 import {readTargetEnvironment} from './lib/target-environment.js'
 
@@ -19,23 +19,33 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
   'rebuild-identities': {type: 'boolean', default: false},
   'login-scope': {type: 'string'},
   'allow-email-aliases': {type: 'boolean', default: false},
+  'allow-counting-split': {type: 'boolean', default: false},
   'campaign-config': {type: 'string'}, 'actor-user-id': {type: 'string'},
   'prefill-file': {type: 'string'}, 'campaign-id': {type: 'string'},
+  'reviewed-plan': {type: 'string'},
   'epidropt-file': {type: 'string'}, snapshot: {type: 'string'}, 'previous-manifest': {type: 'string'},
   apply: {type: 'boolean', default: false}, 'activate-at': {type: 'string'}, 'effective-at': {type: 'string'}, 'service-account-id': {type: 'string'},
   'target-env': {type: 'string'}, 'tunnel-port': {type: 'string'}, 'transaction-timeout-seconds': {type: 'string'}
 }})
 const operation = positionals[0]
-const prefillOperation = ['prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)
-if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign [--input dossier] [--target local|testing|prod] [--apply]')
-if (values.target === 'prod') {
+const countingRepair = ['repair-campaign-countings', 'verify-campaign-countings'].includes(operation)
+const meterRepair = ['repair-campaign-meters', 'verify-campaign-meters'].includes(operation)
+const prefillOperation = countingRepair || meterRepair || ['prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)
+if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign', 'repair-campaign-countings', 'verify-campaign-countings', 'repair-campaign-meters', 'verify-campaign-meters'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign|repair-campaign-countings|verify-campaign-countings|repair-campaign-meters|verify-campaign-meters [--target local|testing|demo|prod] [--apply]')
+if (['prod', 'demo'].includes(values.target)) {
   assertDroptTargetOptions({operation, target: values.target, targetEnv: values['target-env'], tunnelPort: values['tunnel-port'],
     apply: values.apply, againstReport: values['against-report']})
 }
-if (prefillOperation && (!values['prefill-file'] || !values.report)) throw new Error('--prefill-file et --report hors Git sont obligatoires pour le préremplissage.')
+if (prefillOperation && ((!meterRepair && !values['prefill-file']) || !values.report)) throw new Error('--prefill-file et --report hors Git sont obligatoires pour le préremplissage.')
+if (meterRepair && !values['reviewed-plan']) throw new Error('--reviewed-plan privé et vérifié obligatoire pour la réparation des compteurs.')
+if (values['reviewed-plan'] && !meterRepair) throw new Error('--reviewed-plan est réservé à la réparation des compteurs.')
+if (meterRepair && values['prefill-file']) throw new Error('La réparation des compteurs utilise uniquement le plan justifié, pas --prefill-file.')
 if (prefillOperation && operation !== 'prepare-prefill' && (!values['campaign-id'] || !values['actor-user-id'])) throw new Error('--campaign-id et --actor-user-id sont obligatoires.')
 if (operation === 'prepare-prefill' && values.apply) throw new Error('La préparation du préremplissage ne modifie aucune base.')
-if (operation === 'verify-prefill-campaign' && (values.apply || !values['against-report'])) throw new Error('La vérification exige le rapport appliqué et ne prend pas --apply.')
+if (['verify-prefill-campaign', 'verify-campaign-countings', 'verify-campaign-meters'].includes(operation) && (values.apply || !values['against-report'])) throw new Error('La vérification exige le rapport appliqué et ne prend pas --apply.')
+if (values['allow-counting-split'] && !countingRepair) throw new Error('--allow-counting-split est réservé à la réparation des comptages.')
+if (operation === 'repair-campaign-countings' && !values['allow-counting-split']) throw new Error('--allow-counting-split exige une autorisation explicite pour cette correction ciblée, sans changer la configuration globale.')
+if ((countingRepair || meterRepair) && values.apply && !values['against-report']) throw new Error('--against-report simulation obligatoire avant application.')
 if ((values['prefill-file'] || values['campaign-id']) && !prefillOperation) throw new Error('Options réservées au préremplissage de campagne.')
 if (operation === 'enable-logins' && !['non-realimente', 'all'].includes(values['login-scope'])) throw new Error('--login-scope non-realimente|all obligatoire.')
 if (values['login-scope'] && operation !== 'enable-logins') throw new Error('--login-scope est réservé à enable-logins.')
@@ -68,9 +78,34 @@ async function writePrivate(filename, value) {
   } else await rename(temporary, filename)
 }
 
+async function runCampaignOperation(prisma, options, reportPath) {
+  const campaignOptions = {...options, target: values.target, campaignId: values['campaign-id'], actorUserId: values['actor-user-id'],
+    onBeforeApply: backup => writePrivate(reportPath.replace(/\.json$/i, '.backup.json'), backup)}
+  if (meterRepair) {
+    const plan = JSON.parse(await readFile(values['reviewed-plan'], 'utf8'))
+    if (plan.campaignId !== campaignOptions.campaignId) throw new Error('Le plan doit désigner exactement la campagne cible.')
+    const {reviewedPhysicalCampaignRepair, verifyReviewedPhysicalCampaignRepair} = await import('./lib/repair-campaign-meters.js')
+    return operation === 'verify-campaign-meters'
+      ? verifyReviewedPhysicalCampaignRepair(prisma, plan, campaignOptions)
+      : reviewedPhysicalCampaignRepair(prisma, plan, campaignOptions)
+  }
+  const {loadCampaignPrefillSource} = await import('./lib/campaign-prefill-source.js')
+  const source = await loadCampaignPrefillSource(values['prefill-file'])
+  if (countingRepair) {
+    const {repairCampaignCountings, verifyCampaignCountingRepair} = await import('./lib/repair-campaign-countings.js')
+    return operation === 'verify-campaign-countings'
+      ? verifyCampaignCountingRepair(prisma, source, campaignOptions)
+      : repairCampaignCountings(prisma, source, {...campaignOptions, allowCountingSplit: values['allow-counting-split']})
+  }
+  const {prefillCampaign, verifyCampaignPrefill} = await import('./lib/campaign-prefill.js')
+  return operation === 'verify-prefill-campaign'
+    ? verifyCampaignPrefill(prisma, source, campaignOptions)
+    : prefillCampaign(prisma, source, campaignOptions)
+}
+
 try {
   getTransactionTimeoutMs(values['transaction-timeout-seconds'])
-  if (!['prepare', 'prepare-prefill'].includes(operation) && values.target !== 'prod') {
+  if (!['prepare', 'prepare-prefill'].includes(operation) && !['prod', 'demo'].includes(values.target)) {
     assertDroptTargetOptions({operation, target: values.target})
   }
   if (prefillOperation) {
@@ -125,10 +160,11 @@ try {
       process.env.MULTIPLE_EXPLOITATIONS_ENABLED = configuration.MULTIPLE_EXPLOITATIONS_ENABLED === 'true' ? 'true' : 'false'
     }
     if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL doit être chargée explicitement, sans argument de commande.')
-    const url = values.target === 'prod' ? getDroptProdDatabaseUrl(process.env.DATABASE_URL) : new URL(process.env.DATABASE_URL)
+    const url = values.target === 'prod' ? getDroptProdDatabaseUrl(process.env.DATABASE_URL)
+      : values.target === 'demo' ? getDroptDemoDatabaseUrl(process.env.DATABASE_URL) : new URL(process.env.DATABASE_URL)
     if (values['tunnel-port']) {
       const port = Number(values['tunnel-port'])
-      if (!['testing', 'prod'].includes(values.target) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Tunnel réservé à testing ou prod sur un port local explicite.')
+      if (!['testing', 'demo', 'prod'].includes(values.target) || !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Tunnel réservé à testing, demo ou prod sur un port local explicite.')
       const {TESTING_DATABASE_ENDPOINT} = await import('../network/testing-database-target.js')
       if (values.target === 'testing') {
         url.hostname = TESTING_DATABASE_ENDPOINT.host
@@ -169,15 +205,8 @@ try {
         transactionTimeoutSeconds: values['transaction-timeout-seconds'], expectedReport: report
       }
       let result
-      if (prefillOperation) {
-        const {loadCampaignPrefillSource} = await import('./lib/campaign-prefill-source.js')
-        const {prefillCampaign, verifyCampaignPrefill} = await import('./lib/campaign-prefill.js')
-        const source = await loadCampaignPrefillSource(values['prefill-file'])
-        const prefillOptions = {...options, target: values.target, campaignId: values['campaign-id'], actorUserId: values['actor-user-id']}
-        result = operation === 'verify-prefill-campaign'
-          ? await verifyCampaignPrefill(prisma, source, prefillOptions)
-          : await prefillCampaign(prisma, source, prefillOptions)
-      } else if (operation === 'verify') result = await verifyManifest(client, manifest, {report})
+      if (prefillOperation) result = await runCampaignOperation(prisma, options, reportPath)
+      else if (operation === 'verify') result = await verifyManifest(client, manifest, {report})
       else if (operation === 'review') {
         if (options.activateAt || options.effectiveAt) throw new Error('La revue de référentiel ne doit ni activer ni recalculer les volumes.')
         const {applyReviewedManifest} = await import('./lib/apply-reviewed.js')

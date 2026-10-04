@@ -1,0 +1,8 @@
+{
+  "advisoryUrl": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+  "packageName": "braces",
+  "version": "3.0.3",
+  "developmentOnly": true,
+  "expiresAt": "2026-10-10T22:00:00Z",
+  "reason": "Exception temporaire autorisée jusqu'au 11 octobre 2026 à 00 h, heure de Paris. Aucun paquet d'exécution ni autre avis de sécurité n'est exempté."
+}
