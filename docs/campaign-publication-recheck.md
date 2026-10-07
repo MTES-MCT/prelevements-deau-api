@@ -1,5 +1,10 @@
 # Reprise des publications de campagne
 
+Cet outil concerne uniquement les publications physiques internes. Les volumes
+affichés et exportés par la campagne sont calculés à la lecture depuis les index
+envoyés, indépendamment de ces publications et de leurs diagnostics. Aucun
+backfill ni validation n'est nécessaire pour les anciennes réponses.
+
 `scripts/recheck-campaign-publications.js` réévalue les réponses déjà envoyées et
 `PENDING_REVIEW` avec le même service métier que les nouveaux envois. Les motifs
 réels de blocage restent conservés : aucun rattachement, partage historique ou

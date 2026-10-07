@@ -74,7 +74,8 @@ for (const withSerial of [false, true]) integration(`an unallocated source propo
     data.meters[0].serialNumber = `Completed-${randomUUID()}`
   }
   const submitted = await submit(1)
-  t.is(submitted.response.publicationStatus, 'PUBLISHED')
+  t.false(Object.hasOwn(submitted.response, 'publicationStatus'))
+  t.is((await prisma.collectionResponse.findUniqueOrThrow({where: {id: f.response.id}})).publicationStatus, 'PUBLISHED')
   t.truthy(submitted.response.submittedData.meters[0].compteurId)
   t.is(submitted.response.submittedData.meters[0].serialNumber, data.meters[0].serialNumber)
   t.is(await prisma.compteur.count(), meterCount + 1)
