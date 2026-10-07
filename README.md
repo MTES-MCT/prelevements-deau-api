@@ -154,6 +154,10 @@ avec des données synthétiques. Ne leur fournissez pas de base réelle.
 
 ## Maintenance et livraison
 
+La [reprise des publications de campagne](docs/campaign-publication-recheck.md)
+fournit une prévisualisation en lecture seule, une application ciblée avec
+sauvegardes privées et une vérification des données conservées.
+
 ```bash
 npm audit --include=dev --audit-level=low
 npm audit --omit=dev --audit-level=low
