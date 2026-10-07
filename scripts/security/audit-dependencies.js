@@ -5,7 +5,11 @@ import path from 'node:path'
 import process from 'node:process'
 import {fileURLToPath} from 'node:url'
 
-export const AUDIT_EXCEPTION = Object.freeze(JSON.parse(readFileSync(new URL('./npm-audit-exceptions.json', import.meta.url), 'utf8')))
+export const AUDIT_EXCEPTIONS = Object.freeze(JSON.parse(readFileSync(new URL('./npm-audit-exceptions.json', import.meta.url), 'utf8')).map(policy => Object.freeze(policy)))
+const APPROVED_EXCEPTIONS = {
+  braces: {version: '3.0.3', advisoryUrl: 'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm', expiresAt: '2026-10-10T22:00:00Z'},
+  'sprintf-js': {version: '1.0.3', advisoryUrl: 'https://github.com/advisories/GHSA-hp3w-g68c-fv3c', expiresAt: '2026-10-14T22:00:00Z'}
+}
 const SEVERITIES = ['info', 'low', 'moderate', 'high', 'critical']
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const integer = value => Number.isSafeInteger(value) && value >= 0
@@ -45,7 +49,7 @@ function developmentNodes(vulnerability, lockfile, policy) {
     && (node === `node_modules/${vulnerability.name}` || node.endsWith(`/node_modules/${vulnerability.name}`))
     && object(lockfile.packages[node]) && lockfile.packages[node].dev === true
     && typeof lockfile.packages[node].version === 'string'
-    && (vulnerability.name !== policy.packageName || lockfile.packages[node].version === policy.version))
+    && (!policy || lockfile.packages[node].version === policy.version))
 }
 
 function exemptAdvisory(advisory, vulnerability, policy) {
@@ -55,31 +59,47 @@ function exemptAdvisory(advisory, vulnerability, policy) {
     && SEVERITIES.includes(advisory.severity) && typeof advisory.title === 'string' && typeof advisory.range === 'string'
 }
 
+function validatePolicies(policies, now) {
+  ensure(Array.isArray(policies) && policies.length > 0 && Number.isFinite(Number(now)), 'Politique d’exception invalide.')
+  const packages = new Set()
+  for (const policy of policies) {
+    const approved = object(policy) && Object.hasOwn(APPROVED_EXCEPTIONS, policy.packageName) ? APPROVED_EXCEPTIONS[policy.packageName] : null
+    ensure(approved && !packages.has(policy.packageName) && policy.developmentOnly === true
+      && policy.version === approved.version && policy.advisoryUrl === approved.advisoryUrl
+      && policy.expiresAt === approved.expiresAt, 'Politique d’exception invalide.')
+    packages.add(policy.packageName)
+  }
+}
+
 /** Refuse unknown evidence. A parent is exempt only when every dependency path
- * ends in the single allowed advisory and every affected lockfile node is dev.
+ * ends in an unexpired approved advisory and every affected lockfile node is dev.
  */
-export function evaluateAudit({report, exitCode, lockfile, now = Date.now(), policy = AUDIT_EXCEPTION}) {
+export function evaluateAudit({report, exitCode, lockfile, now = Date.now(), policies = AUDIT_EXCEPTIONS}) {
   const vulnerabilities = validateAudit(report, exitCode, lockfile)
-  ensure(object(policy) && policy.packageName === 'braces' && policy.version === '3.0.3' && policy.developmentOnly === true
-    && policy.advisoryUrl === 'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm'
-    && Number.isFinite(Date.parse(policy.expiresAt)) && Number.isFinite(Number(now)), 'Politique d’exception invalide.')
-  const expired = Number(now) >= Date.parse(policy.expiresAt)
+  validatePolicies(policies, now)
+  const byPackage = new Map(policies.map(policy => [policy.packageName, policy]))
   const memo = new Map()
   function exempt(name, visiting = new Set()) {
     if (memo.has(name)) return memo.get(name)
     const vulnerability = Object.hasOwn(report.vulnerabilities, name) ? report.vulnerabilities[name] : null
-    if (!vulnerability || visiting.has(name) || expired || !developmentNodes(vulnerability, lockfile, policy)) return false
+    const policy = byPackage.get(name)
+    if (!vulnerability || visiting.has(name) || !developmentNodes(vulnerability, lockfile, policy)
+      || (policy && Number(now) >= Date.parse(policy.expiresAt))) return false
     const next = new Set([...visiting, name])
     const allowed = vulnerability.via.every(via => typeof via === 'string'
-      ? exempt(via, next) : exemptAdvisory(via, vulnerability, policy))
+      ? exempt(via, next) : Boolean(policy && exemptAdvisory(via, vulnerability, policy)))
     memo.set(name, allowed)
     return allowed
   }
   const waived = []
   const blocked = []
   for (const [name] of vulnerabilities) (exempt(name) ? waived : blocked).push(name)
-  return {ok: blocked.length === 0, waived, blocked, expired, expiresAt: policy.expiresAt,
-    totalVulnerablePackages: vulnerabilities.length, advisoryUrl: policy.advisoryUrl}
+  const exceptions = policies.map(policy => ({packageName: policy.packageName, version: policy.version,
+    advisoryUrl: policy.advisoryUrl, expiresAt: policy.expiresAt,
+    expired: Number(now) >= Date.parse(policy.expiresAt), applied: waived.includes(policy.packageName)}))
+  return {ok: blocked.length === 0, waived, blocked, exceptions,
+    expired: exceptions.some(policy => policy.expired && Object.hasOwn(report.vulnerabilities, policy.packageName)),
+    totalVulnerablePackages: vulnerabilities.length}
 }
 
 export async function runDependencyAudit({cwd = process.cwd(), now, execute = execFile} = {}) {
@@ -98,11 +118,13 @@ export async function runDependencyAudit({cwd = process.cwd(), now, execute = ex
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const result = await runDependencyAudit()
-    if (result.waived.length) console.warn(`::warning::Exception de sécurité TEMPORAIRE : ${result.advisoryUrl}, braces@3.0.3 uniquement en développement ; ${result.waived.length} paquets affectés, expiration ${result.expiresAt}. Rapport brut conservé dans .artifacts/security/npm-audit-all.json.`)
+    for (const policy of result.exceptions.filter(policy => policy.applied)) {
+      console.warn(`::warning::Exception de sécurité TEMPORAIRE : ${policy.advisoryUrl}, ${policy.packageName}@${policy.version} uniquement en développement ; expiration ${policy.expiresAt}. Rapport brut conservé dans .artifacts/security/npm-audit-all.json.`)
+    }
     if (!result.ok) {
       console.error(`Audit BLOQUÉ${result.expired ? ' (exception expirée)' : ''} : ${result.blocked.join(', ')}.`)
       process.exitCode = 1
-    } else console.log(`Audit contrôlé : ${result.totalVulnerablePackages} paquet(s) vulnérable(s), ${result.waived.length} paquet(s) couverts par ${result.waived.length ? 'une exception temporaire' : 'aucune exception'}, 0 autre vulnérabilité.`)
+    } else console.log(`Audit contrôlé : ${result.totalVulnerablePackages} paquet(s) vulnérable(s), ${result.waived.length} paquet(s) couverts par ${result.exceptions.filter(policy => policy.applied).length} exception(s) temporaire(s), 0 autre vulnérabilité.`)
   } catch (error) {
     console.error(`Audit BLOQUÉ : ${error.message}`)
     process.exitCode = 1
