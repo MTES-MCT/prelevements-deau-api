@@ -21,6 +21,22 @@ L'audit de production, le scan de l'image, les tests et les migrations restent
 inchangés et bloquants. Dès qu'une version officielle corrigée est disponible,
 mettre à jour le lockfile, retirer l'exception, puis rejouer les audits et les tests.
 
+## Acceptation temporaire de sprintf-js (7 octobre 2026)
+
+Exception explicitement autorisée pour
+[GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c),
+limitée à `sprintf-js@1.0.3`, version verrouillée en développement via
+`ava > supertap > js-yaml > argparse`. Aucun correctif officiel ni mise à jour
+des parents supprimant cette dépendance n'est disponible au 7 octobre 2026.
+L'exception expire à la fin du **14 octobre 2026, heure de Paris**
+(`2026-10-14T22:00:00Z`). Elle ne prolonge pas l'exception `braces`.
+
+Le rapport brut reste conservé avec ses alertes. Chaque cause transitive doit
+être couverte par une exception valide ; toute autre alerte, version différente,
+dépendance de production ou expiration bloque le contrôle. Aucun paquet installé
+n'est modifié. Retirer cette exception dès qu'un correctif officiel est disponible,
+puis rejouer les audits et les tests.
+
 ## Prisma 7.10.0 et deepmerge-ts
 
 Au 11 septembre 2026, Prisma 7.10.0 était la dernière version stable publiée ;
