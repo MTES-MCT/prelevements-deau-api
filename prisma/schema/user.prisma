@@ -160,6 +160,9 @@ model Declarant {
 
   quickDeclarationEnabled         Boolean @default(true)
   declarationNotificationsEnabled Boolean @default(true)
+  pointManagementEnabled          Boolean @default(false)
+  pointManagementZones            CollectorPointManagementZone[]
+  pointCreationRequests           CollectorPointCreationRequest[]
 
   declarantType DeclarantType  @default(NATURAL_PERSON)
   declarantRole DeclarantRole  @default(PRELEVEUR)
@@ -185,6 +188,29 @@ model Declarant {
   @@index([declarantRole])
   @@index([quickDeclarationEnabled])
   @@index([declarationNotificationsEnabled])
+}
+
+// Explicit creation/relocation scope. Never inferred from collected data.
+model CollectorPointManagementZone {
+  collecteurUserId String    @db.Uuid
+  collecteur       Declarant @relation(fields: [collecteurUserId], references: [userId], onDelete: Cascade)
+  zoneId           String    @db.Uuid
+  zone             Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@id([collecteurUserId, zoneId])
+  @@index([zoneId])
+}
+
+model CollectorPointCreationRequest {
+  collecteurUserId   String    @db.Uuid
+  collecteur         Declarant @relation(fields: [collecteurUserId], references: [userId], onDelete: Cascade)
+  requestId          String    @db.Uuid
+  payloadHash        String
+  result             Json
+  createdAt          DateTime  @default(now())
+  notificationStatus String    @default("not_requested")
+
+  @@id([collecteurUserId, requestId])
 }
 
 model DeclarantContactEmail {

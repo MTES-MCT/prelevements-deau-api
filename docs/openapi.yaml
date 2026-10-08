@@ -17,6 +17,7 @@ tags:
   - name: Sources
   - name: Instruction
   - name: Referentiels
+  - name: Points
   - name: Series
   - name: Stats
   - name: Zones
@@ -1451,6 +1452,139 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DeclarantSearchResponse'}
         default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/point-management:
+    get:
+      tags: [Declarants]
+      operationId: getMyCollectorPointManagement
+      summary: Lire son habilitation de gestion des points
+      description: Session humaine d’un collecteur actif. Une habilitation ne donne aucun accès aux autres préleveurs du territoire.
+      responses:
+        '200':
+          description: Habilitation et zones de création ou déplacement
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointManagement'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/point-management/preleveurs:
+    get:
+      tags: [Declarants]
+      operationId: getCollectorPointCreationPreleveurs
+      summary: Lister les préleveurs sélectionnables pour un nouveau point
+      description: Collecteur humain habilité uniquement. Ne retourne que les préleveurs actuellement suivis, sans recherche globale.
+      responses:
+        '200':
+          description: Identités minimales des préleveurs suivis
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                  properties:
+                    id: {$ref: '#/components/schemas/Uuid'}
+                    label: {type: string}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/{collecteurId}/point-management:
+    parameters:
+      - in: path
+        name: collecteurId
+        required: true
+        schema: {$ref: '#/components/schemas/Uuid'}
+    get:
+      tags: [Administration]
+      operationId: getCollectorPointManagement
+      summary: Consulter l’habilitation d’un collecteur
+      description: Réservé aux administrateurs humains.
+      responses:
+        '200':
+          description: Habilitation du collecteur
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointManagement'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Administration]
+      operationId: updateCollectorPointManagement
+      summary: Accorder ou révoquer la gestion des points
+      description: Administrateur humain hors impersonation. Zones explicites indépendantes des rattachements déduits. Aucun droit activé par défaut ni restriction d’usage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled, zoneIds]
+              properties:
+                enabled: {type: boolean}
+                zoneIds:
+                  type: array
+                  uniqueItems: true
+                  maxItems: 500
+                  description: Au moins une zone lorsque enabled vaut true.
+                  items: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Habilitation enregistrée et auditée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointManagement'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/points-prelevement:
+    post:
+      tags: [Declarants]
+      operationId: createCollectorPoint
+      summary: Créer un point et son exploitation pour un préleveur
+      description: >-
+        Session humaine d’un collecteur habilité. Création atomique du point physique,
+        de l’exploitation active et du lien collecteur, avec création facultative du préleveur.
+        Localisation limitée aux zones explicitement autorisées. L’email facultatif est envoyé
+        seulement après commit. Rejouer la même demande ne crée aucun doublon ni second email.
+        Les identités existantes hors périmètre ne sont jamais automatiquement rattachées.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectorPointCreation'}
+      responses:
+        '201':
+          description: Point, préleveur éventuel et exploitation créés
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointCreationResult'}
+        '200':
+          description: Résultat d’une demande déjà enregistrée et toujours autorisée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointCreationResult'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /referentiels/communes:
+    get:
+      tags: [Referentiels]
+      operationId: searchCurrentCommunes
+      summary: Rechercher une commune actuelle par nom ou code INSEE
+      description: Référentiel local, recherche authentifiée limitée à 20 résultats ; communes déléguées exclues.
+      parameters:
+        - in: query
+          name: q
+          schema: {type: string, maxLength: 100}
+          description: Au moins deux caractères pour obtenir des résultats.
+      responses:
+        '200':
+          description: Communes correspondantes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [code, name]
+                  properties:
+                    code: {type: string}
+                    name: {type: string}
+        default: {$ref: '#/components/responses/Error'}
   /collecteurs/me/preleveurs/search:
     get:
       tags: [Declarants]
@@ -1849,6 +1983,39 @@ paths:
               schema:
                 type: array
                 items: {$ref: '#/components/schemas/PointPrelevementMapSummary'}
+        default: {$ref: '#/components/responses/Error'}
+  /points-prelevement/{pointId}:
+    put:
+      tags: [Points]
+      operationId: updatePointPrelevement
+      summary: Modifier les informations d’un point
+      description: >-
+        Les droits administrateurs et agents restent inchangés. Un collecteur humain habilité,
+        délégué sur une exploitation active, peut modifier uniquement les champs renvoyés par
+        right.editableFields. expectedUpdatedAt est obligatoire pour ce parcours ; un conflit
+        retourne 409. Aucun identifiant technique, commentaire interne ou changement de flowType
+        n’est accepté. Les modifications sont communes aux exploitations du point, sans ouvrir leurs données.
+      parameters:
+        - in: path
+          name: pointId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties:
+                expectedUpdatedAt: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Point modifié, limité au périmètre de lecture de l’acteur
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PointPrelevement'}
+        '409': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /points-prelevement/{pointId}/usage-name:
     patch:
@@ -4793,6 +4960,122 @@ components:
                     type: string
                     format: date-time
                     description: Pour METER, fin exacte exclusive des valeurs de ce chunk autorisé.
+    CollectorPointManagement:
+      type: object
+      required: [enabled, zoneIds, zones]
+      properties:
+        enabled: {type: boolean, default: false}
+        zoneIds:
+          type: array
+          items: {$ref: '#/components/schemas/Uuid'}
+        zones:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              code: {type: string}
+              name: {type: string}
+              type: {type: string, enum: [SAGE, DEPARTEMENT, REGION]}
+    CollectorPointCreation:
+      type: object
+      additionalProperties: false
+      required: [requestId, point, exploitation]
+      oneOf:
+        - required: [preleveurId]
+          not: {required: [preleveur]}
+        - required: [preleveur]
+          not: {required: [preleveurId]}
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Clé d’idempotence par collecteur. Un contenu différent pour la même clé est refusé.
+        preleveurId: {$ref: '#/components/schemas/Uuid'}
+        preleveur:
+          type: object
+          description: >-
+            Nouveau préleveur seulement. Identité habituelle (type, nom/prénom ou raison sociale,
+            type de préleveur), adresse, téléphone, email et SIRET facultatifs. Rôle PRELEVEUR imposé.
+            Les rôles, sourceId, zones libres et autres réglages administratifs sont refusés.
+          additionalProperties: false
+          required: [declarantType, preleveurType]
+          properties:
+            declarantType: {type: string, enum: [NATURAL_PERSON, LEGAL_PERSON]}
+            preleveurType: {$ref: '#/components/schemas/PreleveurType'}
+            firstName: {type: [string, 'null']}
+            lastName: {type: [string, 'null']}
+            socialReason: {type: [string, 'null']}
+            civility:
+              oneOf:
+                - {type: string, enum: [MR, MRS]}
+                - {type: 'null'}
+            email: {type: [string, 'null'], format: email}
+            siret: {type: [string, 'null'], pattern: '^\d{14}$'}
+            phoneNumber: {type: [string, 'null']}
+            jobTitle: {type: [string, 'null']}
+            addressLine1: {type: [string, 'null']}
+            addressLine2: {type: [string, 'null']}
+            poBox: {type: [string, 'null']}
+            postalCode: {type: [string, 'null']}
+            city: {type: [string, 'null']}
+        point:
+          type: object
+          additionalProperties: false
+          required: [name, waterBodyType, flowType, coordinates]
+          properties:
+            name: {type: string, minLength: 3, maxLength: 200}
+            usageName: {type: [string, 'null'], maxLength: 200}
+            flowType: {type: string, enum: [PRELEVEMENT, REJET]}
+            waterBodyType: {type: string, enum: [SUPERFICIELLE, SOUTERRAIN, TRANSITION]}
+            coordinates:
+              type: object
+              required: [type, coordinates]
+              properties:
+                type: {type: string, const: Point}
+                coordinates:
+                  type: array
+                  minItems: 2
+                  maxItems: 2
+                  items: {type: number}
+            communeCode: {type: string, description: Code INSEE d’une commune actuelle.}
+            communeName: {type: string, description: Nom canonique correspondant au code.}
+            geometryPrecision: {type: [string, 'null']}
+            nature: {$ref: '#/components/schemas/PointPrelevement/properties/nature'}
+            withdrawalType: {$ref: '#/components/schemas/PointPrelevement/properties/withdrawalType'}
+            commissioningDate: {type: [string, 'null'], format: date}
+            locationDescription: {type: [string, 'null']}
+            comment: {type: [string, 'null']}
+            depth: {type: [number, 'null'], exclusiveMinimum: 0}
+            reservoirNominalVolume: {type: [number, 'null'], exclusiveMinimum: 0}
+            isWaterBodyConnectedToStream: {type: [boolean, 'null']}
+            isWaterBodyConnectedToGroundwater: {type: [boolean, 'null']}
+        exploitation:
+          type: object
+          additionalProperties: false
+          required: [usageId]
+          properties:
+            usageId: {$ref: '#/components/schemas/Uuid'}
+            secondaryUsageIds:
+              type: array
+              items: {$ref: '#/components/schemas/Uuid'}
+            status: {type: string, enum: [EN_ACTIVITE, NON_RENSEIGNE]}
+            startDate: {type: [string, 'null'], format: date}
+            endDate: {type: [string, 'null'], format: date}
+        notifyAccountCreation: {type: boolean, default: false}
+    CollectorPointCreationResult:
+      type: object
+      required: [point, preleveurId, exploitationId, notification, replayed]
+      properties:
+        point: {$ref: '#/components/schemas/PointPrelevement'}
+        preleveurId: {$ref: '#/components/schemas/Uuid'}
+        exploitationId: {$ref: '#/components/schemas/Uuid'}
+        notification:
+          type: object
+          required: [status]
+          properties:
+            status: {type: string, enum: [not_requested, pending, sent, failed]}
+        replayed: {type: boolean}
     PointPrelevement:
       type: object
       additionalProperties: true
@@ -4801,6 +5084,18 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         name: {type: string}
         usageName: {type: [string, 'null']}
+        updatedAt: {type: string, format: date-time}
+        right:
+          type: object
+          additionalProperties: true
+          properties:
+            canEdit: {type: boolean}
+            editScope: {type: string, const: COLLECTOR}
+            editableFields:
+              type: array
+              items: {type: string}
+            isShared: {type: boolean}
+            canEditLocation: {type: boolean}
         flowType:
           type: string
           enum: [PRELEVEMENT, REJET]
