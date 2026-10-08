@@ -26,7 +26,7 @@ export async function readInventory(client, manifest) {
     FROM "SandreWaterUse" u LEFT JOIN "SandreWaterUse" parent ON parent.id = u."parentId"
     WHERE u.code = $1`, [manifest.exploitation.usageCode])
   const zones = await query(`
-    SELECT id, type, "managedResourceType" FROM "Zone"
+    SELECT id, type, code, "managedResourceType" FROM "Zone"
     WHERE ST_Intersects(coordinates, ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 2154), 4326))
     ORDER BY id`, [x, y])
   const zoneIds = selectPointZones(zones, point.waterBodyType).map(zone => zone.id).sort()

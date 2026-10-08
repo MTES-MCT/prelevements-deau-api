@@ -30,7 +30,11 @@ Vérification de la copie locale le 14 septembre 2026, puis confirmation en lect
 | Les deux SAGE | 259 |
 | Département, points distincts | 333 |
 
-Les chiffres des SAGE sont donc 261 et 331, avec **261 + 331 − 259 = 333** points distincts. Les associations correspondent aux intersections géographiques (`ST_Intersects`). Elles ne constituent pas une attribution exclusive selon le type de ressource ou l’organisme gestionnaire. Ne pas modifier ces associations pour forcer une addition : elles servent aussi aux autorisations. Ces nombres sont une observation datée, pas des constantes métier.
+Les chiffres des SAGE étaient donc 261 et 331, avec **261 + 331 − 259 = 333** points distincts. Ces nombres décrivent les associations géographiques historiques, avant la reprise des rattachements selon le milieu ; ce ne sont pas des constantes métier.
+
+Dans le chevauchement géographique des SAGE Tech-Albères (`sage-SAGE06030`) et Nappes plio-quaternaires de la plaine du Roussillon (`sage-SAGE06028`), un PP d'eau superficielle relève uniquement du Tech-Albères et un PP d'eau souterraine uniquement du Roussillon. Cette règle s'applique au calcul des rattachements lors d'une création ou d'un changement de coordonnées ou de milieu. Les PP existants sont repris par le [script dédié et rejouable](../scripts/sage-overlap/README.md). Elle ne modifie pas le comportement hors du chevauchement ni les paramètres globaux des SAGE. Les cas de transition ou de conflit sont recensés séparément.
+
+Les statistiques utilisent les rattachements territoriaux effectivement enregistrés, qui déterminent aussi les accès des agents. Après reprise, les PP éligibles ne sont plus comptés dans les deux SAGE. Un préleveur exploitant plusieurs PP peut toujours être présent dans les deux territoires : les effectifs de préleveurs ne deviennent donc pas additionnables. Le cache mémoire des statistiques publiques expire après une heure ; la vérification HTTP après reprise doit tenir compte de ce délai.
 
 La vérification testing du 21 septembre confirme également que les préleveurs ayant déclaré ne sont pas figés d’un mois à l’autre : Nappes compte 7, 3, 15 et 4 préleveurs de mai à août 2026, contre 7, 3, 18 et 4 pour Tech. Les effectifs communs sont respectivement 7, 3, 15 et 4 ; seuls trois préleveurs de juillet sont exclusifs au Tech. Les égalités entre SAGE résultent ici des mêmes préleveurs présents dans les deux périmètres, et non d’un cache ignorant le mois.
 

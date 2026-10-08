@@ -192,3 +192,23 @@ test('aucun candidat SAGE : ne rattache pas le PP au Dropt par défaut et rappor
   t.is(result.pointZoneDecisions[0].selectedSage, null)
   t.is(result.pointZoneDecisions[0].untraceableRemovedSageLinks.length, 2)
 })
+
+test('le conflit de configuration du chevauchement annule les champs préparés et bloque aussi verify', async t => {
+  const db = databaseFixture()
+  db.getState().candidates = [
+    {...OTHER, id: 'roussillon', code: 'sage-SAGE06028'},
+    {...OTHER, id: 'tech', code: 'sage-SAGE06030', managedResourceType: 'SOUTERRAIN'}
+  ]
+  const before = structuredClone(db.getState())
+  const input = manifest({data: {...INITIAL_DATA, usageName: 'Ne doit pas être enregistré'}})
+  const result = await applyManifest(db.client, input, {apply: true})
+  t.false(result.applied)
+  t.false(result.complete)
+  t.deepEqual(result.changes, [])
+  t.is(result.executionIssues[0].code, 'SAGE_OVERLAP_RESOURCE_CONFLICT')
+  t.deepEqual(db.getState(), before)
+  const verification = await verifyManifest(db.client, input)
+  t.false(verification.complete)
+  t.is(verification.issues[0].code, 'SAGE_OVERLAP_RESOURCE_CONFLICT')
+  t.deepEqual(db.getState(), before)
+})

@@ -5,6 +5,7 @@ import {getTransactionTimeoutMs} from './import-options.js'
 import {assertExploitationMultiplicity, normalizeCountingCode} from '../../../lib/services/exploitation-periods.js'
 import {inspectDroptPointZones, synchronizeDroptPointZones} from './point-zones.js'
 import {createImportAliasResolver, IMPORT_ALIAS_PROVIDER, resolvePointImportAlias} from '../../../lib/services/import-aliases.js'
+import {isSageSelectionBlocked} from '../../../lib/services/zone-resource-types.js'
 
 const entityFields = {POINT: 'pointPrelevementId', DECLARANT: 'declarantUserId', METER: 'compteurId'}
 
@@ -474,7 +475,7 @@ export async function verifyManifest(client, manifest, {report} = {}) {
         if (kind === 'points') {
           const decision = await inspectDroptPointZones(client, id)
           pointZoneDecisions.push(decision)
-          if (decision.reason === 'SAGE_CANDIDATES_AMBIGUOUS') throw new Error('SAGE_CANDIDATES_AMBIGUOUS')
+          if (isSageSelectionBlocked(decision.reason)) throw new Error(decision.reason)
           if (decision.removed.length || decision.added.length) throw new Error('SAGE_ZONE_DIFFERENTE')
         }
         if (entityKind) {
