@@ -7,6 +7,26 @@ import {buildPlan} from '../plan.js'
 import {parseOptions, assertReviewedPreflight, checkTarget, safeError} from '../initialize.js'
 import {readPrivateFile, reservePrivateReport} from '../private-files.js'
 import {fixture, existingFixture, manifestInput} from '../fixtures/synthetic.js'
+import {readInventory} from '../database.js'
+
+test('inventory selects the overlap using zone codes and rejects conflicting configuration before initialization', async t => {
+  const {manifest} = fixture()
+  const candidates = [
+    {id: 'roussillon', code: 'sage-SAGE06028', type: 'SAGE', managedResourceType: 'MIXTE'},
+    {id: 'tech', code: 'sage-SAGE06030', type: 'SAGE', managedResourceType: 'MIXTE'}
+  ]
+  const client = {async query(sql) {
+    t.true(sql.trim().startsWith('SELECT'))
+    if (!sql.includes('ST_Intersects')) return {rows: []}
+    t.regex(sql, /SELECT id, type, code,/)
+    return {rows: candidates}
+  }}
+  t.deepEqual((await readInventory(client, manifest)).zoneIds, ['roussillon'])
+  candidates[0].managedResourceType = 'SUPERFICIELLE'
+  const error = await t.throwsAsync(readInventory(client, manifest))
+  t.is(error.status, 409)
+  t.is(error.data.code, 'SAGE_OVERLAP_RESOURCE_CONFLICT')
+})
 
 test('private manifest rejects secrets, unknown fields, invented exploitation dates and ambiguous timestamps', t => {
   for (const input of [

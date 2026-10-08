@@ -1,4 +1,4 @@
-import {getZoneManagedResourceType, selectCompatibleSageZone} from '../../../lib/services/zone-resource-types.js'
+import {getZoneManagedResourceType, isSageSelectionBlocked, selectCompatibleSageZone} from '../../../lib/services/zone-resource-types.js'
 
 function sortedZones(zones) {
   return zones.map(({id, type, code, name, managedResourceType}) => ({
@@ -13,7 +13,7 @@ export function planDroptPointZones({point, candidates, currentZones, refreshNon
   const {selectedSage, reason, compatibleCandidates} = selectCompatibleSageZone(geometricZones, point.waterBodyType)
 
   const nonSageZones = (refreshNonSageZones ? geometricZones : before).filter(zone => zone.type !== 'SAGE')
-  const after = reason === 'SAGE_CANDIDATES_AMBIGUOUS'
+  const after = isSageSelectionBlocked(reason)
     ? before
     : sortedZones([...nonSageZones, ...(selectedSage ? [selectedSage] : [])])
   const beforeIds = new Set(before.map(zone => zone.id))
@@ -69,7 +69,7 @@ export async function inspectDroptPointZones(client, pointId, {refreshNonSageZon
 export async function synchronizeDroptPointZones(client, pointId, {refreshNonSageZones, changes, decisions}) {
   const decision = await inspectDroptPointZones(client, pointId, {refreshNonSageZones})
   decisions.push(decision)
-  if (decision.reason === 'SAGE_CANDIDATES_AMBIGUOUS') throw new Error('SAGE_CANDIDATES_AMBIGUOUS')
+  if (isSageSelectionBlocked(decision.reason)) throw new Error(decision.reason)
   if (decision.removed.length) {
     await client.pointPrelevementZone.deleteMany({where: {
       pointPrelevementId: pointId, zoneId: {in: decision.removed.map(zone => zone.id)}

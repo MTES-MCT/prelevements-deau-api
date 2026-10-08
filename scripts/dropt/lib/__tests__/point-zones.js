@@ -54,11 +54,31 @@ test('le SAGE mixte accepte tous les milieux et un SAGE de transition reste limi
   t.deepEqual(plan({candidates: [OTHER]}).after, [OTHER])
 })
 
-test('le choix dépend de l’attribut PE, jamais du nom ou du code du SAGE', t => {
+test('hors chevauchement arbitré, le choix dépend de l’attribut PE, jamais du nom du SAGE', t => {
   const changed = {...DROPT, managedResourceType: 'SOUTERRAIN'}
   t.deepEqual(plan({candidates: [changed]}).after, [])
   t.deepEqual(plan({candidates: [changed], point: {...POINT, waterBodyType: 'SOUTERRAIN'}}).after, [changed])
   t.deepEqual(plan({candidates: [{...OTHER, managedResourceType: null}]}).after, [OTHER])
+})
+
+test('le conflit du chevauchement conserve le plan existant et bloque la synchronisation', async t => {
+  const candidates = [
+    {...OTHER, id: 'roussillon', code: 'sage-SAGE06028'},
+    {...OTHER, id: 'tech', code: 'sage-SAGE06030', managedResourceType: 'SOUTERRAIN'}
+  ]
+  const currentZones = [DEPARTMENT, ...candidates]
+  const result = plan({candidates, currentZones, refreshNonSageZones: true})
+  t.is(result.reason, 'SAGE_OVERLAP_RESOURCE_CONFLICT')
+  t.deepEqual(result.after, result.before)
+  t.deepEqual(result.removed, [])
+  t.deepEqual(result.added, [])
+  const db = databaseFixture({candidates, currentZones})
+  const changes = []
+  const decisions = []
+  await t.throwsAsync(synchronizeDroptPointZones(db.client, POINT.id, {changes, decisions}), {message: result.reason})
+  t.deepEqual(db.mutations, [])
+  t.deepEqual(changes, [])
+  t.is(decisions[0].reason, result.reason)
 })
 
 test('zéro candidat ne fabrique aucun SAGE et rapporte la suppression des anciens liens non traçables', t => {

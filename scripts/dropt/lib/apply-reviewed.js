@@ -111,7 +111,7 @@ async function inspectImportState(tx, manifest) {
   ]) fingerprints[table] = await fingerprint(tx, table, predicate, parameters, orderBy)
   // Ignore technical timestamps in SAGE settings, which are configured separately
   // on the restored copy and target. Geometry and resource classification count.
-  const zones = await tx.$queryRaw`SELECT id, type, "managedResourceType", md5(ST_AsEWKB(coordinates)::text) AS geometry
+  const zones = await tx.$queryRaw`SELECT id, type, code, "managedResourceType", md5(ST_AsEWKB(coordinates)::text) AS geometry
     FROM "Zone" ORDER BY id`
   fingerprints.ZoneSettings = {count: zones.length, hash: stateDigest(zones)}
   return {pointIds, activePointIds: importedPoints.filter(item => !item.deletedAt).map(item => item.id),
