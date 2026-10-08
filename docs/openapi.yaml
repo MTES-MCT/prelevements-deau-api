@@ -5405,10 +5405,19 @@ components:
           allOf: [{$ref: '#/components/schemas/CountingCode'}]
           description: Précondition d'édition du code, non nécessaire pour une lecture.
         status: {type: string}
-        usageId: {$ref: '#/components/schemas/Uuid'}
+        usageId:
+          allOf: [{$ref: '#/components/schemas/Uuid'}]
+          description: >-
+            Usage principal SANDRE, racine ou sous-usage. Un passage parent vers enfant ne conserve pas
+            le parent comme secondaire. Le choix du parent remplace les précisions de sa famille.
+            Les sous-usages frères et les autres familles restent distincts et sont conservés lors
+            d'un changement de principal. Les déclarations historiques ne sont pas modifiées.
         usage: {$ref: '#/components/schemas/WaterUse'}
         secondaryUsageIds:
-          description: Liste des usages secondaires à enregistrer sur l'exploitation.
+          description: >-
+            Liste des usages ou sous-usages secondaires à enregistrer sur l'exploitation.
+            Aucun doublon identique ou parent-enfant n'est autorisé dans la sélection complète.
+            Plusieurs sous-usages frères sont autorisés. Les usages 0 et 1 ne peuvent pas être secondaires.
           type: array
           uniqueItems: true
           maxItems: 100
