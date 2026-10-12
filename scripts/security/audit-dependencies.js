@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url'
 
 export const AUDIT_EXCEPTIONS = Object.freeze(JSON.parse(readFileSync(new URL('./npm-audit-exceptions.json', import.meta.url), 'utf8')).map(policy => Object.freeze(policy)))
 const APPROVED_EXCEPTIONS = {
-  braces: {version: '3.0.3', advisoryUrl: 'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm', expiresAt: '2026-10-10T22:00:00Z'},
+  braces: {version: '3.0.3', advisoryUrl: 'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm', expiresAt: '2026-10-18T22:00:00Z'},
   'sprintf-js': {version: '1.0.3', advisoryUrl: 'https://github.com/advisories/GHSA-hp3w-g68c-fv3c', expiresAt: '2026-10-14T22:00:00Z'}
 }
 const SEVERITIES = ['info', 'low', 'moderate', 'high', 'critical']
