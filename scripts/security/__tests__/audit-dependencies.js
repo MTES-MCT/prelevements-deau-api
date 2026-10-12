@@ -32,6 +32,7 @@ function sprintfFixture() {
     ava: vulnerability('ava', ['supertap'])
   }
   const input = fixture()
+  input.now = Date.parse(policy.expiresAt) - 1
   input.report.vulnerabilities = vulnerabilities
   input.report.metadata.vulnerabilities = {info: 0, low: 0, moderate: 5, high: 0, critical: 0, total: 5}
   input.report.metadata.dependencies.dev = 5
@@ -52,7 +53,7 @@ test('sprintf-js exception covers only the locked development advisory and its c
   t.is(result.exceptions.find(policy => policy.packageName === 'sprintf-js').expiresAt, '2026-10-14T22:00:00Z')
 })
 
-test('sprintf-js expires at the end of October 14 in Paris without inheriting the earlier braces deadline', t => {
+test('sprintf-js expires at the end of October 14 in Paris without inheriting the extended braces deadline', t => {
   for (const now of ['2026-10-10T22:00:00Z', '2026-10-14T21:59:59.999Z']) {
     t.true(evaluateAudit({...sprintfFixture(), now: Date.parse(now)}).ok)
   }
@@ -93,11 +94,12 @@ test('parents with both advisory branches require both exceptions to remain vali
   input.report.metadata.vulnerabilities.total = 8
   input.report.metadata.dependencies.dev = 8
   input.report.metadata.dependencies.total = 8
+  input.now = Date.parse('2026-10-14T21:59:59.999Z')
   t.true(evaluateAudit(input).ok)
-  const result = evaluateAudit({...input, now: Date.parse('2026-10-10T22:00:00Z')})
+  const result = evaluateAudit({...input, now: Date.parse('2026-10-14T22:00:00Z')})
   t.false(result.ok)
-  t.deepEqual(result.blocked, ['braces', 'micromatch', 'parent'])
-  t.deepEqual(result.waived, ['sprintf-js', 'argparse', 'js-yaml', 'supertap', 'ava'])
+  t.deepEqual(result.blocked, ['parent', 'sprintf-js', 'argparse', 'js-yaml', 'supertap', 'ava'])
+  t.deepEqual(result.waived, ['braces', 'micromatch'])
   input.report.vulnerabilities.ava.via.push({...advisory(), name: 'ava', dependency: 'ava'})
   t.true(evaluateAudit(input).blocked.includes('parent'))
 })
@@ -129,8 +131,8 @@ test('only the exact development advisory and exclusively affected parents are t
 })
 
 test('expiration is exclusive: allowed one millisecond before, blocked at the exact Paris midnight boundary', t => {
-  t.true(evaluateAudit({...fixture(), now: Date.parse('2026-10-10T21:59:59.999Z')}).ok)
-  for (const now of [Date.parse('2026-10-10T22:00:00Z'), Date.parse('2026-10-11T00:00:00Z')]) {
+  t.true(evaluateAudit({...fixture(), now: Date.parse('2026-10-18T21:59:59.999Z')}).ok)
+  for (const now of [Date.parse('2026-10-18T22:00:00Z'), Date.parse('2026-10-19T00:00:00Z')]) {
     const result = evaluateAudit({...fixture(), now})
     t.false(result.ok)
     t.true(result.expired)
