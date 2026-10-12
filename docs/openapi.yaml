@@ -2774,7 +2774,16 @@ paths:
                         id: {$ref: '#/components/schemas/Uuid'}
                         countingCode: {$ref: '#/components/schemas/CountingCode'}
                         point: {type: object, additionalProperties: true}
-                        connectors: {type: array, items: {type: object, additionalProperties: true}}
+                        connectors:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: true
+                            properties:
+                              mostRecentAvailableDate:
+                                type: [string, 'null']
+                                format: date-time
+                                description: Pour Willie, fin de la dernière mesure de ce module uniquement. Une valeur null signifie qu'aucune mesure n'est disponible pour ce module ; la date globale de l'exploitation ne doit pas être utilisée à sa place. Champ absent pour les autres connecteurs.
         default: {$ref: '#/components/responses/Error'}
   /service-accounts/connectors/ingest:
     post:
@@ -2785,6 +2794,10 @@ paths:
         autorisés. Les champs exploitationId et countingCode facultatifs des
         métriques doivent correspondre à la même exploitation ; ils ne permettent
         pas de rediriger un connecteur vers un autre bénéficiaire.
+        Les volumes de modules Willie distincts et autorisés sur une même
+        exploitation sont additionnables ; le rejeu d'un même module conserve
+        les contrôles de conflit. La politique SKIP_CONFLICTING_VALUES permet
+        de compléter les périodes manquantes sans remplacer les valeurs présentes.
         Les compteurs physiques utilisent le transport meter-readings distinct.
       security: [{BearerAuth: []}]
       requestBody:
