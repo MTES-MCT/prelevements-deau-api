@@ -156,6 +156,10 @@ manifeste ainsi que `pointPrelevementId` et `preleveurUserId` réellement vérif
 sur la cible. Aucune identité ni donnée personnelle réelle ne doit être inscrite
 dans le code ou les fixtures. Le code comptage reste vide lorsqu'il est absent de
 la source ; aucun numéro de compteur n'est inventé.
+Plusieurs exploitations du même préleveur sur un même PP sont admises seulement
+si chaque code comptage est renseigné, distinct et explicitement sélectionné.
+Un comptage existant hors sélection ou sans identité source prouvée bloque
+la réparation ; le rejeu conserve chaque comptage séparément.
 
 ```sh
 npm run import:dropt -- repair-missing-exploitations --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --manifest /chemin/prive/manifeste-neuf.json --reviewed-plan /chemin/prive/selection.json --epidropt-file /chemin/prive/source.xlsx --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --report /chemin/prive/simulation.json
