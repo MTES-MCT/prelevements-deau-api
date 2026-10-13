@@ -1,6 +1,6 @@
 # Comprendre les pipelines
 
-Ce document décrit les workflows de la modernisation sécurité pour les trois dépôts :
+Ce document décrit les workflows de qualité, sécurité et déploiement des trois dépôts :
 `prelevements-deau-api`, `prelevements-deau-front` et `partageonsleau-orchestration`.
 Il décrit leur fonctionnement, pas une exécution réussie sur GitHub ou Scaleway.
 
@@ -20,7 +20,8 @@ Les workflows historiques des autres branches ne sont pas modifiés par ces corr
 
 ## 2. Le contrôle commun : `quality.yml`
 
-Ce workflow est réutilisé par le déploiement. Ses deux jobs tournent en parallèle :
+Ce workflow est réutilisé par le déploiement. Les audits de sécurité tournent en
+parallèle des tests du projet. L'organisation des tests dépend du dépôt :
 
 ```text
              PR ou début du déploiement
@@ -53,6 +54,22 @@ Ce workflow est réutilisé par le déploiement. Ses deux jobs tournent en paral
 - **Lint** détecte des erreurs de code. Les erreurs bloquent ; les avertissements
   restent visibles mais ne bloquent pas à eux seuls.
 
+L'API répartit les tests AVA en deux lots, chacun avec ses propres PostGIS et Redis,
+des migrations sur base vide puis un second passage. Un contrôle final vérifie
+que chaque fichier de test a été exécuté exactement une fois et fusionne la
+couverture. Les données de couverture des dépendances déjà exclues par c8 sont
+retirées avant transfert, sans modifier la couverture du code applicatif.
+
+Le front construit une seule fois Next.js et Storybook pour les tests, puis
+partage cette archive entre quatre lots Playwright (deux workers chacun). Le test
+du classeur de 500 000 cellules vient ensuite. Un contrôle final vérifie
+l'inventaire complet et fusionne les rapports navigateur. Cette archive utilise
+une API fictive ; elle ne sert jamais à construire l'image déployée.
+
+Pour relancer une CI front, utiliser **Re-run all jobs** : les archives sont liées
+à la tentative. L'API accepte **Re-run failed jobs** tant que les artefacts des
+lots réussis du même run sont encore disponibles ; sinon, tout relancer.
+
 ### Ce qui est testé dans chaque dépôt
 
 | API | Front | Orchestrateur |
@@ -67,31 +84,26 @@ Les tests n'utilisent pas les bases ni les connecteurs réels. Les tests navigat
 utilisent une API simulée. Le contrat front vérifié côté API est un commit public
 figé : ce n'est pas une recette complète des deux applications ensemble.
 
-## 3. Après les contrôles : préparer l'image à déployer
+## 3. Préparer l'image en parallèle des contrôles
 
 ```text
-                 QUALITÉ ET SÉCURITÉ OK
-                           │
-                           ▼
-                 Construction de l'image Docker
-                           │
-                           ▼
-                 Envoi au registre Scaleway
-                 (stockage, pas mise en service)
-                           │
-                           ▼
-                 Identification par digest
-                 (empreinte du contenu exact)
-                           │
-                           ▼
-                 Scan Trivy de cette image
-                 + essais des modules natifs
-                           │
-                      Tout est OK ?
-                       │        │
-                      NON      OUI
-                       ▼        ▼
-                      ARRÊT   Déploiement ciblé
+                     DÉBUT DU DÉPLOIEMENT
+                              │
+                ┌─────────────┴─────────────┐
+                ▼                           ▼
+       QUALITÉ ET SÉCURITÉ          Construction de l'image
+       Audits et tests             Envoi au registre Scaleway
+       Contrôles des rapports      Identification par digest
+                │                  Scan Trivy et essais natifs
+                │                           │
+                └─────────────┬─────────────┘
+                              ▼
+                  Les deux ont réussi pour
+                     le même commit ?
+                       │           │
+                      NON         OUI
+                       ▼           ▼
+                      ARRÊT   Déploiement du digest vérifié
 ```
 
 Trivy contrôle les vulnérabilités connues des paquets de l'image, y compris ceux du
@@ -102,6 +114,19 @@ Sharp pour le front, Sentry/SheetJS pour l'orchestrateur.
 L'API contrôle aussi la taille de l'image et la présence des certificats nécessaires.
 Les contrôles de branche, projet, namespace et conteneur sont effectués avant toute
 modification des services ; certains sont réalisés dès le début du job.
+
+L'envoi d'une image candidate au registre ne la met pas en service. Si la qualité
+échoue, le déploiement reste bloqué même lorsque l'image est prête. Les caches
+BuildKit sont séparés par environnement. Celui de l'API reste dans son registre
+privé, car ses couches contiennent un sous-module privé. Le cache Next.js des
+tests porte uniquement sur la compilation ; les réponses HTTP mises en cache
+sont effacées avant le build synthétique.
+
+Les jobs image et déploiement de l'API n'installent plus les dépendances de
+l'application sur le runner. L'image conserve son installation verrouillée.
+L'orchestrateur conserve ses dépendances dans le job de déploiement pour vérifier
+TLS et Redis. Les déploiements d'un même environnement restent sérialisés ; une
+nouvelle exécution n'annule pas celle déjà en cours.
 
 ## 4. Ce qui change selon le service
 
@@ -128,6 +153,9 @@ API                      FRONT                    ORCHESTRATEUR
 Les trois colonnes sont **trois pipelines indépendants**, pas trois tâches
 coordonnées par un workflow global. L'API et son worker partagent le même digest ;
 le front et l'orchestrateur ont chacun leur image.
+
+En production, l'orchestrateur vérifie également que les files sont au repos
+immédiatement avant la modification du service.
 
 Les scripts ne réécrivent pas les secrets existants. Ils vérifient les réglages
 avant et après la mise à jour. Les exceptions explicites de l'API sont la variable
@@ -163,3 +191,5 @@ d'échec. Un résultat local ne remplace pas l'exécution GitHub du commit publi
 Les sources sont `.github/workflows/quality.yml` et les fichiers `deploy-testing.yml`,
 `deploy-demo.yml`, `deploy-prod.yml` dans chaque dépôt. Pour la production de
 l'orchestrateur, le fichier s'appelle `deploy.yml`.
+Le [guide CI de l'API](../.github/CI.md) détaille le partitionnement, la couverture
+et les règles du cache privé.
