@@ -1,4 +1,5 @@
 import test from 'ava'
+import {fileURLToPath} from 'node:url'
 
 import {withSeedStateSnapshot} from '../lib/seed-database.js'
 
@@ -114,4 +115,18 @@ test('refuse une URL absente avant de créer le client dédié', async t => {
     {message: 'databaseUrl est requis'}
   )
   t.deepEqual(events, [])
+})
+
+test('le client de verrou du seed vérifie lui aussi l’identité TLS de l’IP privée', async t => {
+  const {collect, createLockClient, database, events} = buildHarness()
+  const url = new URL('postgresql://demo:fake@172.16.12.2:5432/prelevements_demo')
+  url.searchParams.set('sslmode', 'verify-full')
+  url.searchParams.set('sslrootcert', fileURLToPath(new URL('../../../deploy/certs/demo/postgres-ca.pem', import.meta.url)))
+  await withSeedStateSnapshot({database, databaseUrl: url.toString(), collect, createLockClient})
+
+  const [, options] = events[0]
+  t.true(options.ssl.rejectUnauthorized)
+  t.regex(options.ssl.ca, /BEGIN CERTIFICATE/)
+  t.is(options.ssl.checkServerIdentity('localhost', {subjectaltname: 'IP Address:172.16.12.2'}), undefined)
+  t.is(options.ssl.checkServerIdentity('localhost', {subjectaltname: 'IP Address:127.0.0.1'}).code, 'ERR_TLS_CERT_ALTNAME_INVALID')
 })
