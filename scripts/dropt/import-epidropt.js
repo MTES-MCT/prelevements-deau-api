@@ -30,32 +30,37 @@ const {positionals, values} = parseArgs({allowPositionals: true, options: {
 const operation = positionals[0]
 const countingRepair = ['repair-campaign-countings', 'verify-campaign-countings'].includes(operation)
 const meterRepair = ['repair-campaign-meters', 'verify-campaign-meters'].includes(operation)
+const missingRepair = ['repair-missing-exploitations', 'verify-missing-exploitations'].includes(operation)
 const prefillOperation = countingRepair || meterRepair || ['prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign'].includes(operation)
-if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign', 'repair-campaign-countings', 'verify-campaign-countings', 'repair-campaign-meters', 'verify-campaign-meters'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign|repair-campaign-countings|verify-campaign-countings|repair-campaign-meters|verify-campaign-meters [--target local|testing|demo|prod] [--apply]')
+const privateOperation = prefillOperation || missingRepair
+if (!['prepare', 'apply', 'review', 'verify', 'rebuild', 'recompute-rebuild', 'enable-logins', 'seed-campaign', 'prepare-prefill', 'prefill-campaign', 'verify-prefill-campaign', 'repair-campaign-countings', 'verify-campaign-countings', 'repair-campaign-meters', 'verify-campaign-meters', 'repair-missing-exploitations', 'verify-missing-exploitations'].includes(operation)) throw new Error('Usage : npm run import:dropt -- prepare|apply|review|verify|rebuild|recompute-rebuild|enable-logins|seed-campaign|prepare-prefill|prefill-campaign|verify-prefill-campaign|repair-campaign-countings|verify-campaign-countings|repair-campaign-meters|verify-campaign-meters|repair-missing-exploitations|verify-missing-exploitations [--target local|testing|demo|prod] [--apply]')
 if (['prod', 'demo'].includes(values.target)) {
   assertDroptTargetOptions({operation, target: values.target, targetEnv: values['target-env'], tunnelPort: values['tunnel-port'],
     apply: values.apply, againstReport: values['against-report']})
 }
 if (prefillOperation && ((!meterRepair && !values['prefill-file']) || !values.report)) throw new Error('--prefill-file et --report hors Git sont obligatoires pour le préremplissage.')
 if (meterRepair && !values['reviewed-plan']) throw new Error('--reviewed-plan privé et vérifié obligatoire pour la réparation des compteurs.')
-if (values['reviewed-plan'] && !meterRepair) throw new Error('--reviewed-plan est réservé à la réparation des compteurs.')
+if (values['reviewed-plan'] && !meterRepair && !missingRepair) throw new Error('--reviewed-plan est réservé aux réparations ciblées.')
+if (missingRepair && ['manifest', 'reviewed-plan', 'epidropt-file', 'report', 'campaign-id', 'actor-user-id'].some(key => !values[key])) throw new Error('--manifest, --reviewed-plan, --epidropt-file, --report, --campaign-id et --actor-user-id sont obligatoires pour les exploitations manquantes.')
+if (missingRepair && ['activate-at', 'effective-at', 'service-account-id', 'prefill-file', 'consolidation-plan', 'backup-evidence', 'resume', 'snapshot', 'previous-manifest', 'overrides', 'dataset'].some(key => values[key])) throw new Error('Options étrangères à la réparation des exploitations manquantes interdites.')
+if (missingRepair && values['rebuild-identities']) throw new Error('La réparation conserve les identités existantes.')
 if (meterRepair && values['prefill-file']) throw new Error('La réparation des compteurs utilise uniquement le plan justifié, pas --prefill-file.')
 if (prefillOperation && operation !== 'prepare-prefill' && (!values['campaign-id'] || !values['actor-user-id'])) throw new Error('--campaign-id et --actor-user-id sont obligatoires.')
 if (operation === 'prepare-prefill' && values.apply) throw new Error('La préparation du préremplissage ne modifie aucune base.')
-if (['verify-prefill-campaign', 'verify-campaign-countings', 'verify-campaign-meters'].includes(operation) && (values.apply || !values['against-report'])) throw new Error('La vérification exige le rapport appliqué et ne prend pas --apply.')
+if (['verify-prefill-campaign', 'verify-campaign-countings', 'verify-campaign-meters', 'verify-missing-exploitations'].includes(operation) && (values.apply || !values['against-report'])) throw new Error('La vérification exige le rapport appliqué et ne prend pas --apply.')
 if (values['allow-counting-split'] && !countingRepair) throw new Error('--allow-counting-split est réservé à la réparation des comptages.')
 if (operation === 'repair-campaign-countings' && !values['allow-counting-split']) throw new Error('--allow-counting-split exige une autorisation explicite pour cette correction ciblée, sans changer la configuration globale.')
-if ((countingRepair || meterRepair) && values.apply && !values['against-report']) throw new Error('--against-report simulation obligatoire avant application.')
-if ((values['prefill-file'] || values['campaign-id']) && !prefillOperation) throw new Error('Options réservées au préremplissage de campagne.')
+if ((countingRepair || meterRepair || missingRepair) && values.apply && !values['against-report']) throw new Error('--against-report simulation obligatoire avant application.')
+if ((values['prefill-file'] || values['campaign-id']) && !privateOperation) throw new Error('Options réservées aux opérations de campagne.')
 if (operation === 'enable-logins' && !['non-realimente', 'all'].includes(values['login-scope'])) throw new Error('--login-scope non-realimente|all obligatoire.')
 if (values['login-scope'] && operation !== 'enable-logins') throw new Error('--login-scope est réservé à enable-logins.')
 if (values['allow-email-aliases'] && operation !== 'enable-logins') throw new Error('--allow-email-aliases est réservé à enable-logins.')
 if (operation === 'seed-campaign' && !values['campaign-config']) throw new Error('--campaign-config data/.../configuration.json obligatoire pour seed-campaign.')
 if (values['campaign-config'] && operation !== 'seed-campaign') throw new Error('--campaign-config est réservé à seed-campaign.')
-if (values['actor-user-id'] && operation !== 'seed-campaign' && !prefillOperation) throw new Error('--actor-user-id est réservé aux opérations de campagne.')
+if (values['actor-user-id'] && operation !== 'seed-campaign' && !privateOperation) throw new Error('--actor-user-id est réservé aux opérations de campagne.')
 const base = path.resolve(values.input)
 let dataset
-try { if (!prefillOperation) dataset = JSON.parse(await readFile(values.dataset ?? path.join(base, 'mapping/dataset.json'), 'utf8')) } catch (error) {
+try { if (!privateOperation) dataset = JSON.parse(await readFile(values.dataset ?? path.join(base, 'mapping/dataset.json'), 'utf8')) } catch (error) {
   if (error.code !== 'ENOENT' || values.dataset) throw error
 }
 if (dataset && dataset.version !== 1) throw new Error('Version de jeu de données non prise en charge.')
@@ -71,7 +76,7 @@ async function writePrivate(filename, value) {
   await mkdir(path.dirname(filename), {recursive: true, mode: 0o700})
   const temporary = `${filename}.${randomUUID()}.partial`
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {mode: 0o600, flag: 'wx'})
-  if (prefillOperation) {
+  if (privateOperation) {
     // Publish exclusively: a report must never replace the source workbook or
     // a previously reviewed report, including symlinks and concurrent writers.
     try { await link(temporary, filename) } finally { await unlink(temporary) }
@@ -103,12 +108,25 @@ async function runCampaignOperation(prisma, options, reportPath) {
     : prefillCampaign(prisma, source, campaignOptions)
 }
 
+async function runMissingExploitationOperation(prisma, manifest, options, reportPath) {
+  const plan = JSON.parse(await readFile(values['reviewed-plan'], 'utf8'))
+  const sourceSha256 = createHash('sha256').update(await readFile(values['epidropt-file'])).digest('hex')
+  if (sourceSha256 !== plan.sourceSha256 || sourceSha256 !== manifest.inputs?.epidropt?.sha256) throw new Error('Le classeur source ne correspond pas au manifeste et au plan revus.')
+  if (plan.campaignId !== values['campaign-id']) throw new Error('Le plan doit désigner exactement la campagne cible.')
+  const {repairMissingExploitations, verifyMissingExploitations} = await import('./lib/repair-missing-exploitations.js')
+  const repairOptions = {...options, target: values.target, actorUserId: values['actor-user-id'],
+    onBeforeApply: backup => writePrivate(reportPath.replace(/\.json$/i, '.backup.json'), backup)}
+  return operation === 'verify-missing-exploitations'
+    ? verifyMissingExploitations(prisma, manifest, plan, repairOptions)
+    : repairMissingExploitations(prisma, manifest, plan, repairOptions)
+}
+
 try {
   getTransactionTimeoutMs(values['transaction-timeout-seconds'])
   if (!['prepare', 'prepare-prefill'].includes(operation) && !['prod', 'demo'].includes(values.target)) {
     assertDroptTargetOptions({operation, target: values.target})
   }
-  if (prefillOperation) {
+  if (privateOperation) {
     if (path.extname(values.report).toLowerCase() !== '.json') throw new Error('Le rapport privé doit être un nouveau fichier .json.')
     try {
       await access(path.resolve(values.report))
@@ -121,7 +139,7 @@ try {
       const {stdout} = await promisify(execFile)('git', ['-C', directory, 'rev-parse', '--is-inside-work-tree'])
       insideGit = stdout.trim() === 'true'
     } catch (error) { if (error.code !== 128) throw new Error('Impossible de vérifier le dossier privé du rapport.', {cause: error}) }
-    if (insideGit) throw new Error('Le rapport de préremplissage doit être stocké hors de tout dépôt Git.')
+    if (insideGit) throw new Error('Le rapport privé doit être stocké hors de tout dépôt Git.')
   }
   if (operation === 'prepare-prefill') {
     const {loadCampaignPrefillSource} = await import('./lib/campaign-prefill-source.js')
@@ -196,16 +214,17 @@ try {
       }
       const {applyManifest, verifyManifest} = await import('./lib/apply-epidropt.js')
       const report = values['against-report'] ? JSON.parse(await readFile(values['against-report'], 'utf8')) : undefined
-      if (values.target === 'prod' && !prefillOperation) assertDroptProdReport(report, {operation, manifestHash: manifest.manifestHash, apply: values.apply})
+      if (values.target === 'prod' && !privateOperation) assertDroptProdReport(report, {operation, manifestHash: manifest.manifestHash, apply: values.apply})
       const stamp = new Date().toISOString().replaceAll(':', '-')
       reportPath = path.resolve(values.report ?? path.join(base, `reports/${stamp}-${values.target}-${operation}${values.apply ? '-applied' : ''}.json`))
-      const client = prefillOperation ? prisma : await getDroptOperationClient(prisma, manifest, {target: values.target, operation})
+      const client = privateOperation ? prisma : await getDroptOperationClient(prisma, manifest, {target: values.target, operation})
       const options = {
         apply: values.apply, activateAt: values['activate-at'], effectiveAt: values['effective-at'], serviceAccountId: values['service-account-id'],
         transactionTimeoutSeconds: values['transaction-timeout-seconds'], expectedReport: report
       }
       let result
-      if (prefillOperation) result = await runCampaignOperation(prisma, options, reportPath)
+      if (missingRepair) result = await runMissingExploitationOperation(prisma, manifest, options, reportPath)
+      else if (prefillOperation) result = await runCampaignOperation(prisma, options, reportPath)
       else if (operation === 'verify') result = await verifyManifest(client, manifest, {report})
       else if (operation === 'review') {
         if (options.activateAt || options.effectiveAt) throw new Error('La revue de référentiel ne doit ni activer ni recalculer les volumes.')
@@ -232,7 +251,7 @@ try {
         result = await recomputeRebuiltManifest(prisma, manifest, {...options, target: values.target, report, resume,
           onProgress: progress => writePrivate(reportPath, progress)})
       } else result = await applyManifest(client, manifest, options)
-      await writePrivate(reportPath, values.target === 'prod' && !prefillOperation ? {...result, target: 'prod', operation} : result)
+      await writePrivate(reportPath, values.target === 'prod' && !privateOperation ? {...result, target: 'prod', operation} : result)
       console.log(JSON.stringify({manifestHash: result.manifestHash, applied: result.applied ?? false, counts: result.counts, issues: result.issues?.length, complete: result.complete}))
       if (result.complete === false) process.exitCode = 1
     } catch (error) {

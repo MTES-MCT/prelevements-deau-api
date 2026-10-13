@@ -3,7 +3,7 @@ import {validateProdAdminDatabaseUrl, assertConnectedProdAdminDatabase} from '..
 import {validateDemoAdminDatabaseUrl, assertConnectedDemoAdminDatabase} from '../../demo/database-target.js'
 
 const COUNTING_REPAIR_OPERATIONS = new Set(['repair-campaign-countings', 'verify-campaign-countings', 'repair-campaign-meters', 'verify-campaign-meters'])
-const PROD_OPERATIONS = new Set(['apply', 'verify', 'enable-logins', 'seed-campaign', 'prefill-campaign', 'verify-prefill-campaign', ...COUNTING_REPAIR_OPERATIONS])
+const PROD_OPERATIONS = new Set(['apply', 'verify', 'enable-logins', 'seed-campaign', 'prefill-campaign', 'verify-prefill-campaign', 'repair-missing-exploitations', 'verify-missing-exploitations', ...COUNTING_REPAIR_OPERATIONS])
 
 function assertDemoRepairOptions({targetEnv, tunnelPort, operation, apply, againstReport}) {
   if (!targetEnv || !/^\d+$/.test(tunnelPort ?? '') || Number(tunnelPort) < 1024 || Number(tunnelPort) > 65535) throw new Error('--target-env et --tunnel-port local explicite obligatoires pour demo.')
@@ -26,7 +26,7 @@ export function assertDroptTargetOptions({operation, target, targetEnv, tunnelPo
   if (!/^\d+$/.test(tunnelPort ?? '') || Number(tunnelPort) < 1024 || Number(tunnelPort) > 65535) {
     throw new Error('--tunnel-port local explicite entre 1024 et 65535 obligatoire pour la production.')
   }
-  if (['verify', 'verify-prefill-campaign', 'verify-campaign-countings', 'verify-campaign-meters'].includes(operation) && apply) throw new Error('La vérification de production reste en lecture seule.')
+  if (['verify', 'verify-prefill-campaign', 'verify-campaign-countings', 'verify-campaign-meters', 'verify-missing-exploitations'].includes(operation) && apply) throw new Error('La vérification de production reste en lecture seule.')
   if (apply && !againstReport) throw new Error('--against-report simulation de production obligatoire avant application.')
 }
 

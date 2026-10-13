@@ -216,7 +216,7 @@ test('email et SIRET explicites priment sur une raison sociale différente', t =
   }
 })
 
-test('un email présent mais inconnu, invalide ou partagé n’est pas contourné par le commentaire', t => {
+test('un email présent mais inconnu ou invalide n’est pas contourné par le commentaire', t => {
   for (const identifier of ['inconnu@example.test', 'adresse invalide', '12345678900099']) {
     const input = fixture()
     input.epidropt.Exploitations[0].values[2] = identifier
@@ -224,12 +224,6 @@ test('un email présent mais inconnu, invalide ou partagé n’est pas contourn�
     t.is(result.exploitations.length, 0)
     t.is(nameDecision(result), undefined)
   }
-  const shared = fixture()
-  addDeclarant(shared, {name: 'Autre ferme', email: 'ferme@example.test'})
-  shared.epidropt.Exploitations[0].values[2] = 'ferme@example.test'
-  const result = buildManifest(shared)
-  t.is(result.exploitations.length, 0)
-  t.is(nameDecision(result), undefined)
 })
 
 test('le fallback garde les codes comptage et les identités au rejeu', t => {
@@ -263,4 +257,158 @@ test('un commentaire absent ou une exploitation explicitement ignorée ne décle
   const ignored = buildManifest(skipped)
   t.is(ignored.exploitations.length, 0)
   t.is(nameDecision(ignored), undefined)
+})
+
+function sharedEmailFixture() {
+  const input = fixture()
+  addDeclarant(input, {name: 'Autre ferme', email: 'ferme@example.test'})
+  input.epidropt.Exploitations[0].values[2] = 'ferme@example.test'
+  return input
+}
+
+function sharedEmailDecision(manifest) {
+  return manifest.reconciliation.find(item => item.method === 'EMAIL_INTERSECTION_EXACT_SOURCE_NAME')
+}
+
+test('un email partagé est départagé par le nom complet exact de la source sans fusion ni accès de connexion', t => {
+  const input = sharedEmailFixture()
+  input.epidropt.Exploitations[0].declarantName = ' FERME  des\u00a0PRES '
+  const before = structuredClone(input)
+  const result = buildManifest(input)
+  t.is(result.declarants.length, 2)
+  t.is(result.exploitations.length, 1)
+  t.is(result.exploitations[0].declarantId, stableId('epidropt:preleveur:aeag:AEAG-A'))
+  t.true(result.declarants.every(owner => owner.user.email === null))
+  t.true(result.declarants.every(owner => owner.emails.includes('ferme@example.test')))
+  t.like(sharedEmailDecision(result), {status: 'ACCEPTED', reason: null, candidateKey: 'epidropt:preleveur:aeag:AEAG-A',
+    candidateId: result.exploitations[0].declarantId, sources: [{sheet: 'Préleveurs', row: 3}]})
+  t.deepEqual(input, before)
+})
+
+test('email partagé : les noms partiels, inconnus et hors des candidats email restent bloqués', t => {
+  for (const name of ['Prés', 'Ferme des Prés et Fils', 'Ferme des Pres.', 'Ferme introuvable', 'Ferme tierce']) {
+    const input = sharedEmailFixture()
+    addDeclarant(input, {name: 'Ferme tierce', agencyId: 'AEAG-C', siret: '12345678900003'})
+    input.epidropt.Exploitations[0].declarantName = name
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 0, `Nom : ${name}`)
+    t.is(sharedEmailDecision(result).reason, name === 'Ferme tierce' ? 'NAME_OUTSIDE_EMAIL_CANDIDATES' : 'NAME_NOT_FOUND')
+    t.true(result.issues.some(issue => issue.code === 'EXPLOITATION_UNRESOLVED' && issue.reason === 'PRELEVEUR'))
+  }
+})
+
+test('email partagé : les homonymes ignorés ou privés d’identité ne rendent pas le nom unique', t => {
+  for (const variant of ['same-name', 'missing-identity', 'skipped']) {
+    const input = sharedEmailFixture()
+    addDeclarant(input, {agencyId: variant === 'missing-identity' ? null : 'AEAG-C',
+      siret: variant === 'missing-identity' ? null : '12345678900003'})
+    if (variant === 'skipped') input.overrides = {declarants: {'AEAG-C': {skip: true}}}
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 0, `Variante : ${variant}`)
+    t.is(sharedEmailDecision(result).reason, 'NAME_AMBIGUOUS')
+  }
+})
+
+test('email partagé : une identité rejetée ou ignorée ne cède pas son exploitation au candidat restant', t => {
+  for (const variant of ['skipped', 'conflicting-name', 'conflicting-siret']) {
+    const input = sharedEmailFixture()
+    if (variant === 'skipped') input.overrides = {declarants: {'AEAG-A': {skip: true}}}
+    else addDeclarant(input, {agencyId: 'AEAG-A', name: variant === 'conflicting-name' ? 'Autre identité' : 'Ferme des Prés'})
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 0, `Variante : ${variant}`)
+    t.is(sharedEmailDecision(result).reason, 'NAME_IDENTITY_UNRESOLVED')
+  }
+})
+
+test('email partagé : SIRET source partagé même avec une ligne ignorée et UUID source contradictoires restent bloqués', t => {
+  for (const variant of ['same-siret', 'skipped-siret', 'invalid-siret', 'same-uuid', 'same-agency']) {
+    const input = sharedEmailFixture()
+    if (variant === 'same-uuid') input.overrides = {declarants: {'AEAG-B': {id: stableId('epidropt:preleveur:aeag:AEAG-A')}}}
+    else if (variant === 'same-agency') {
+      addDeclarant(input, {name: 'Ferme tierce', agencyId: 'AEAG-A', siret: '12345678900003'})
+      input.overrides = {declarants: {'AEAG-A': {skip: true}}}
+    } else if (variant === 'invalid-siret') input.epidropt.Préleveurs[0].values[3] = 'SIRET-INCOHERENT'
+    else {
+      addDeclarant(input, {name: 'Ferme tierce', agencyId: 'AEAG-C', siret: '12345678900001'})
+      if (variant === 'skipped-siret') input.overrides = {declarants: {'AEAG-C': {skip: true}}}
+    }
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 0, `Variante : ${variant}`)
+    t.is(sharedEmailDecision(result).reason, variant === 'same-uuid' ? 'IDENTITY_LEDGER_CONFLICT'
+      : variant === 'same-agency' ? 'NAME_IDENTITY_UNRESOLVED' : 'SIRET_IDENTITY_CONFLICT')
+  }
+})
+
+test('email partagé : une contradiction du commentaire ne retombe jamais sur le nom du contrat Rives', t => {
+  const input = sharedEmailFixture()
+  const pointName = '240000001CACG_90001'
+  input.epidropt['Points prélèvement'][0].values[1] = pointName
+  input.epidropt.Exploitations[0].values[1] = pointName
+  input.epidropt.Exploitations[0].declarantName = 'Nom contradictoire'
+  input.rives = {Contrat: [{row: 2, values: ['C-A', 'CLIENT-A', 'Ferme des Prés', 10000, 5]}],
+    Compteur: [{row: 2, values: ['SYNTHETIC-METER']}], Lieu: [{row: 2, values: ['L-A', pointName, 'Lieu A', 0.4, 44.6]}],
+    Affectation: [{row: 2, values: ['C-A', 'L-A', pointName, 'SYNTHETIC-METER', 100]}]}
+  input.snapshot = {tables: {declarants: [{userId: stableId('epidropt:preleveur:aeag:AEAG-A'), siret: '12345678900001'}]}}
+  const blocked = buildManifest(input)
+  t.is(blocked.exploitations.length, 0)
+  t.is(sharedEmailDecision(blocked).reason, 'NAME_NOT_FOUND')
+  t.false(blocked.reconciliation.some(item => item.method === 'EMAIL_INTERSECTION_EXACT_CONTRACT_NAME'))
+  delete input.epidropt.Exploitations[0].declarantName
+  const unchangedFallback = buildManifest(input)
+  t.is(unchangedFallback.exploitations.length, 1, 'sans commentaire le repli Rives existant reste inchangé')
+  t.true(unchangedFallback.reconciliation.some(item => item.method === 'EMAIL_INTERSECTION_EXACT_CONTRACT_NAME' && item.status === 'ACCEPTED'))
+})
+
+test('email partagé : contradictions SIRET, référence, source et suppression dans le snapshot bloquent le rapprochement', t => {
+  for (const variant of ['current-siret', 'other-siret', 'deleted-siret', 'other-reference', 'source', 'deleted-owner']) {
+    const input = sharedEmailFixture()
+    const candidate = buildManifest(input).declarants.find(owner => owner.key === 'epidropt:preleveur:aeag:AEAG-A')
+    const current = {userId: candidate.id, sourceId: candidate.sourceId, siret: candidate.data.siret}
+    input.snapshot = {tables: {declarants: [current], externalReferences: []}}
+    if (variant === 'current-siret') current.siret = '12345678900099'
+    if (['other-siret', 'deleted-siret'].includes(variant)) input.snapshot.tables.declarants.push({userId: 'another-id',
+      siret: current.siret, ...(variant === 'deleted-siret' ? {deletedAt: '2026-01-01T00:00:00.000Z'} : {})})
+    if (variant === 'other-reference') input.snapshot.tables.externalReferences.push({scope: 'epidropt', kind: 'DECLARANT',
+      provider: 'epidropt', externalId: 'AEAG-OTHER', declarantUserId: candidate.id})
+    if (variant === 'source') current.sourceId = 'unrelated-source'
+    if (variant === 'deleted-owner') current.deletedAt = '2026-01-01T00:00:00.000Z'
+    const result = buildManifest(input)
+    t.is(result.exploitations.length, 0, `Variante : ${variant}`)
+    t.is(sharedEmailDecision(result).status, 'REVIEW')
+  }
+})
+
+test('email partagé : le rejeu garde les anciennes identités, deux comptages et ajoute seulement les quatre liens manquants', t => {
+  const input = sharedEmailFixture()
+  const sourcePoint = input.epidropt['Points prélèvement'][0].values
+  input.epidropt['Points prélèvement'] = Array.from({length: 5}, (_, index) => ({row: 3 + index,
+    values: Object.assign([...sourcePoint], {1: `POINT-${index}`})}))
+  const sourceExploitation = input.epidropt.Exploitations[0]
+  input.epidropt.Exploitations = ['001', '002'].map((countingCode, index) => ({...structuredClone(sourceExploitation), row: 3 + index,
+    countingCode, values: Object.assign([...sourceExploitation.values], {1: 'POINT-0'})}))
+  const previous = buildManifest(input)
+  const owner = previous.declarants.find(record => record.key === 'epidropt:preleveur:aeag:AEAG-A')
+  owner.id = 'existing-owner'
+  owner.sourceId = 'existing-owner-source'
+  for (const [index, record] of previous.exploitations.entries()) {
+    record.id = `existing-exploitation-${index}`
+    record.declarantId = owner.id
+    record.sourceId = `existing-exploitation-source-${index}`
+  }
+  input.previousManifest = previous
+  input.snapshot = {tables: {declarants: [{userId: owner.id, sourceId: owner.sourceId, siret: owner.data.siret}],
+    externalReferences: [{scope: 'epidropt', kind: 'DECLARANT', provider: 'epidropt', externalId: 'AEAG-A', declarantUserId: owner.id}]}}
+  for (let index = 1; index < 5; index++) input.epidropt.Exploitations.push({...structuredClone(sourceExploitation), row: 4 + index,
+    values: Object.assign([...sourceExploitation.values], {1: `POINT-${index}`})})
+  const result = buildManifest(input)
+  t.is(result.exploitations.length, 6)
+  t.is(new Set(result.exploitations.map(record => record.pointId)).size, 5)
+  t.true(result.exploitations.every(record => record.declarantId === owner.id))
+  t.deepEqual(result.exploitations.filter(record => record.countingCode).map(record => [record.id, record.sourceId, record.countingCode]).sort(),
+    previous.exploitations.map(record => [record.id, record.sourceId, record.countingCode]).sort())
+  t.is(sharedEmailDecision(result).candidateId, owner.id)
+  input.previousManifest = result
+  const replay = buildManifest(input)
+  t.deepEqual(replay.exploitations.map(record => [record.id, record.sourceId]).sort(), result.exploitations.map(record => [record.id, record.sourceId]).sort())
+  t.is(replay.declarants.find(record => record.id === owner.id).user.email, null)
 })

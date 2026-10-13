@@ -191,6 +191,60 @@ function pointData(values, conflictedColumns, source, issue) {
   return data
 }
 
+function hasStoredSiretConflict(siret, id, stored, previous) {
+  return Boolean(siret && (stored.some(owner => owner.siret && (owner.userId === id ? owner.siret !== siret : owner.siret === siret))
+    || previous.some(owner => owner.data?.siret && owner.data.siret !== siret)))
+}
+
+function sharedEmailSnapshotIdentity(candidate, {previousManifest, snapshot}) {
+  // Reuse the identity ledger before comparing SIRETs: a source UUID may have
+  // an explicitly anchored existing UUID. Never infer this remapping by name.
+  const anchored = preserveManifestIdentities({points: [], declarants: [candidate], exploitations: [], meters: [], allocations: [], issues: [], reconciliation: []},
+    {previousManifest, snapshot})
+  if (anchored.issues.length || anchored.declarants.length !== 1) return {reason: anchored.issues[0]?.code ?? 'IDENTITY_LEDGER_CONFLICT'}
+  const identity = anchored.declarants[0]
+  const tables = snapshot?.tables ?? {}
+  const stored = tables.declarants ?? []
+  const current = stored.find(owner => owner.userId === identity.id)
+  if (current?.deletedAt) return {reason: 'IDENTITY_DELETED'}
+  const prior = (previousManifest?.declarants ?? []).filter(owner => owner.id === identity.id || owner.sourceId === identity.sourceId)
+  if (current?.sourceId && current.sourceId !== candidate.sourceId && !prior.some(owner => owner.sourceId === current.sourceId)) {
+    return {reason: 'IDENTITY_LEDGER_CONFLICT'}
+  }
+  const siret = candidate.data.siret
+  if (hasStoredSiretConflict(siret, identity.id, stored, prior)) {
+    return {reason: 'SIRET_IDENTITY_CONFLICT'}
+  }
+  const expected = new Set(candidate.references.filter(ref => ref.provider === 'epidropt').map(ref => ref.externalId))
+  if (siret) expected.add(`siret:${siret}`)
+  const conflictingReference = (tables.externalReferences ?? []).some(ref => ref.scope === SCOPE
+    && ref.kind === 'DECLARANT' && ref.provider === 'epidropt' && ref.declarantUserId === identity.id && !expected.has(ref.externalId))
+  return conflictingReference ? {reason: 'IDENTITY_LEDGER_CONFLICT'} : {candidateId: identity.id}
+}
+
+function resolveSharedEmailDeclarant({name, owners, sources, declarants, previousManifest, snapshot}) {
+  const matches = sources.filter(source => source.fullName === name)
+  const candidateKeys = [...new Set(matches.map(source => source.key))]
+  const candidate = candidateKeys.length === 1 ? declarants.get(candidateKeys[0]) : null
+  const decision = {normalizedName: name, candidateKeys: candidateKeys.filter(Boolean),
+    sources: matches.map(source => ({sheet: 'Préleveurs', row: source.row}))}
+  let reason = !matches.length ? 'NAME_NOT_FOUND'
+    : candidateKeys.length > 1 ? 'NAME_AMBIGUOUS'
+      : !candidate || matches.some(source => source.skipped) ? 'NAME_IDENTITY_UNRESOLVED'
+        : !owners.has(candidate.key) ? 'NAME_OUTSIDE_EMAIL_CANDIDATES' : null
+  if (!reason) {
+    const sameIdentity = sources.filter(source => source.key === candidate.key)
+    const conflictingSiret = sameIdentity.some(source => !missing(source.siret) && source.siret !== candidate.data.siret)
+      || (candidate.data.siret && sources.some(source => source.siret === candidate.data.siret && source.key !== candidate.key))
+    const agencyIds = new Set(sameIdentity.map(source => source.agencyId).filter(Boolean))
+    const conflictingIdentity = agencyIds.size > 1 || sources.some(source => source.key !== candidate.key
+      && (source.id === candidate.id || (source.agencyId && agencyIds.has(source.agencyId))))
+    reason = conflictingSiret ? 'SIRET_IDENTITY_CONFLICT' : conflictingIdentity ? 'IDENTITY_LEDGER_CONFLICT' : null
+  }
+  const identity = reason ? {reason} : sharedEmailSnapshotIdentity(candidate, {previousManifest, snapshot})
+  return {...decision, ...identity, ...(!identity.reason ? {candidateKey: candidate.key} : {})}
+}
+
 export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, previousManifest, snapshot, resetExistingPointAndExploitationIdentities = false}) {
   const reviewed = applyReviewedInputs(epidropt, overrides.reviewedInputs)
   epidropt = reviewed.epidropt
@@ -365,7 +419,8 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     const key = override.key ?? (agencyId ? `epidropt:preleveur:aeag:${agencyId}` : /^\d{14}$/.test(siret) ? `epidropt:preleveur:siret:${siret}` : null)
     // Rejected or explicitly skipped identities must not make a homonym appear
     // unique merely because it is the only remaining importable declarant.
-    if (!missing(fullName)) declarantNameSources.push({fullName, key, row, skipped: Boolean(override.skip)})
+    if (!missing(fullName)) declarantNameSources.push({fullName, key, row, skipped: Boolean(override.skip), siret, agencyId,
+      id: override.id ?? (key ? stableId(key) : null), emails: emails(v[2])})
     if (override.skip) continue
     if (!key || !fullName) {
       issue('PRELEVEUR_IDENTITY_MISSING', {sheet: 'Préleveurs', row})
@@ -414,6 +469,16 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
     if (/^\d{14}$/.test(siret)) for (const owner of declarantsBySiret.get(siret) ?? []) owners.add(owner.key)
     const override = overrides.exploitations?.[digest(v)] ?? {}
     let ownerKey = override.declarantKey ?? (owners.size === 1 ? [...owners][0] : null)
+    const sourceEmails = emails(v[2])
+    const sourceOwnerKeys = new Set(declarantNameSources.filter(person => person.emails.some(email => sourceEmails.includes(email))).map(person => person.key))
+    const sharedEmailName = sourceOwnerKeys.size > 1 && !missing(declarantName) && !override.declarantKey && !override.skip
+    if (sharedEmailName) {
+      const decision = resolveSharedEmailDeclarant({name: normalized(declarantName), owners, sources: declarantNameSources,
+        declarants, previousManifest, snapshot})
+      ownerKey = decision.candidateKey ?? null
+      reconciliation.push({kind: 'DECLARANT', source, pointName: clean(v[1]), method: 'EMAIL_INTERSECTION_EXACT_SOURCE_NAME',
+        status: decision.reason ? 'REVIEW' : 'ACCEPTED', reason: decision.reason ?? null, ...decision})
+    }
     if (!ownerKey && missingDeclarantReference(v[2]) && !missing(declarantName) && !override.skip) {
       const name = normalized(declarantName)
       const sourceMatches = declarantSourcesByName.get(name) ?? []
@@ -432,7 +497,7 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
         ...(!reason ? {candidateId: candidate.id, candidateKey: candidate.key} : {})})
       if (!reason) ownerKey = candidate.key
     }
-    if (!ownerKey) {
+    if (!ownerKey && !sharedEmailName) {
       const contractNames = new Set(assignmentsForName(clean(v[1])).map(a => normalized(contracts.get(a.contractId)?.name)).filter(Boolean))
       const options = [...declarants.values()].filter(owner => contractNames.has(owner.fullName) && (!owners.size || owners.has(owner.key)))
       const candidate = options.length === 1 ? options[0] : null

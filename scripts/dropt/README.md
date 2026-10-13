@@ -132,6 +132,62 @@ Règles de préparation :
 
 L’application verrouille la campagne comme les sauvegardes manuelles et recontrôle toutes les conditions en une transaction. Elle ne modifie que `prefillData`/`prefillMetadata` (et la date technique de modification), jamais les droits, secrets, répartitions, brouillons, révisions ou données soumises. `verify-prefill-campaign` compare les propositions enregistrées au rapport d’application sans remplacer les saisies intervenues depuis.
 
+## Compléter des exploitations non réalimentées manquantes
+
+Lorsqu'une adresse source est partagée, le commentaire de l'exploitation peut
+départager ses propriétaires par leur nom source complet et exact, normalisé
+uniquement pour la casse, les accents et les espaces. Le candidat doit être unique
+dans les sources et appartenir aux propriétaires de cette adresse. Les homonymes,
+identités rejetées ou ignorées et contradictions de SIRET ou d'identifiant restent
+bloquants, sans repli vers un nom de contrat Rives. Les emails inconnus ou invalides
+ne bénéficient pas de ce rapprochement. Le rapport porte la méthode
+`EMAIL_INTERSECTION_EXACT_SOURCE_NAME` et les lignes justificatives ; cela n'active
+jamais une adresse de connexion.
+
+`repair-missing-exploitations` complète uniquement une sélection explicitement
+revue d'exploitations d'irrigation non réalimentées, sur des PP et préleveurs déjà
+existants. Préparer un manifeste neuf depuis le classeur privé préservé ; les
+anciens manifestes servent seulement à conserver les identités. La commande ne
+réapplique pas l'import général, même si le manifeste contient d'autres objets.
+
+Le plan privé contient `version: 1`, `manifestHash`, `sourceSha256`, `campaignId`,
+`collecteurUserId` et `entries`. Chaque entrée désigne `exploitationId` dans le
+manifeste ainsi que `pointPrelevementId` et `preleveurUserId` réellement vérifiés
+sur la cible. Aucune identité ni donnée personnelle réelle ne doit être inscrite
+dans le code ou les fixtures. Le code comptage reste vide lorsqu'il est absent de
+la source ; aucun numéro de compteur n'est inventé.
+
+```sh
+npm run import:dropt -- repair-missing-exploitations --target prod --target-env /chemin/prive/prod.env --tunnel-port PORT_LOCAL --manifest /chemin/prive/manifeste-neuf.json --reviewed-plan /chemin/prive/selection.json --epidropt-file /chemin/prive/source.xlsx --campaign-id UUID_CAMPAGNE --actor-user-id UUID_ADMIN --report /chemin/prive/simulation.json
+# Après sauvegarde restaurable et examen de la simulation, mêmes arguments :
+# --apply --against-report /chemin/prive/simulation.json --report /chemin/prive/application.json
+# Vérifier avec verify-missing-exploitations, les mêmes sources/options et :
+# --against-report /chemin/prive/application.json --report /chemin/prive/verification.json
+```
+
+Les cibles autorisées sont local, testing et prod ; demo reste exclue. La simulation
+est une transaction en lecture seule. L'application exige une simulation complète
+du même état, de la même sélection, source, campagne, cible et administrateur actif.
+Les rapports sont privés, hors Git, sans écrasement. La sauvegarde `.backup.json`
+est écrite après verrouillage et avant la première mutation ; une dérive ou erreur
+annule toute la transaction.
+
+La réparation ajoute les exploitations absentes avec
+`excludeFromQuickDeclaration: true`, les délégations au collecteur de la campagne,
+les réponses vierges manquantes et les liens territoriaux nécessaires. Elle ne
+modifie ni le compte, ni les PP, ni la configuration ou les réponses existantes de
+la campagne. `quickDeclarationEnabled` doit rester vrai sur le préleveur pour
+autoriser la campagne. Aucun email, index, compteur, volume ou répartition n'est
+créé ou modifié. Une campagne archivée/fermée ou une identité contradictoire bloque
+la réparation.
+
+Une exploitation équivalente créée manuellement est conservée ; toute collision
+est signalée. L'audit transactionnel est complété par un marqueur durable
+`ExternalReference` : une suppression ou modification manuelle postérieure ne
+sera jamais annulée par le rejeu. Une nouvelle simulation après application doit
+indiquer toutes les entrées déjà appliquées et zéro écriture. La vérification
+préserve les réponses commencées depuis l'import.
+
 ## Corriger des comptages distincts regroupés dans une campagne
 
 `repair-campaign-countings` examine tous les groupes du classeur pour la campagne ciblée, pas une liste de points codée dans le script. Le code comptage reste distinct du numéro de série : deux index égaux ou deux numéros de série absents ne prouvent jamais un compteur unique.
