@@ -26,6 +26,8 @@ jobs:
           npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
       - name: Install locked dependencies
         run: npm ci
+      - name: Test CI sharding and private cache guards
+        run: node --test .github/scripts/ci-guards.test.mjs
       - name: Test audit policy
         run: npx --no-install ava scripts/security/__tests__/audit-dependencies.js
       - name: Audit all dependencies with expiring development exception
@@ -47,9 +49,14 @@ jobs:
           path: .artifacts/security/
           if-no-files-found: warn
           retention-days: 30
+          overwrite: true
 
-  tests:
-    name: API quality, migrations and integration tests
+  test_shards:
+    name: API tests shard ${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
@@ -73,6 +80,8 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
+      CI_NODE_INDEX: ${{ matrix.shard }}
+      CI_NODE_TOTAL: '2'
       NODE_ENV: test
       TZ: Europe/Paris
       FRONT_URL: ''
@@ -110,14 +119,69 @@ jobs:
           npm run migrate:prisma
           npm run migrate:prisma
       - run: npm run lint
+        if: matrix.shard == 0
       - run: npm run lint:openapi
-      - name: Full tests including database integrations, with coverage
-        run: npm run coverage -- --concurrency=1 --timeout=180s
-      - name: Retain test coverage
+        if: matrix.shard == 0
+      - name: Native AVA partition including database integrations, with raw V8 coverage
+        run: node .github/scripts/ci-shards.mjs run
+      - name: Retain shard inventory and raw coverage
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: api-coverage
-          path: api/coverage/
-          if-no-files-found: warn
+          name: api-coverage-shard-${{ matrix.shard }}
+          path: api/coverage/shard-${{ matrix.shard }}/
+          if-no-files-found: error
           retention-days: 14
+          overwrite: true
+
+  # Keep the existing required-check name and fail closed on any missing/failed shard.
+  tests:
+    name: API quality, migrations and integration tests
+    if: always()
+    needs: [security, test_shards]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - name: Require every quality job to succeed
+        env:
+          SECURITY_RESULT: ${{ needs.security.result }}
+          SHARDS_RESULT: ${{ needs.test_shards.result }}
+        run: test "$SECURITY_RESULT" = success && test "$SHARDS_RESULT" = success
+        working-directory: .
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: api
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: api/.nvmrc
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Use locked npm and dependencies for the coverage merger
+        run: |
+          npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
+          npm ci
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: api-coverage-shard-0
+          path: api/coverage/shard-0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: api-coverage-shard-1
+          path: api/coverage/shard-1
+      - name: Verify complete disjoint execution and merge V8 coverage
+        run: node .github/scripts/ci-shards.mjs merge
+      - name: Retain merged test coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: api-coverage
+          path: |
+            api/coverage/
+            !api/coverage/shard-*/**
+            !api/coverage/merged-v8/**
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
