@@ -9,6 +9,151 @@ Le script n'écrit pas sur les cibles par défaut. Une application exige
 La production est interdite. Les snapshots et rapports restent des écritures
 locales, y compris lors d'une simulation.
 
+Cette restriction concerne la migration du référentiel Mongo/S3. L’étape
+`access-*` ci-dessous accepte également une cible `prod` strictement attestée.
+
+## Appliquer le registre des accès ODS
+
+L’étape d’accès s’exécute **après** l’import du référentiel. Elle possède sa
+propre simulation transactionnelle, son application et sa vérification. Elle
+est rejouable directement sur une cible où les déclarants et la zone Réunion
+existent déjà. Elle ne migre aucun point, exploitation, document ou volume.
+
+Conserver l’ODS original et son SHA-256 dans un dossier privé durable hors Git,
+avec le mapping, les sauvegardes et les rapports (`0700`/`0600`). Python 3
+(bibliothèque standard) lit l’ODS ; aucun fichier Excel converti n’est requis.
+Les rapports doivent avoir des chemins neufs : les sources et anciennes preuves
+ne sont jamais écrasées. Ne pas utiliser `/tmp` comme stockage de référence.
+
+```sh
+access_dir=/chemin/prive/acces-reunion
+npm run migrate:reunion -- access-prepare \
+  --access-file "$access_dir/gestion_acces_prelevements_deau.ods" \
+  --effective-date 2026-10-05 --report "$access_dir/source.json"
+```
+
+La préparation lit `liste_brute` et `Détail droits agent lecture seule`.
+Les colonnes « rôle Partageons l’eau » et « Détail » priment sur le profil
+historique ; « ACCES A SUPPRIMER » et « accès supprimé » ferment les droits
+Réunion. La suppression des anciens comptes est définie par la liste
+`retireAccounts` ci-dessous. Les dates de fermeture renseignées sont
+conservées ; `--effective-date`, identique à chaque rejeu, remplace uniquement
+les dates absentes et fixe les retraits demandés. Le territoire manquant dans
+une liste exclusivement réunionnaise et les identités incomplètes apparaissent
+dans les avertissements. Une identité absente n’est pas déduite de l’email.
+
+Les 26 permissions de lecture sont obtenues par correspondance des libellés
+avec le catalogue applicatif et leurs dépendances sont contrôlées. Elles
+incluent les exports décrits dans l’ODS ; le profil générique de lecture ne les
+remplace pas. Les agents en écriture reçoivent les permissions du catalogue.
+Le pouvoir d’administrer les agents est un choix distinct dans le mapping.
+
+Le mapping privé doit contenir l’empreinte `sourceHash` de la préparation et
+des identifiants source stables, jamais les UUID propres à testing :
+
+```json
+{
+  "version": 1,
+  "sourceHash": "<empreinte-de-source.json>",
+  "writersAreZoneAdmins": true,
+  "preserveGlobalAdmins": true,
+  "declarants": [
+    {"structure": "<structure exacte ODS>", "sourceId": "reunion:DEP-974:declarant:<id source>"}
+  ]
+}
+```
+
+Chaque adresse marquée déclarant rejoint le compte de sa structure comme
+adresse principale si elle est absente, sinon comme alias. Le mapping de
+structure doit être justifié par la source de migration. Les contacts existants
+restent conservés. Une ancienne adresse d’agent ne peut être transférée que si
+le compte est limité à Réunion et sans dépendance métier ; son identité est
+conservée sauf retrait explicite dans `retireAccounts`. Les autres rôles, comptes supprimés, réservations
+d’emails et identités ambiguës bloquent la transaction. Avec
+`preserveGlobalAdmins`, un administrateur global déjà présent correspondant à
+une ligne en écriture est signalé et conservé ; cette option ne crée ni ne
+promeut aucun administrateur global. Un administrateur global déclaré en
+lecture seule reste un conflit à résoudre.
+
+### Supprimer les anciens comptes
+
+Après autorisation de suppression, ajouter `retireAccounts` au mapping privé.
+Cette liste désigne précisément les identités importées à supprimer, par
+`Instructor.sourceId` stable, avec leur ancien email et le motif :
+
+```json
+{
+  "retireAccounts": [
+    {
+      "sourceId": "reunion:DEP-974:agent:<identifiant source>",
+      "email": "ancien-agent@example.test",
+      "reason": "REPLACED"
+    }
+  ]
+}
+```
+
+Les motifs sont `REPLACED` (adresse transférée au compte déclarant), `CLOSED`
+(retrait du registre) et `ABSENT_FROM_REGISTER` (ancien agent absent du registre).
+Conserver les preuves du rapprochement avec le manifeste historique et le
+registre. Ne pas sélectionner des comptes à supprimer par leur seule zone,
+leur domaine email ou leur nom. Les comptes actifs du registre, administrateurs
+globaux, déclarants, accès à d’autres zones et dépendances métier bloquent leur
+suppression. Le transfert au déclarant est vérifié avant de retirer un compte
+remplacé.
+
+La même séquence simulation/application/vérification supprime physiquement les
+comptes listés et leurs données d’authentification, droits de zone et activité
+mensuelle liée au compte. Les audits sont conservés. La liste, les dépendances
+et leur état sont liés à la simulation ; une dérive annule la transaction.
+Une identité déjà supprimée ne provoque ni nouvelle suppression ni nouvel audit
+au rejeu. Conserver ce mapping complété pour rejouer la même opération en prod.
+
+Le fichier cible conserve la `DATABASE_URL` native attendue par
+`scripts/network/{testing,prod}-database-target.js`, avec `sslmode=verify-full`
+et `sslrootcert=/usr/local/share/ca-certificates/scw-postgres-ca.crt`.
+Le transport emprunte un tunnel local déjà ouvert ; le certificat de la cible
+est vérifié via `deploy/certs/<cible>/postgres-ca.pem`. L’identité SQL est
+contrôlée avant la simulation et à l’intérieur de chaque transaction.
+
+```sh
+npm run migrate:reunion -- access-apply \
+  --access-file "$access_dir/gestion_acces_prelevements_deau.ods" \
+  --effective-date 2026-10-05 --mappings "$access_dir/mappings.json" \
+  --target testing --target-env "$access_dir/testing.env" --tunnel-port PORT_LOCAL \
+  --report "$access_dir/testing-simulation.json"
+# Après examen de la simulation et restauration vérifiée de la sauvegarde :
+npm run migrate:reunion -- access-apply \
+  --access-file "$access_dir/gestion_acces_prelevements_deau.ods" \
+  --effective-date 2026-10-05 --mappings "$access_dir/mappings.json" \
+  --target testing --target-env "$access_dir/testing.env" --tunnel-port PORT_LOCAL \
+  --apply --against-report "$access_dir/testing-simulation.json" \
+  --backup-evidence "$access_dir/testing-backup.json" \
+  --report "$access_dir/testing-application.json"
+npm run migrate:reunion -- access-verify \
+  --access-file "$access_dir/gestion_acces_prelevements_deau.ods" \
+  --effective-date 2026-10-05 --mappings "$access_dir/mappings.json" \
+  --target testing --target-env "$access_dir/testing.env" --tunnel-port PORT_LOCAL \
+  --against-report "$access_dir/testing-application.json" \
+  --report "$access_dir/testing-verification.json"
+```
+
+La preuve de sauvegarde contient `target`, `backupFile`, `backup.sha256` et
+`restore: {success: true, matchesPreflight: true}`. Le SHA-256 du dump est
+recalculé avant application. Un état privé des comptes et droits est aussi
+conservé dans le rapport `.before.json`. Toute dérive de la source, du mapping,
+de la cible ou des comptes depuis la simulation bloque l’application entière.
+Les sessions des comptes modifiés sont invalidées ; aucun email n’est envoyé.
+
+Refaire simulation, application et vérification avec des rapports neufs pour
+démontrer le rejeu : `changes` doit être zéro et aucun audit ne doit être créé.
+Pour la production, conserver le même ODS, mapping et date, remplacer la cible
+et sa configuration par `prod`, puis produire une sauvegarde restaurée et une
+simulation **production** neuves. Un rapport testing ne peut pas autoriser une
+écriture production. La livraison du référentiel Mongo/S3 reste une étape
+distincte ; ne pas la relancer après le registre d’accès avec les anciens rôles
+Mongo, qui ne représentent plus les droits validés par l’ODS.
+
 ## Prérequis et protection des fichiers
 
 - Node.js 24, `npm ci` et Docker/Compose pour la répétition locale.

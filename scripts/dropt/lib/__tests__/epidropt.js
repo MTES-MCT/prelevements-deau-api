@@ -34,6 +34,90 @@ function fixture() {
   }
 }
 
+test('les lignes AEP historiques sont exclues avant les points, profils et compteurs', t => {
+  for (const usage of ['AEP', ' aep ', 'Alimentation en eau potable', '5']) {
+    const input = fixture()
+    const previousManifest = buildManifest(input)
+    input.epidropt.Exploitations[0].values[3] = usage
+    const original = structuredClone(input)
+    const manifest = buildManifest({...input, previousManifest})
+    for (const kind of ['points', 'declarants', 'exploitations', 'meters', 'allocations']) t.deepEqual(manifest[kind], [], `Aucune création : ${kind}`)
+    t.true(manifest.reconciliation.some(item => item.reason === 'LEGACY_AEP_SOURCE_REPLACED' && item.pointExcluded))
+    t.false(manifest.issues.some(item => item.code === 'EXPLOITATION_UNRESOLVED'))
+    t.deepEqual(input, original, 'le classeur source reste intact')
+  }
+})
+
+test('un point mixte et son préleveur conservent uniquement l’exploitation non AEP et ses identités', t => {
+  const input = fixture()
+  const before = buildManifest(input)
+  input.epidropt.Exploitations.push(row([null, input.epidropt.Exploitations[0].values[1], 'contact@example.test', 'AEP'], 4))
+  const after = buildManifest(input)
+  for (const kind of ['points', 'declarants', 'exploitations', 'meters', 'allocations']) t.deepEqual(after[kind], before[kind], `Préservation : ${kind}`)
+  t.true(after.reconciliation.some(item => item.reason === 'LEGACY_AEP_SOURCE_REPLACED' && !item.pointExcluded))
+})
+
+test('les noms numériques ne sont pas exclus et les points 7 et 23 restent importables', t => {
+  const input = fixture()
+  input.rives = {Contrat: [], Compteur: [], Lieu: [], Affectation: []}
+  input.epidropt['Points prélèvement'] = ['1', '2', '5', '6', '8', '7', '23'].map((name, index) => {
+    const values = [...input.epidropt['Points prélèvement'][0].values]
+    values[1] = name
+    return row(values, index + 3)
+  })
+  input.epidropt.Exploitations = input.epidropt['Points prélèvement'].map(({row: number, values}) =>
+    row([null, values[1], 'contact@example.test', ['7', '23'].includes(values[1]) ? 'Irrigation' : 'AEP'], number))
+  const result = buildManifest(input)
+  t.deepEqual(result.points.map(point => point.data.name).sort(), ['23', '7'])
+  t.is(result.exploitations.length, 2)
+  t.is(result.declarants.length, 1)
+  t.is(result.reconciliation.filter(item => item.reason === 'LEGACY_AEP_SOURCE_REPLACED' && item.pointExcluded).length, 5)
+  input.epidropt.Exploitations[0].values[3] = 'Irrigation'
+  t.true(buildManifest(input).points.some(point => point.data.name === '1'))
+})
+
+test('un propriétaire exclusivement AEP est exclu, un préleveur non lié ou partagé reste conservé', t => {
+  const input = fixture()
+  const point = [...input.epidropt['Points prélèvement'][0].values]
+  point[1] = 'AEP-SYNTHETIC'
+  input.epidropt['Points prélèvement'].push(row(point, 4))
+  const owner = [...input.epidropt.Préleveurs[0].values]
+  owner[2] = 'aep@example.test'
+  owner[3] = '12345678900002'
+  owner[4] = 'AEP synthétique'
+  owner[9] = 'AEAG-AEP'
+  input.epidropt.Préleveurs.push(row(owner, 4))
+  input.epidropt.Exploitations.push(row([null, point[1], owner[3], 'AEP'], 4))
+  t.is(buildManifest(input).declarants.length, 1)
+  input.epidropt.Exploitations.pop()
+  t.is(buildManifest(input).declarants.length, 2, 'absence de relation AEP : aucune suppression globale des profils orphelins')
+})
+
+test('le rapprochement par nom sans mail retire seulement le profil exclusivement AEP', t => {
+  const input = fixture()
+  input.rives = {Contrat: [], Compteur: [], Lieu: [], Affectation: []}
+  input.epidropt.Exploitations = [{row: 3, declarantName: 'Ferme A', values: [null, '240000001CACG_90001', 'pas de mail', 'AEP']}]
+  t.is(buildManifest(input).declarants.length, 0)
+  input.epidropt.Exploitations.push({row: 4, declarantName: 'Ferme A', values: [null, '240000001CACG_90001', 'pas de mail', 'Irrigation']})
+  t.is(buildManifest(input).declarants.length, 1)
+  t.is(buildManifest(input).exploitations.length, 1)
+})
+
+test('une référence non AEP ambiguë ou un usage à revoir ne perd pas ses préleveurs ni son point', t => {
+  const input = fixture()
+  input.epidropt.Exploitations[0].values[3] = 'Usage à vérifier'
+  input.epidropt.Exploitations.push(row([null, '240000001CACG_90001', 'contact@example.test', 'AEP'], 4))
+  const other = [...input.epidropt.Préleveurs[0].values]
+  other[3] = '12345678900002'
+  other[4] = 'Ferme B'
+  other[9] = 'AEAG-B'
+  input.epidropt.Préleveurs.push(row(other, 4))
+  const result = buildManifest(input)
+  t.is(result.points.length, 1)
+  t.is(result.declarants.length, 2)
+  t.true(result.issues.some(item => item.code === 'EXPLOITATION_UNRESOLVED'))
+})
+
 test('identités stables, contacts distincts de l’accès et compteur physique non découpé', t => {
   const manifest = buildManifest(fixture())
   t.is(manifest.points.length, 1)
@@ -122,6 +206,66 @@ test('coordonnées nulles/incohérentes isolées, Lambert et WGS84 acceptés', t
   input.epidropt['Points prélèvement'][0].values[3] = 0
   input.epidropt['Points prélèvement'][0].values[4] = 0
   t.is(buildManifest(input).points.length, 0)
+})
+
+test('coordonnées Lambert avec espaces de milliers strictement groupés', t => {
+  const expected = coordinates(517286.43, 6395982.4)
+  t.truthy(expected)
+  for (const separator of [' ', '\u00A0', '\u202F']) {
+    for (const decimal of ['.', ',']) {
+      t.deepEqual(coordinates(`517${separator}286${decimal}43`, `6${separator}395${separator}982${decimal}4`), expected)
+    }
+  }
+
+  t.deepEqual(coordinates('517\u00A0286.43', '6\u202F395 982,4'), expected)
+  t.deepEqual(coordinates('  517 286,43  ', '\u00A06\u202F395\u202F982,4\u00A0'), expected)
+  const integerCoordinates = coordinates(522148, 6405109)
+  t.truthy(integerCoordinates)
+  t.deepEqual(coordinates('522\u00A0148', '6\u00A0405\u00A0109'), integerCoordinates)
+})
+
+test('coordonnées numériques et décimales non groupées conservées', t => {
+  const expected = coordinates(517286.43, 6395982.4)
+  t.deepEqual(coordinates('517286.43', '6395982.4'), expected)
+  t.deepEqual(coordinates('517286,43', '6395982,4'), expected)
+  t.deepEqual(coordinates('5.1728643e5', '6.3959824E6'), expected)
+  t.deepEqual(coordinates('+0,4', '44,6'), [0.4, 44.6])
+  t.deepEqual(coordinates('.4', '44.6'), [0.4, 44.6])
+  t.deepEqual(coordinates('-0.2', '44.6'), [-0.2, 44.6])
+  t.deepEqual(coordinates('44.6', '0.4'), [0.4, 44.6])
+})
+
+test('coordonnées ambiguës, groupements mal formés et valeurs hors périmètre refusés', t => {
+  for (const x of ['51 7286.43', '5172 86.43', '517  286.43', '517\t286.43', '517\n286.43',
+    '517\u00A0\u202F286.43', '517 286, 43', '517 286.4 3', '517,286.43', '517.286,43',
+    '517_286.43', '0x1', '1 234e2', '', null, undefined, true, {}, [0.4], Number.NaN, Infinity]) {
+    t.is(coordinates(x, 44.6), null, `Valeur refusée : ${String(x)}`)
+    t.is(coordinates(x, 6395982.4), null, `Valeur Lambert refusée : ${String(x)}`)
+  }
+
+  for (const y of ['6 39 5982.4', '6 395 98.4', '6\t395\t982.4', '6  395 982.4', '6,395,982.4']) {
+    t.is(coordinates(517286.43, y), null, `Latitude refusée : ${y}`)
+  }
+
+  t.is(coordinates('517 286', '7 395 982'), null)
+  t.is(coordinates('0', '0'), null)
+  t.is(coordinates('0,4', '91'), null)
+})
+
+test('les coordonnées groupées restaurent le point et son exploitation sans changer leur identité', t => {
+  const input = fixture()
+  input.rives = {Contrat: [], Compteur: [], Lieu: [], Affectation: []}
+  input.epidropt['Points prélèvement'][0].values[3] = 517286.43
+  input.epidropt['Points prélèvement'][0].values[4] = 6395982.4
+  const expected = buildManifest(input)
+  t.is(expected.points.length, 1)
+  t.is(expected.exploitations.length, 1)
+  input.epidropt['Points prélèvement'][0].values[3] = '517\u00A0286,43'
+  input.epidropt['Points prélèvement'][0].values[4] = '6\u202F395\u202F982,4'
+  const actual = buildManifest(input)
+  t.deepEqual(actual.points, expected.points)
+  t.deepEqual(actual.exploitations, expected.exploitations)
+  t.deepEqual(actual.issues, [])
 })
 
 test('contacts nettoyés sans alias de connexion ni séparateur dans un numéro compteur', t => {

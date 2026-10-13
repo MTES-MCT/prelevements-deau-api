@@ -415,3 +415,192 @@ integration('une simulation d’un autre périmètre ne permet pas d’élargir 
   await t.throwsAsync(() => enableManifestLogins(prisma, manifest, {scope: 'all', apply: true, expectedReport}))
   t.is(await prisma.user.count({where: {id: {in: manifest.declarants.map(row => row.id)}, email: {not: null}}}), 0)
 })
+
+integration('une décision nominative permet le seul contact partagé confirmé, sans effets de simulation ni envoi', async t => {
+  const manifest = await imported(t, fixture())
+  const {id, emails: [email]} = manifest.declarants[0]
+  const other = await extraUser({declarant: {create: {preleveurType: 'IRRIGANT', contactEmails: {create: {email}}}}})
+  const before = await prisma.user.findUnique({where: {id}})
+  const contactsBefore = await prisma.declarantContactEmail.findMany({where: {email}, orderBy: {id: 'asc'}})
+  t.is((await preview(manifest)).entries[0].reason, 'CONTACT_PARTAGE')
+  const options = {reviewedSharedContactOwnerIds: [id]}
+  const expectedReport = await preview(manifest, options)
+  t.deepEqual(expectedReport.reviewedSharedContactOwnerIds, [id])
+  t.is(expectedReport.counts.enabled, 1)
+  t.deepEqual(await prisma.user.findUnique({where: {id}}), before)
+  t.is(await getAuthUserByEmail(email), null)
+  const applied = await enableManifestLogins(prisma, manifest, {scope: 'non-realimente', ...options, apply: true, expectedReport})
+  t.true(applied.applied)
+  t.is((await getAuthUserByEmail(email)).id, id)
+  t.deepEqual(await prisma.user.findUnique({where: {id: other.id}}), other)
+  t.deepEqual(await prisma.declarantContactEmail.findMany({where: {email}, orderBy: {id: 'asc'}}), contactsBefore)
+  const enabledUser = await prisma.user.findUnique({where: {id}})
+  t.is(enabledUser.accountCreationMailSentAt, null)
+  t.is(await prisma.authToken.count({where: {userId: id}}), 0)
+  t.is(await prisma.sessionToken.count({where: {userId: id}}), 0)
+  t.is(await prisma.passwordActivation.count({where: {userId: id}}), 0)
+  t.is(await prisma.passwordCredential.count({where: {userId: id}}), 0)
+  t.false((await prisma.declarant.findUnique({where: {userId: id}})).declarationNotificationsEnabled)
+  const replay = await apply(manifest, options)
+  t.is(replay.counts.enabled, 0)
+  t.is(replay.counts.unchanged, 1)
+  t.deepEqual(await prisma.user.findUnique({where: {id}}), enabledUser)
+})
+
+integration('la décision de contact partagé est limitée aux UUID retenus et non à tout le lot', async t => {
+  const first = fixture()
+  const second = fixture()
+  const manifest = await imported(t, merge(first, second))
+  for (const record of manifest.declarants) {
+    await extraUser({declarant: {create: {preleveurType: 'IRRIGANT', contactEmails: {create: {email: record.emails[0]}}}}})
+  }
+  const result = await apply(manifest, {reviewedSharedContactOwnerIds: [first.declarants[0].id]})
+  t.is(result.counts.enabled, 1)
+  t.is(result.counts.blocked, 1)
+  t.is((await getAuthUserByEmail(first.declarants[0].emails[0])).id, first.declarants[0].id)
+  t.is(await getAuthUserByEmail(second.declarants[0].emails[0]), null)
+  t.is(result.entries.find(row => row.id === second.declarants[0].id).reason, 'CONTACT_PARTAGE')
+})
+
+integration('les décisions de contact partagé exigent des UUID appartenant au périmètre choisi', async t => {
+  const ordinary = fixture()
+  const excluded = fixture({cacg: true})
+  const manifest = await imported(t, merge(ordinary, excluded))
+  const repeated = [ordinary.declarants[0].id, ordinary.declarants[0].id]
+  for (const reviewedSharedContactOwnerIds of [true, ['not-a-uuid'], [randomUUID()], [excluded.declarants[0].id], repeated]) {
+    await t.throwsAsync(() => preview(manifest, {reviewedSharedContactOwnerIds}))
+  }
+  t.is(await prisma.user.count({where: {id: {in: manifest.declarants.map(row => row.id)}, email: {not: null}}}), 0)
+})
+
+integration('la simulation lie la décision de partage, y compris sans effet sur les comptes éligibles', async t => {
+  const manifest = await imported(t, merge(fixture(), fixture()))
+  const ids = manifest.declarants.map(row => row.id)
+  const expectedReport = await preview(manifest, {reviewedSharedContactOwnerIds: ids})
+  const reversed = await preview(manifest, {reviewedSharedContactOwnerIds: [...ids].reverse()})
+  t.deepEqual(expectedReport.reviewedSharedContactOwnerIds, [...ids].sort())
+  t.is(reversed.planHash, expectedReport.planHash)
+  await t.throwsAsync(() => enableManifestLogins(prisma, manifest, {
+    scope: 'non-realimente', reviewedSharedContactOwnerIds: [ids[0]], apply: true, expectedReport
+  }))
+  const withoutDecision = await preview(manifest)
+  await t.throwsAsync(() => enableManifestLogins(prisma, manifest, {
+    scope: 'non-realimente', reviewedSharedContactOwnerIds: ids, apply: true, expectedReport: withoutDecision
+  }))
+  t.is(await prisma.user.count({where: {id: {in: ids}, email: {not: null}}}), 0)
+})
+
+integration('la décision de partage ne contourne aucune identité de connexion ni la preuve de contact importé', async t => {
+  for (const scenario of ['primary', 'alias', 'verification', 'registry', 'unproven']) {
+    const manifest = await imported(t, fixture())
+    const {id, emails: [email]} = manifest.declarants[0]
+    const other = await extraUser({declarant: {create: {preleveurType: 'IRRIGANT', contactEmails: {create: {email}}}}})
+    if (scenario === 'primary') await prisma.user.update({where: {id: other.id}, data: {email}})
+    if (scenario === 'alias') await prisma.userEmailAlias.create({data: {userId: other.id, email}})
+    if (scenario === 'verification') await reserveEmail(other.id, email)
+    if (scenario === 'registry') await prisma.userEmailIdentity.create({data: {email, primaryUserId: other.id}})
+    if (scenario === 'unproven') await prisma.declarantContactEmail.updateMany({where: {declarantUserId: id}, data: {sourceId: null}})
+    try {
+      const result = await apply(manifest, {reviewedSharedContactOwnerIds: [id]})
+      t.is(result.counts.blocked, 1, scenario)
+      t.is(result.counts.enabled, 0, scenario)
+      t.is(result.entries[0].reason, scenario === 'unproven' ? 'CONTACT_IMPORTE_NON_CONFIRME' : 'EMAIL_DEJA_ATTRIBUE_OU_RESERVE', scenario)
+      t.is((await prisma.user.findUnique({where: {id}})).email, null, scenario)
+    } finally {
+      if (scenario === 'registry') await prisma.userEmailIdentity.delete({where: {email}})
+    }
+  }
+})
+
+integration('la décision nominative ne suit pas une référence résolue vers un autre UUID', async t => {
+  const original = await imported(t, fixture())
+  const changed = structuredClone(original)
+  const selectedId = randomUUID()
+  changed.declarants[0].id = selectedId
+  changed.exploitations[0].declarantId = selectedId
+  await t.throwsAsync(() => preview(sign(changed), {reviewedSharedContactOwnerIds: [selectedId]}), {
+    message: 'SHARED_CONTACT_REVIEW_IDENTITY_CHANGED'
+  })
+  t.is((await prisma.user.findUnique({where: {id: original.declarants[0].id}})).email, null)
+  t.is(await prisma.user.count({where: {id: selectedId}}), 0)
+})
+
+integration('le partage source explicitement revu active uniquement le propriétaire nommé sans retirer l’autre source', async t => {
+  const email = `${randomUUID()}@example.test`
+  const selected = fixture({emails: [email]})
+  const other = fixture({emails: [email]})
+  const full = await imported(t, merge(selected, other))
+  const manifest = sign({...full, points: selected.points, exploitations: selected.exploitations})
+  const id = selected.declarants[0].id
+  const otherId = other.declarants[0].id
+  const before = await prisma.user.findUnique({where: {id}})
+  const otherBefore = await prisma.user.findUnique({where: {id: otherId}})
+  const contactsBefore = await prisma.declarantContactEmail.findMany({where: {email}, orderBy: {id: 'asc'}})
+  t.is(manifest.declarants.length, 2)
+  t.is((await preview(manifest)).entries[0].reason, 'EMAIL_SOURCE_PARTAGE')
+  const options = {reviewedSharedContactOwnerIds: [id]}
+  const expectedReport = await preview(manifest, options)
+  t.is(expectedReport.entries[0].reason, 'EMAIL_SOURCE_PARTAGE_REVU')
+  t.is(expectedReport.counts.selected, 1)
+  t.is(expectedReport.counts.enabled, 1)
+  t.deepEqual(await prisma.user.findUnique({where: {id}}), before)
+  t.is(await getAuthUserByEmail(email), null)
+  await enableManifestLogins(prisma, manifest, {scope: 'non-realimente', ...options, apply: true, expectedReport})
+  t.is((await getAuthUserByEmail(email.toUpperCase())).id, id)
+  t.deepEqual(await prisma.user.findUnique({where: {id: otherId}}), otherBefore)
+  t.deepEqual(await prisma.declarantContactEmail.findMany({where: {email}, orderBy: {id: 'asc'}}), contactsBefore)
+  const enabled = await prisma.user.findUnique({where: {id}})
+  t.is(enabled.accountCreationMailSentAt, null)
+  t.is(await prisma.authToken.count({where: {userId: id}}), 0)
+  t.is(await prisma.sessionToken.count({where: {userId: id}}), 0)
+  t.is(await prisma.passwordActivation.count({where: {userId: id}}), 0)
+  t.is(await prisma.passwordCredential.count({where: {userId: id}}), 0)
+  t.false((await prisma.declarant.findUnique({where: {userId: id}})).declarationNotificationsEnabled)
+  const replay = await apply(manifest, options)
+  t.is(replay.counts.enabled, 0)
+  t.is(replay.counts.unchanged, 1)
+  t.deepEqual(await prisma.user.findUnique({where: {id}}), enabled)
+  await prisma.user.update({where: {id}, data: {email: null}})
+  t.is((await apply(manifest, options)).entries[0].reason, 'COMPTE_DEJA_CONFIGURE')
+  t.is(await getAuthUserByEmail(email), null)
+})
+
+integration('un partage source revu ne débloque pas les autres comptes sélectionnés et refuse deux destinataires revus', async t => {
+  const email = `${randomUUID()}@example.test`
+  const manifest = await imported(t, merge(fixture({emails: [email]}), fixture({emails: [email]})))
+  const [first, second] = manifest.declarants
+  await t.throwsAsync(() => preview(manifest, {reviewedSharedContactOwnerIds: [first.id, second.id]}), {
+    message: 'SHARED_CONTACT_REVIEW_AMBIGUOUS'
+  })
+  t.is(await getAuthUserByEmail(email), null)
+  const result = await apply(manifest, {reviewedSharedContactOwnerIds: [first.id]})
+  t.is(result.counts.enabled, 1)
+  t.is(result.counts.blocked, 1)
+  t.is(result.entries.find(entry => entry.id === second.id).reason, 'EMAIL_SOURCE_PARTAGE')
+  t.is((await getAuthUserByEmail(email)).id, first.id)
+  t.is((await prisma.user.findUnique({where: {id: second.id}})).email, null)
+})
+
+integration('le partage source revu respecte les identités réservées et la provenance exacte du contact', async t => {
+  for (const scenario of ['primary', 'alias', 'verification', 'registry', 'unproven']) {
+    const email = `${randomUUID()}@example.test`
+    const selected = fixture({emails: [email]})
+    const other = fixture({cacg: true, emails: [email]})
+    const manifest = await imported(t, merge(selected, other))
+    const id = selected.declarants[0].id
+    const otherId = other.declarants[0].id
+    if (scenario === 'primary') await prisma.user.update({where: {id: otherId}, data: {email}})
+    if (scenario === 'alias') await prisma.userEmailAlias.create({data: {userId: otherId, email}})
+    if (scenario === 'verification') await reserveEmail(otherId, email)
+    if (scenario === 'registry') await prisma.userEmailIdentity.create({data: {email, primaryUserId: otherId}})
+    if (scenario === 'unproven') await prisma.declarantContactEmail.updateMany({where: {declarantUserId: id}, data: {sourceId: null}})
+    try {
+      const result = await apply(manifest, {reviewedSharedContactOwnerIds: [id]})
+      t.is(result.counts.enabled, 0, scenario)
+      t.is(result.entries[0].reason, scenario === 'unproven' ? 'CONTACT_IMPORTE_NON_CONFIRME' : 'EMAIL_DEJA_ATTRIBUE_OU_RESERVE', scenario)
+      t.is((await prisma.user.findUnique({where: {id}})).email, null, scenario)
+    } finally {
+      if (scenario === 'registry') await prisma.userEmailIdentity.delete({where: {email}})
+    }
+  }
+})

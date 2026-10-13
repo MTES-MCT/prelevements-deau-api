@@ -21,10 +21,20 @@ export function stableId(key) {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`
 }
 
+function coordinateNumber(value) {
+  if (typeof value === 'number') return value
+  const text = typeof value === 'string' ? value.trim() : ''
+  const decimal = /^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:e[+-]?\d+)?$/i
+  const grouped = /^[+-]?\d{1,3}(?:[ \u00A0\u202F]\d{3})+(?:[.,]\d+)?$/
+  // Only remove thousands separators after checking every group. Whitespace
+  // inside a malformed number must never silently move a point on the map.
+  if (!decimal.test(text) && !grouped.test(text)) return Number.NaN
+  return Number(text.replaceAll(/[ \u00A0\u202F]/g, '').replace(',', '.'))
+}
+
 export function coordinates(x, y) {
-  if (!clean(x) || !clean(y)) return null
-  const a = Number(clean(x).replace(',', '.'))
-  const b = Number(clean(y).replace(',', '.'))
+  const a = coordinateNumber(x)
+  const b = coordinateNumber(y)
   if (!Number.isFinite(a) || !Number.isFinite(b) || (a === 0 && b === 0)) return null
   const candidates = Math.abs(a) <= 180 && Math.abs(b) <= 90
     ? [[a, b], [b, a]]
@@ -245,9 +255,43 @@ function resolveSharedEmailDeclarant({name, owners, sources, declarants, previou
   return {...decision, ...identity, ...(!identity.reason ? {candidateKey: candidate.key} : {})}
 }
 
+function excludeHistoricalAep(epidropt) {
+  const isAep = row => usageCodes[normalized(row.values[3])] === '5' || clean(row.values[3]) === '5'
+  const excludedRows = epidropt.Exploitations.filter(isAep)
+  const retainedRows = epidropt.Exploitations.filter(row => !isAep(row))
+  // A point name is not a usage. Keep mixed-use points and uncertain non-AEP
+  // rows for the existing reconciliation checks, including numeric names.
+  const retainedNames = new Set(retainedRows.map(row => clean(row.values[1])))
+  const excludedPointNames = new Set(excludedRows.map(row => clean(row.values[1])).filter(name => name && !retainedNames.has(name)))
+  return {excludedRows, excludedPointNames, epidropt: {...epidropt,
+    Exploitations: retainedRows,
+    'Points prélèvement': epidropt['Points prélèvement'].filter(row => !excludedPointNames.has(clean(row.values[1])))}}
+}
+
+function referencedOwnerKeys(rows, {declarants, declarantSourcesByName, assignments, contracts, overrides}) {
+  const result = new Set()
+  for (const {values, declarantName} of rows) {
+    const references = emails(values[2])
+    const siret = clean(values[2]).replaceAll(/\s/g, '')
+    const override = overrides.exploitations?.[digest(values)]?.declarantKey
+    if (override) result.add(override)
+    for (const owner of declarants.values()) {
+      if (owner.emails.some(email => references.includes(email)) || (owner.data.siret && owner.data.siret === siret)) result.add(owner.key)
+    }
+    if (missingDeclarantReference(values[2]) && !missing(declarantName)) {
+      for (const source of declarantSourcesByName.get(normalized(declarantName)) ?? []) result.add(source.key)
+    }
+    const names = new Set(assignments.filter(item => item.pointName === clean(values[1]))
+      .map(item => normalized(contracts.get(item.contractId)?.name)).filter(Boolean))
+    for (const owner of declarants.values()) if (names.has(owner.fullName)) result.add(owner.key)
+  }
+  return result
+}
+
 export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, previousManifest, snapshot, resetExistingPointAndExploitationIdentities = false}) {
   const reviewed = applyReviewedInputs(epidropt, overrides.reviewedInputs)
-  epidropt = reviewed.epidropt
+  const historicalAep = excludeHistoricalAep(reviewed.epidropt)
+  epidropt = historicalAep.epidropt
   if (overrides.reviewedConsolidationPlan) snapshot = projectReviewedIdentities(snapshot, overrides.reviewedConsolidationPlan)
   if (resetExistingPointAndExploitationIdentities) {
     previousManifest = previousManifest ? {...previousManifest, points: [], exploitations: []} : undefined
@@ -257,6 +301,9 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
   const issues = []
   const reconciliation = []
   reconciliation.push(...reviewed.decisions.map(decision => ({kind: 'SOURCE_REVIEW', status: 'ACCEPTED', ...decision})))
+  reconciliation.push(...historicalAep.excludedRows.map(({row, values}) => ({kind: 'SOURCE_EXCLUSION', status: 'EXCLUDED',
+    reason: 'LEGACY_AEP_SOURCE_REPLACED', source: {sheet: 'Exploitations', row}, pointName: clean(values[1]),
+    pointExcluded: historicalAep.excludedPointNames.has(clean(values[1]))})))
   const issue = (code, source, details = {}) => issues.push({code, source, ...details})
   const points = new Map()
   const pointsByName = new Map()
@@ -725,6 +772,18 @@ export function buildManifest({epidropt, rives, overrides = {}, inputs = {}, pre
 
     const person = [...declarants.values()].find(d => d.id === [...owners][0])
     person.references.push({provider: 'rives-et-eaux', externalId: clientId})
+  }
+
+  // Do not create a profile only referenced by excluded AEP rows. Preserve all
+  // other existing import behaviour, including ambiguous non-AEP identities.
+  if (historicalAep.excludedRows.length) {
+    const ownerContext = {declarants, declarantSourcesByName, assignments, contracts, overrides}
+    const aepOwnerKeys = referencedOwnerKeys(historicalAep.excludedRows, ownerContext)
+    const retainedOwnerKeys = referencedOwnerKeys(epidropt.Exploitations, ownerContext)
+    const usedOwnerIds = new Set([...exploitations.values()].map(item => item.declarantId))
+    for (const [key, owner] of declarants) {
+      if (aepOwnerKeys.has(key) && !retainedOwnerKeys.has(key) && !usedOwnerIds.has(owner.id)) declarants.delete(key)
+    }
   }
 
   const manifest = {formatVersion: FORMAT_VERSION, scope: SCOPE, inputs, overridesHash: digest(overrides),

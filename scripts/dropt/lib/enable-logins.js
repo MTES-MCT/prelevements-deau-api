@@ -21,7 +21,7 @@ function sourceEmails(record) {
   }
 }
 
-async function inspectAccount(tx, record, id, {sharedSourceEmails, allowEmailAliases}) {
+async function inspectAccount(tx, record, id, {sharedSourceEmails, allowEmailAliases, reviewedSharedContactOwnerIds}) {
   // The primary-email trigger serializes claims across primary/alias/verification
   // tables and invalidates old tokens. Never bypass it or write its registry.
   await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${id}::uuid FOR UPDATE`
@@ -50,7 +50,8 @@ async function inspectAccount(tx, record, id, {sharedSourceEmails, allowEmailAli
   if (!emails.every(address => contacts.some(contact => contact.email.toLowerCase() === address
     && contact.sourceId === `dropt-epidropt:contact:${digest([record.key, address])}`))) return outcome('BLOCKED', 'CONTACT_IMPORTE_NON_CONFIRME')
   if (contacts.some(contact => contact.isPrimary && contact.email.toLowerCase() !== email)) return outcome('PRESERVED', 'CONTACT_PRINCIPAL_MODIFIE')
-  if (emails.some(address => sharedSourceEmails.has(address))) return outcome('BLOCKED', 'EMAIL_SOURCE_PARTAGE')
+  const sharedSource = emails.some(address => sharedSourceEmails.has(address))
+  if (sharedSource && !reviewedSharedContactOwnerIds.includes(id)) return outcome('BLOCKED', 'EMAIL_SOURCE_PARTAGE')
   const emailWhere = {in: emails}
   const [otherContact, primary, alias, verification, identity] = await Promise.all([
     tx.declarantContactEmail.findFirst({where: {email: emailWhere, declarantUserId: {not: id}}, select: {id: true}}),
@@ -59,19 +60,24 @@ async function inspectAccount(tx, record, id, {sharedSourceEmails, allowEmailAli
     tx.userEmailVerification.findFirst({where: {email: emailWhere, ...activeVerification}, select: {id: true}}),
     tx.userEmailIdentity.findFirst({where: {email: emailWhere, OR: [{primaryUserId: {not: null}}, {aliasUserId: {not: null}}, {verificationUserId: {not: null}}]}, select: {email: true}})
   ])
-  if (otherContact) return outcome('BLOCKED', 'CONTACT_PARTAGE')
+  if (otherContact && !reviewedSharedContactOwnerIds.includes(id)) return outcome('BLOCKED', 'CONTACT_PARTAGE')
   if (primary || alias || verification || identity) return outcome('BLOCKED', 'EMAIL_DEJA_ATTRIBUE_OU_RESERVE')
-  return {...outcome('ENABLE', emailAliases.length ? 'EMAILS_SOURCE_VALIDES' : 'EMAIL_SOURCE_UNIQUE', email), emailAliases}
+  return {...outcome('ENABLE', sharedSource ? 'EMAIL_SOURCE_PARTAGE_REVU' : otherContact ? 'CONTACT_PARTAGE_REVU' : emailAliases.length ? 'EMAILS_SOURCE_VALIDES' : 'EMAIL_SOURCE_UNIQUE', email), emailAliases}
 }
 
 // Explicit second import step: grant login only, never recreate the referential,
 // generate credentials/tokens, subscribe notifications or send invitations.
-export async function enableManifestLogins(client, manifest, {scope, allowEmailAliases = false, apply = false, expectedReport, transactionTimeoutSeconds} = {}) {
+export async function enableManifestLogins(client, manifest, {scope, allowEmailAliases = false, reviewedSharedContactOwnerIds = [], apply = false, expectedReport, transactionTimeoutSeconds} = {}) {
   validateManifest(manifest)
   if (!['non-realimente', 'all'].includes(scope)) throw new Error('Périmètre de connexion explicite obligatoire : non-realimente ou all.')
   if (typeof allowEmailAliases !== 'boolean') throw new Error('Autorisation des alias invalide.')
+  if (!Array.isArray(reviewedSharedContactOwnerIds) || reviewedSharedContactOwnerIds.some(id => typeof id !== 'string'
+    || !/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(id))
+    || new Set(reviewedSharedContactOwnerIds).size !== reviewedSharedContactOwnerIds.length) throw new Error('SHARED_CONTACT_REVIEW_INVALID')
+  reviewedSharedContactOwnerIds = [...reviewedSharedContactOwnerIds].sort()
   if ((apply && !expectedReport) || (expectedReport && (expectedReport.operation !== 'enable-logins'
     || expectedReport.scope !== scope || expectedReport.allowEmailAliases !== allowEmailAliases || expectedReport.manifestHash !== manifest.manifestHash
+    || digest(expectedReport.reviewedSharedContactOwnerIds ?? []) !== digest(reviewedSharedContactOwnerIds)
     || !expectedReport.complete || expectedReport.applied || !expectedReport.planHash))) throw new Error('Simulation de référence compatible obligatoire avant activation des connexions.')
 
   const points = new Map(manifest.points.map(point => [point.id, point]))
@@ -82,6 +88,7 @@ export async function enableManifestLogins(client, manifest, {scope, allowEmailA
   const selected = new Set(exploitations.map(record => record.declarantId))
   const records = manifest.declarants.filter(record => selected.has(record.id)).sort((a, b) => a.id.localeCompare(b.id))
   if (records.length !== selected.size || new Set(records.map(record => record.id)).size !== records.length) throw new Error('Identités du périmètre de connexion incohérentes.')
+  if (reviewedSharedContactOwnerIds.some(id => !selected.has(id))) throw new Error('SHARED_CONTACT_REVIEW_OUTSIDE_SCOPE')
   const emailOwners = new Map()
   for (const record of manifest.declarants) {
     for (const email of sourceEmails(record)) {
@@ -90,6 +97,11 @@ export async function enableManifestLogins(client, manifest, {scope, allowEmailA
     }
   }
   const shared = new Set([...emailOwners].filter(([, ids]) => ids.size > 1).map(([email]) => email))
+  // A reviewed owner may use a shared source contact, but one address must
+  // never authorize two accounts, even when both UUIDs were listed explicitly.
+  if ([...emailOwners.values()].some(ids => [...ids].filter(id => reviewedSharedContactOwnerIds.includes(id)).length > 1)) {
+    throw new Error('SHARED_CONTACT_REVIEW_AMBIGUOUS')
+  }
   let result
   const rollback = new Error('LOGIN_DRY_RUN_ROLLBACK')
   try {
@@ -100,6 +112,7 @@ export async function enableManifestLogins(client, manifest, {scope, allowEmailA
       const pointIdentities = new Map()
       for (const record of records) {
         const {id} = await referenceIdentity(tx, record, 'DECLARANT')
+        if (reviewedSharedContactOwnerIds.includes(record.id) && id !== record.id) throw new Error('SHARED_CONTACT_REVIEW_IDENTITY_CHANGED')
         if (resolvedIds.has(id)) throw new Error('Plusieurs identités source désignent le même compte ; rapprochement à vérifier.')
         resolvedIds.add(id)
         // Resolve the actual imported links as well: a stale manifest must not
@@ -117,7 +130,7 @@ export async function enableManifestLogins(client, manifest, {scope, allowEmailA
             && !matches[0].pointPrelevement.deletedAt && !matches[0].endDate
             && (scope === 'all' || !/CACG/i.test(matches[0].pointPrelevement.name))) links.push(matches[0].id)
         }
-        const entry = links.length ? await inspectAccount(tx, record, id, {sharedSourceEmails: shared, allowEmailAliases})
+        const entry = links.length ? await inspectAccount(tx, record, id, {sharedSourceEmails: shared, allowEmailAliases, reviewedSharedContactOwnerIds})
           : {id, status: 'BLOCKED', reason: 'EXPLOITATION_IMPORTEE_ACTIVE_NON_CONFIRMEE'}
         entries.push({...entry, sourceId: record.id, exploitationIds: links.sort()})
       }
@@ -127,8 +140,8 @@ export async function enableManifestLogins(client, manifest, {scope, allowEmailA
         counts[countKeys[entry.status]]++
         if (entry.status === 'ENABLE') counts.aliases += entry.emailAliases.length
       }
-      result = {operation: 'enable-logins', scope, allowEmailAliases, manifestHash: manifest.manifestHash, complete: true, applied: false, counts, entries}
-      result.planHash = digest({operation: result.operation, scope, allowEmailAliases, manifestHash: result.manifestHash, entries})
+      result = {operation: 'enable-logins', scope, allowEmailAliases, reviewedSharedContactOwnerIds, manifestHash: manifest.manifestHash, complete: true, applied: false, counts, entries}
+      result.planHash = digest({operation: result.operation, scope, allowEmailAliases, reviewedSharedContactOwnerIds, manifestHash: result.manifestHash, entries})
       if (expectedReport && result.planHash !== expectedReport.planHash) throw new Error('DRY_RUN_STATE_CHANGED : refaire la simulation des connexions.')
       for (const entry of entries.filter(item => item.status === 'ENABLE')) {
         const updated = await tx.user.updateMany({where: {id: entry.id, email: null, authVersion: 0, deletedAt: null}, data: {email: entry.email}})

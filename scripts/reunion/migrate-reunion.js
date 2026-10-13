@@ -73,6 +73,18 @@ function printUsage() {
 
 Usage:
   node scripts/reunion/migrate-reunion.js <snapshot|preflight|apply|verify|all> [options]
+  node scripts/reunion/migrate-reunion.js <access-prepare|access-apply|access-verify> [options]
+
+Accès ODS (étape distincte après import du référentiel) :
+  --access-file <fichier.ods>       Original privé conservé
+  --effective-date <YYYY-MM-DD>     Date stable pour les retraits et dates manquantes
+  --mappings <fichier.json>         Structures -> sourceId et politique administration
+  --target <testing|prod>          Cible explicite de l’étape accès
+  --target-env <fichier.env>        DATABASE_URL native avec TLS verify-full
+  --tunnel-port <port>             Tunnel local vers cette cible
+  --report <nouveau.json>          Rapport privé hors Git
+  --against-report <rapport.json>  Simulation avant --apply; application avant vérification
+  --backup-evidence <preuve.json>  Sauvegarde restaurée avant --apply
 
 Options communes:
   --manifest <fichier.jsonl>        Manifeste sécurisé à créer ou lire
@@ -2347,9 +2359,14 @@ async function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === SCRIPT_PATH) {
   try {
-    await main()
+    if (process.argv[2]?.startsWith('access-')) {
+      const {runAccessCommand} = await import('./lib/access-cli.js')
+      await runAccessCommand(process.argv.slice(2))
+    } else await main()
   } catch (error) {
-    console.error(`[reunion] ${error.message}`)
+    console.error(process.argv[2]?.startsWith('access-')
+      ? `[reunion-access] Échec de la commande (${error.name ?? 'Error'}). Vérifier les fichiers privés et les options.`
+      : `[reunion] ${error.message}`)
     process.exitCode = 1
   }
 }

@@ -1,5 +1,10 @@
 # Import Epidropt et Rives et Eaux
 
+L’import autonome des gestionnaires AEP, sans collecteur et avec saisie rapide,
+est documenté dans [AEP.md](AEP.md).
+Le [complément Loisirs](LOISIRS.md) applique la même saisie autonome aux lignes
+Loisirs du classeur epIdropt, en conservant les points et préleveurs historiques.
+
 Les originaux et les rapports restent privés dans `data/dropt/epidropt-2026/`, exclus de l’image Docker et du dépôt public. Vérifier aussi leur exclusion locale dans le sous-dépôt privé `data` avant toute copie. Le mail et ses pièces jointes contiennent notamment une clé d’API.
 
 Disposition attendue :
@@ -23,6 +28,14 @@ npm run import:dropt -- verify --target local --target-env .env.local
 `apply` est une simulation transactionnelle par défaut : sans `--apply`, aucune donnée n’est conservée. `prepare` conserve chaque manifeste par son empreinte dans `mapping/manifests/`. Les rapports sont horodatés. `--manifest`, `--input`, `--overrides` et `--report` permettent de choisir les fichiers ; `verify --against-report chemin.json` vérifie également les identités d’une précédente application.
 
 Pour un nouveau classeur, utiliser `prepare --epidropt-file chemin.xlsx --previous-manifest ancien-manifeste.json --snapshot export-testing.json`. L’export doit être complet et en lecture seule. Les anciennes identités sont conservées même lorsqu’une référence Rives est découverte ; les décisions et les candidats non validés figurent dans `reconciliation`. Le code comptage reste distinct du numéro de série. Son attribution automatique exige un code unique et un propriétaire unique dans toutes les lignes sources correspondantes.
+
+Les coordonnées textuelles acceptent les espaces, espaces insécables et espaces
+insécables fines entre groupes de trois chiffres (`522 148`, `6 405 109`), avec
+une décimale point ou virgule. Les groupements mal formés restent rejetés. Après
+une correction du parseur, régénérer un manifeste neuf et comparer les objets
+aux anciennes preuves : une récupération ciblée doit conserver les identités
+existantes et borner explicitement les points, exploitations et dépendances
+retenus. Les compteurs et répartitions non validées exigent leur propre examen.
 
 Si `mapping/dataset.json` existe, il sélectionne les sources et paramètres privés du jeu courant : `version: 1`, `files: {epidropt, rives, ...justificatifs}`, `overrides`, `previousManifest`, `snapshot`, `manifest`. Les chemins sont relatifs au dossier `--input` ; aucune dépendance à `/tmp` n’est nécessaire. `--dataset` permet d’en choisir un autre, les options explicites restent prioritaires. Les corrections arbitrées conservent les originaux, les empreintes des lignes et la cellule justificative ; une source modifiée exige une nouvelle revue.
 
@@ -84,7 +97,9 @@ Pour testing ou prod, remplacer les options de connexion comme indiqué plus hau
 
 Sur autorisation explicite, ajouter `--allow-email-aliases` aux **deux** commandes pour permettre la connexion avec toutes les adresses source d’un même préleveur. La première adresse normalisée du manifeste (tri alphabétique stable de l’import) devient l’adresse principale ; les suivantes deviennent des alias du même compte, sans créer de préleveur supplémentaire. Toutes doivent être confirmées et libres : un conflit sur une seule adresse bloque le compte entier. Un alias retiré manuellement ne sera pas rétabli au rejeu.
 
-Seuls les comptes vierges, actifs, avec un email source unique confirmé dans les contacts importés (ou des alias explicitement autorisés) sont activés. Les emails partagés, déjà attribués/réservés, les identités non confirmées et les sources ambiguës restent bloqués et détaillés dans le rapport. Les comptes déjà configurés et les retraits manuels d’email sont préservés. Les cas bloqués sont exclus, les autres peuvent être appliqués après examen de la simulation. Toute dérive du plan depuis cette simulation ou erreur SQL annule toute l’application. Le rejeu exige une nouvelle simulation et ne réactive pas les comptes modifiés manuellement.
+Seuls les comptes vierges, actifs, avec un email source unique confirmé dans les contacts importés (ou des alias explicitement autorisés) sont activés. Par défaut, les emails partagés, déjà attribués/réservés, les identités non confirmées et les sources ambiguës restent bloqués et détaillés dans le rapport. Les comptes déjà configurés et les retraits manuels d’email sont préservés. Les cas bloqués sont exclus, les autres peuvent être appliqués après examen de la simulation. Toute dérive du plan depuis cette simulation ou erreur SQL annule toute l’application. Le rejeu exige une nouvelle simulation et ne réactive pas les comptes modifiés manuellement.
+
+Sur autorisation explicite et nominative, l’option interne `reviewedSharedContactOwnerIds` de `enableManifestLogins` permet de retenir des UUID précis malgré un email partagé entre contacts ou lignes source. Elle n’est pas exposée par la CLI générale. Le manifeste conserve tous les préleveurs source pour rendre le partage visible ; la liste revue est liée au rapport et au hash du plan. Deux UUID revus pour une même adresse sont refusés. La provenance du contact et l’UUID effectivement résolu restent obligatoires, et aucune adresse principale, aucun alias, aucune vérification en cours ni revendication du registre d’identités ne peut être récupéré. Cette opération ciblée exige sa propre simulation, une sauvegarde vérifiée et un contrôle de connexion par `getAuthUserByEmail`, sans envoi de mail.
 
 ## Préparer la campagne de collecte
 
