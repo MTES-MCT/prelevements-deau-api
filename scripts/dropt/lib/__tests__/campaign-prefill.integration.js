@@ -123,7 +123,11 @@ integration('a new allocation prevents an unallocated serial proposal from overr
   const known = await prisma.compteur.create({data: {serialNumber: `Known-${randomUUID()}`}})
   await prisma.meterAllocation.create({data: {sourceId: randomUUID(), provider: 'test', scope: 'test', compteurId: known.id, exploitationId: f.exploitation.id}})
   const context = await getAuthorizedCampaignResponseContext(f.admin, f.campaign.id, f.response.id)
-  t.deepEqual(context.data.meters, [{compteurId: known.id, serialNumber: known.serialNumber, offSeason: {}, season: {}}])
+  t.deepEqual(context.data.meters, [{compteurId: known.id, serialNumber: known.serialNumber,
+    expectedSerialNumber: known.serialNumber, offSeason: {}, season: {}}])
+  const stored = await prisma.collectionResponse.findUniqueOrThrow({where: {id: f.response.id}})
+  t.is(stored.prefillData.meters[0].serialNumber, serial)
+  t.false(Object.hasOwn(stored.prefillData.meters[0], 'expectedSerialNumber'))
 })
 
 integration('source provenance stays on October 31 while exact November 1 observations take precedence over the proposal', async t => {
