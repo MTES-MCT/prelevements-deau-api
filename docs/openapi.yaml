@@ -1560,6 +1560,48 @@ paths:
               schema: {$ref: '#/components/schemas/CollectorPointCreationResult'}
         '409': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/points-prelevement/{pointId}/form:
+    parameters:
+      - $ref: '#/components/parameters/PointId'
+    get:
+      tags: [Declarants]
+      operationId: getCollectorPointForm
+      summary: Charger le formulaire du point et de ses comptages
+      description: >-
+        Session humaine d’un collecteur habilité. Ne retourne que les exploitations actives
+        déléguées au collecteur, leurs compteurs et les capacités de correction de numéro.
+        Les compteurs partagés, liés à un fournisseur ou à un historique ambigu sont en lecture seule.
+      responses:
+        '200':
+          description: Formulaire autorisé avec versions attendues
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointForm'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Declarants]
+      operationId: updateCollectorPointForm
+      summary: Modifier ensemble le point, les codes comptage et les numéros de compteur
+      description: >-
+        Modification atomique réservée au collecteur habilité sur les exploitations explicitement
+        désignées. Les champs absents sont conservés. Les valeurs nulles effacent les références
+        facultatives sans supprimer les compteurs. Un nouveau numéro crée uniquement une identité
+        et un rattachement désactivé sans dates ni pourcentage. Les droits et versions sont revérifiés
+        dans la transaction. Aucun rattachement implicite à un numéro existant, aucune modification
+        des index ou des répartitions. Une version périmée ou une collision renvoie 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectorPointFormChanges'}
+      responses:
+        '200':
+          description: Formulaire actualisé après enregistrement complet
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointForm'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
   /referentiels/communes:
     get:
       tags: [Referentiels]
@@ -3437,6 +3479,14 @@ components:
             properties:
               compteurId: {type: [string, 'null'], format: uuid}
               serialNumber: {type: [string, 'null'], maxLength: 100, description: Obligatoire à la soumission sauf numéro serveur déjà connu conservé si omis ou rejeu identique ancien ; facultatif en brouillon. Un numéro encore inconnu peut être complété sans collision et sans changer le compteurId.}
+              expectedSerialNumber:
+                type: [string, 'null']
+                maxLength: 100
+                description: >-
+                  Numéro courant renvoyé au chargement pour un compteur connu. Jeton de concurrence
+                  transitoire à restituer lors de la sauvegarde ou soumission, retiré avant stockage
+                  et calcul de l’empreinte de réponse. Un numéro ou un inventaire de compteurs périmé
+                  impose un rechargement (409), sans réécrire les réponses historiques.
               meterChanged: {type: boolean, description: Signalement informatif de changement de compteur ; absent équivaut à false. Obligatoire à true en cas d’index incohérents. Les périodes dont les index permettent une différence non négative restent calculées.}
               meterChangeReason: {type: string, maxLength: 2000, description: 'Motif nettoyé des espaces extérieurs, obligatoire et non vide à la soumission lorsque meterChanged vaut true. Facultatif en brouillon.'}
               offSeason: {$ref: '#/components/schemas/CollectionPeriod'}
@@ -5061,6 +5111,8 @@ components:
             comment: {type: [string, 'null']}
             depth: {type: [number, 'null'], exclusiveMinimum: 0}
             reservoirNominalVolume: {type: [number, 'null'], exclusiveMinimum: 0}
+            waterAgencyInternalIdentifier: {type: [string, 'null'], maxLength: 100}
+            waterBodyIdentifier: {type: [string, 'null'], maxLength: 100, description: Facultatif et réservé aux points d’origine PLAN_EAU.}
             isWaterBodyConnectedToStream: {type: [boolean, 'null']}
             isWaterBodyConnectedToGroundwater: {type: [boolean, 'null']}
         exploitation:
@@ -5075,7 +5127,121 @@ components:
             status: {type: string, enum: [EN_ACTIVITE, NON_RENSEIGNE]}
             startDate: {type: [string, 'null'], format: date}
             endDate: {type: [string, 'null'], format: date}
+            countingCode: {type: [string, 'null'], maxLength: 255, description: Code comptage Agence de l’eau de cette exploitation.}
+            meters:
+              type: array
+              maxItems: 100
+              items: {$ref: '#/components/schemas/CollectorNewMeter'}
         notifyAccountCreation: {type: boolean, default: false}
+    CollectorNewMeter:
+      type: object
+      additionalProperties: false
+      required: [serialNumber]
+      properties:
+        serialNumber: {type: string, minLength: 1, maxLength: 100, description: Numéro de série ; une ligne laissée vide doit être omise.}
+    CollectorMeterChanges:
+      type: object
+      additionalProperties: false
+      required: [id, expectedUpdatedAt, serialNumber]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        expectedUpdatedAt: {type: string, format: date-time}
+        serialNumber: {type: [string, 'null'], maxLength: 100, description: 'Correction ou effacement du numéro, sans remplacement physique.'}
+    CollectorPointFormChanges:
+      type: object
+      additionalProperties: false
+      required: [expectedUpdatedAt]
+      description: Au moins un champ du point ou une modification d’exploitation est nécessaire.
+      properties:
+        expectedUpdatedAt: {type: string, format: date-time}
+        point:
+          type: object
+          additionalProperties: false
+          properties:
+            usageName: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/usageName'}
+            coordinates: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/coordinates'}
+            communeCode: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/communeCode'}
+            communeName: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/communeName'}
+            geometryPrecision: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/geometryPrecision'}
+            waterBodyType: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/waterBodyType'}
+            nature: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/nature'}
+            withdrawalType: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/withdrawalType'}
+            locationDescription: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/locationDescription'}
+            comment: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/comment'}
+            commissioningDate: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/commissioningDate'}
+            depth: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/depth'}
+            waterAgencyInternalIdentifier: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/waterAgencyInternalIdentifier'}
+            reservoirNominalVolume: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/reservoirNominalVolume'}
+            waterBodyIdentifier: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/waterBodyIdentifier'}
+            isWaterBodyConnectedToStream: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/isWaterBodyConnectedToStream'}
+            isWaterBodyConnectedToGroundwater: {$ref: '#/components/schemas/CollectorPointCreation/properties/point/properties/isWaterBodyConnectedToGroundwater'}
+        exploitations:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [id]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              countingCode: {type: [string, 'null'], maxLength: 255}
+              expectedCountingCode: {type: [string, 'null'], maxLength: 255, description: Ancienne valeur requise lorsque countingCode est fourni.}
+              meters:
+                type: array
+                minItems: 1
+                maxItems: 100
+                items:
+                  oneOf:
+                    - $ref: '#/components/schemas/CollectorNewMeter'
+                    - $ref: '#/components/schemas/CollectorMeterChanges'
+    CollectorPointForm:
+      type: object
+      required: [point, exploitations]
+      properties:
+        point: {$ref: '#/components/schemas/PointPrelevement'}
+        exploitations:
+          type: array
+          items:
+            type: object
+            required: [id, countingCode, preleveur, usage, meters, capabilities]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              countingCode: {type: [string, 'null']}
+              preleveur:
+                type: object
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  socialReason: {type: [string, 'null']}
+                  firstName: {type: [string, 'null']}
+                  lastName: {type: [string, 'null']}
+              usage:
+                type: object
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  label: {type: string}
+              capabilities:
+                type: object
+                properties:
+                  canEditCountingCode: {type: boolean}
+                  canAddMeter: {type: boolean}
+              meters:
+                type: array
+                items:
+                  type: object
+                  required: [id, serialNumber, updatedAt, capabilities]
+                  properties:
+                    id: {$ref: '#/components/schemas/Uuid'}
+                    serialNumber: {type: [string, 'null']}
+                    updatedAt: {type: string, format: date-time}
+                    capabilities:
+                      type: object
+                      required: [canEditSerialNumber, reason]
+                      properties:
+                        canEditSerialNumber: {type: boolean}
+                        reason:
+                          oneOf:
+                            - {type: string, enum: [SHARED_METER, EXTERNAL_METER, AMBIGUOUS_HISTORY]}
+                            - {type: 'null'}
     CollectorPointCreationResult:
       type: object
       required: [point, preleveurId, exploitationId, notification, replayed]
