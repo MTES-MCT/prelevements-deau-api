@@ -1191,14 +1191,45 @@ paths:
       parameters:
         - in: query
           name: limit
-          schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
         - in: query
           name: cursor
           schema: {type: string, minLength: 1, maxLength: 512}
         - in: query
           name: includeMeta
-          description: Inclut les compteurs globaux et les droits de création. Peut être désactivé après la première page.
+          description: Inclut les droits de création et, si includeCounts vaut true, les compteurs. Peut être désactivé après la première page.
           schema: {type: boolean, default: true}
+        - in: query
+          name: includeCounts
+          description: >-
+            Inclut les compteurs globaux non filtrés lorsque includeMeta vaut true.
+            Désactiver pour afficher la page sans attendre le comptage de tout l'historique.
+            Les propriétés total et countsByKind sont alors absentes, et non égales à zéro.
+          schema: {type: boolean, default: true}
+        - in: query
+          name: kinds
+          description: Types séparés par des virgules. Absent sélectionne tous les types ; vide ne sélectionne aucun type.
+          schema: {type: string, examples: ['MANUAL,SPREADSHEET', TELEMETRY, '']}
+        - in: query
+          name: declarationCode
+          description: Numéro de déclaration ou code court numérique affiché pour une télérelève.
+          schema: {type: string, maxLength: 100}
+        - in: query
+          name: declarantName
+          description: Termes recherchés sans distinction de casse ni d'accents dans les identités visibles.
+          schema: {type: string, maxLength: 200}
+        - in: query
+          name: dateFrom
+          description: Début inclusif du chevauchement de période. Les intervalles METER utilisent les jours Europe/Paris.
+          schema: {type: string, format: date}
+        - in: query
+          name: dateTo
+          description: Fin inclusive du chevauchement de période. Les intervalles METER utilisent les jours Europe/Paris.
+          schema: {type: string, format: date}
+        - in: query
+          name: pointsToAssociateOnly
+          description: Limite aux fichiers traités dont au moins un point reste à associer.
+          schema: {type: boolean, default: false}
       responses:
         '200':
           description: Page du flux unifié
@@ -4982,7 +5013,7 @@ components:
               additionalProperties: false
               required: [limit, hasNext, nextCursor]
               properties:
-                limit: {type: integer, minimum: 1, maximum: 50}
+                limit: {type: integer, minimum: 1, maximum: 100}
                 hasNext: {type: boolean}
                 nextCursor: {type: [string, 'null']}
     Source:
