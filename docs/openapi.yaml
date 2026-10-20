@@ -4998,6 +4998,12 @@ components:
           additionalProperties: true
           required: [pagination]
           properties:
+            hasOtherDeclarations:
+              type: boolean
+              description: >-
+                Présent lorsque includeMeta vaut true. Indique l'existence d'au moins
+                une déclaration NONE ou sans type dans le périmètre autorisé complet,
+                indépendamment des filtres et de la page, sans imposer un comptage global.
             countsByKind:
               type: object
               additionalProperties: false
