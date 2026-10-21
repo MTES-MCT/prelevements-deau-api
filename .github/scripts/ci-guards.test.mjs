@@ -7,6 +7,23 @@ import {pathToFileURL} from 'node:url'
 import {validateReceipt, selectedFiles, inventory, compactV8Report, compactCoverage, hasCoveredApplicationCode} from './ci-shards.mjs'
 import {checkPrivateRegistry} from './check-private-registry.mjs'
 
+test('the container, package engines and CI use the same patched Node release', () => {
+  const version = readFileSync(new URL('../../.nvmrc', import.meta.url), 'utf8').trim()
+  const manifest = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+  const lockfile = JSON.parse(readFileSync(new URL('../../package-lock.json', import.meta.url), 'utf8'))
+  const dockerfile = readFileSync(new URL('../../deploy/Dockerfile', import.meta.url), 'utf8')
+  assert.match(version, /^\d+\.\d+\.\d+$/)
+  assert.ok(dockerfile.startsWith(`FROM node:${version}-alpine`))
+  assert.match(dockerfile.split('\n')[0], /@sha256:[a-f0-9]{64} AS base$/)
+  assert.equal(manifest.engines.node, `>= ${version} < 25`)
+  assert.deepEqual(lockfile.packages[''].engines, manifest.engines)
+  for (const file of ['quality.yml', 'default.yml', 'openapi-lint.yml', 'deploy-testing.yml', 'deploy-demo.yml', 'deploy-prod.yml']) {
+    const workflow = readFileSync(new URL(`../workflows/${file}`, import.meta.url), 'utf8')
+    assert.match(workflow, /node-version-file: (?:api\/)?\.nvmrc/)
+    assert.doesNotMatch(workflow, /^\s+node-version:/m)
+  }
+})
+
 function fixture() {
   const files = ['a.test.js', 'b.test.js', 'c.test.js']
   const expected = {files, selected: files.slice(0, 2), index: 0, commit: 'a'.repeat(40), lockHash: 'b'.repeat(64), checkoutRoot: '/workspace/api'}
