@@ -1,6 +1,7 @@
 {
   "name": "prelevement-deau-data",
   "type": "module",
+  "packageManager": "npm@11.19.1",
   "workspaces": [
     "packages/*"
   ],
@@ -26,6 +27,10 @@
     "lint": "xo",
     "lint:openapi": "spectral lint docs/openapi.yaml",
     "test": "ava",
+    "test:runtime": "node --test .github/scripts/runtime-policy.test.mjs",
+    "audit": "npm audit --include=dev --audit-level=low",
+    "audit:gate": "node scripts/security/audit-dependencies.js",
+    "audit:production": "npm audit --omit=dev --audit-level=low",
     "coverage": "c8 ava",
     "coverage:report": "c8 --reporter=html --reporter=text ava"
   },
@@ -39,8 +44,8 @@
     "@etalab/decoupage-administratif": "^5.2.0",
     "@fabnum/demarches-simplifiees": "workspace:*",
     "@fabnum/prelevements-deau-timeseries-parsers": "workspace:*",
-    "@sentry/node": "^10.38.0",
-    "@sentry/profiling-node": "^10.38.0",
+    "@sentry/node": "^10.74.0",
+    "@sentry/profiling-node": "^10.74.0",
     "bullmq": "^5.63.1",
     "content-disposition": "^0.5.4",
     "cors": "^2.8.5",
@@ -51,14 +56,14 @@
     "hash-object": "^5.0.1",
     "http-errors": "^2.0.0",
     "ioredis": "^5.8.1",
-    "joi": "^18.0.1",
+    "joi": "^18.2.9",
     "lodash-es": "^4.17.21",
-    "mjml": "^4.18.0",
-    "moment": "^2.30.1",
+    "mjml": "^5.4.1",
+    "moment": "^2.31.0",
     "mongodb": "~6.16.0",
-    "morgan": "^1.10.1",
-    "multer": "^2.0.2",
-    "nodemailer": "^7.0.11",
+    "morgan": "^1.12.1",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.0.13",
     "papaparse": "^5.5.3",
     "proj4": "^2.20.0",
     "wkx": "^0.5.0"
@@ -71,7 +76,7 @@
     "mongodb-memory-server": "^10.3.0",
     "nodemon": "^3.1.14",
     "supertest": "^7.1.4",
-    "xo": "^1.2.3"
+    "xo": "^2.0.2"
   },
   "c8": {
     "all": true,
@@ -89,6 +94,7 @@
     ]
   },
   "engines": {
-    "node": ">= 24 < 25"
+    "node": "24.22.1",
+    "npm": "11.19.1"
   }
 }

@@ -1,0 +1,18 @@
+[
+  {
+    "advisoryUrl": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+    "packageName": "braces",
+    "version": "3.0.3",
+    "developmentOnly": true,
+    "expiresAt": "2026-10-27T23:00:00Z",
+    "reason": "Exception temporaire explicitement autorisée pour Réunion le 22 octobre 2026 jusqu'à la fin du 27 octobre, heure de Paris, limitée à braces@3.0.3 en développement. Aucun correctif officiel disponible à cette date. Aucun paquet d'exécution ni autre avis de sécurité n'est exempté."
+  },
+  {
+    "advisoryUrl": "https://github.com/advisories/GHSA-hp3w-g68c-fv3c",
+    "packageName": "sprintf-js",
+    "version": "1.0.3",
+    "developmentOnly": true,
+    "expiresAt": "2026-10-27T23:00:00Z",
+    "reason": "Exception temporaire explicitement autorisée pour Réunion le 22 octobre 2026 jusqu'à la fin du 27 octobre, heure de Paris, limitée à sprintf-js@1.0.3 en développement. Dépendance d'AVA via supertap, js-yaml et argparse ; aucune version officielle corrigée disponible à cette date. Aucun paquet d'exécution ni autre avis de sécurité n'est exempté."
+  }
+]

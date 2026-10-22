@@ -6,10 +6,14 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
 
     services:
       redis:
@@ -22,19 +26,38 @@ jobs:
           --health-timeout 3s
           --health-retries 20
 
-    strategy:
-      matrix:
-        node-version: [24.x]
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        node-version: ${{ matrix.node-version }}
+        persist-credentials: false
+    - name: Use patched Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version-file: .nvmrc
         cache: 'npm'
+    - name: Use locked npm
+      run: npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
     - run: npm ci
+    - run: npm run test:runtime
     - run: npm run lint
     - run: npm test
       env:
         NODE_ENV: test
+        REDIS_URL: redis://127.0.0.1:6379/1
+    - name: Audit all dependencies with temporary development-only policy
+      if: ${{ !cancelled() }}
+      run: npm run audit:gate
+    - name: Audit production dependencies
+      if: ${{ !cancelled() }}
+      run: |
+        set -o pipefail
+        mkdir -p .artifacts/security
+        npm audit --omit=dev --audit-level=low --json | tee .artifacts/security/npm-audit-production.json
+    - name: Retain audit reports
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: dependency-audits
+        path: .artifacts/security/
+        if-no-files-found: warn
+        retention-days: 30

@@ -6,8 +6,8 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 
 ## Prérequis
 
-- Node.js version 24 LTS (24.11+)
-- `npm`
+- Node.js 24.22.1 (voir `.nvmrc`)
+- npm 11.19.1 (voir `packageManager` et `engines.npm`)
 - Docker version >= 28
 
 ## Installation
@@ -15,10 +15,18 @@ Consultez la [documentation de validation](packages/timeseries-parsers/docs/vali
 1. Installez les dépendances :
 
    ```bash
-   npm install
+   nvm install
+   npm install --global npm@11.19.1
+   npm ci
    ```
 
 2. Créez un fichier `.env` en utilisant `.env.example` comme modèle et complétez les variables obligatoires.
+
+### Contrôles de sécurité
+
+La CI utilise les mêmes versions exactes de Node et npm que Scalingo, puis exécute le lint, les tests et les audits complets et de production. `npm run audit:production` doit rester sans vulnérabilité.
+
+`npm run audit:gate` conserve le rapport brut dans `.artifacts/security/` et bloque toute vulnérabilité, à l'exception temporaire de `braces@3.0.3` et `sprintf-js@1.0.3`, uniquement en développement, autorisée jusqu'au 27 octobre 2026 inclus (heure de Paris). Les avis, versions et échéances exacts figurent dans `scripts/security/npm-audit-exceptions.json`. Une erreur réseau, une nouvelle faille, un chemin de production ou l'expiration rendent ce contrôle bloquant ; `npm run audit` reste l'audit brut, sans filtrage.
 
 ## Démarrage des conteneurs
 

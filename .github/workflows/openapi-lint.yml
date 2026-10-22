@@ -6,25 +6,40 @@ on:
       - 'docs/openapi.yaml'
       - '.spectral.yaml'
       - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - '.github/workflows/openapi-lint.yml'
   push:
     branches: [ main, improve-timeseries ]
     paths:
       - 'docs/openapi.yaml'
       - '.spectral.yaml'
       - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
+      - '.github/workflows/openapi-lint.yml'
+
+permissions:
+  contents: read
 
 jobs:
   spectral:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - name: Use Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '24'
+          persist-credentials: false
+      - name: Use patched Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
           cache: 'npm'
+      - name: Use locked npm
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
       - name: Install dependencies
         run: npm ci
+      - run: npm run test:runtime
       - name: Lint OpenAPI spec
         run: npm run lint:openapi
