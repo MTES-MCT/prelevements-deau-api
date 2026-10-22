@@ -42,23 +42,20 @@ test('extractMultiParamFile - structure des séries', async t => {
     for (const point of s.data) {
       t.truthy(point.date)
       if (s.frequency === '15 minutes') {
-        t.regex(point.time, /^\d{2}:\d{2}$/)
+        t.regex(point.time, /^\d{2}:\d{2}$/v)
       } else {
         t.is(point.time, undefined)
       }
 
       t.true(typeof point.value === 'number')
-      if (point.remark !== undefined) {
-        t.true(typeof point.remark === 'string')
-      }
+      t.true(point.remark === undefined || typeof point.remark === 'string')
     }
   }
   // Vérifie qu'au moins une série 15 minutes contient un champ time.
 
   const any15 = series.find(s => s.frequency === '15 minutes')
-  if (any15) {
-    t.truthy(any15.data[0].time)
-  }
+  t.truthy(any15)
+  t.truthy(any15.data[0].time)
 })
 
 test('extractMultiParamFile - incorrect file format', async t => {
@@ -315,7 +312,7 @@ test('extractMultiParamFile - hourly series have time field', async t => {
   for (const point of hourlySeries.data) {
     t.truthy(point.date, 'Chaque point doit avoir une date')
     t.truthy(point.time, 'Chaque point horaire doit avoir une heure')
-    t.regex(point.time, /^\d{2}:\d{2}$/, 'Le format de l\'heure doit être HH:mm')
+    t.regex(point.time, /^\d{2}:\d{2}$/v, 'Le format de l\'heure doit être HH:mm')
     t.true(typeof point.value === 'number', 'La valeur doit être un nombre')
   }
 })

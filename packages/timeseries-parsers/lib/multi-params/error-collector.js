@@ -27,7 +27,7 @@ export class ErrorCollector {
     const groupedErrors = []
 
     for (const [type, errors] of Object.entries(this.errors)) {
-      const rowNumbers = [...new Set(errors.map(e => Number.parseInt(e.cell.match(/\d+/)[0], 10)))].sort((a, b) => a - b)
+      const rowNumbers = [...new Set(errors.map(e => Number.parseInt(e.cell.match(/\d+/v)[0], 10)))].toSorted((a, b) => a - b)
 
       const ranges = []
       if (rowNumbers.length > 0) {

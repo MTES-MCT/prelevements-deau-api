@@ -42,8 +42,8 @@ const CHAR_TO_TRIM = ' -\'"'
 function sanitizeRaw(str) {
   return String(str)
     .trim() // Espaces extrêmes
-    .replace(/['’]+$/, '') // Apostrophes finales
-    .replaceAll(/\s{2,}/g, ' ') // Multiples espaces
+    .replace(/['’]+$/v, '') // Apostrophes finales
+    .replaceAll(/\s{2,}/gv, ' ') // Multiples espaces
     .replaceAll('\u00A0', ' ') // Espaces insécables
     .toLowerCase()
 }

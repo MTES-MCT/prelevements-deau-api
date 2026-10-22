@@ -78,8 +78,8 @@ const NORMALIZED_PERIODS = {
  */
 function extractPeriod(sheetName) {
   const sanitized = sheetName.replaceAll('\u00A0', ' ')
-  // Allow optional spaces and more word chars
-  const match = sanitized.match(/^data\s*\|\s*t\s*=\s*([\w\s]+)$/i)
+  // La casse ASCII du titre est libre, sans élargir \w aux équivalences Unicode.
+  const match = sanitized.match(/^[dD][aA][tT][aA]\s*\|\s*[tT]\s*=\s*([\w\s]+)$/v)
 
   if (!match) {
     return

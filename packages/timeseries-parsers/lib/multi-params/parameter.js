@@ -168,7 +168,7 @@ export function normalizeString(str) {
     // Remplacer les apostrophes typographiques par des apostrophes simples
     .replaceAll('’', '\'')
     // Supprimer les espaces consécutifs
-    .replaceAll(/\s+/g, ' ')
+    .replaceAll(/\s+/gv, ' ')
 }
 
 /**

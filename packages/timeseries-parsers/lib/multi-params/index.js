@@ -275,15 +275,15 @@ function safeParsePointPrelevement(value) {
 }
 
 function parsePointPrelevement(value) {
-  if (/^\d+\s\|\s(.+)$/.test(value)) {
+  if (/^\d+\s\|\s(.+)$/v.test(value)) {
     return Number(value.split(' | ')[0].trim())
   }
 
-  if (/^\d+\s-\s(.+)$/.test(value)) {
+  if (/^\d+\s-\s(.+)$/v.test(value)) {
     return Number(value.split(' - ')[0].trim())
   }
 
-  if (/^\d+\s(.+)$/.test(value)) {
+  if (/^\d+\s(.+)$/v.test(value)) {
     return Number(value.split(' ')[0].trim())
   }
 
@@ -294,7 +294,7 @@ function extractDataSheetNames(workbook) {
   return workbook.SheetNames
     .filter(name => name
       .trim()
-      .replaceAll(/\s+/g, ' ')
+      .replaceAll(/\s+/gv, ' ')
       .toLowerCase()
       .startsWith('data | t='))
 }

@@ -138,10 +138,10 @@ function validateHeaders(sheet, errors) {
     }
 
     // Nettoyer la chaîne : supprimer les retours à la ligne et les espaces supplémentaires
-    const cleanedCellValue = cellValue.replaceAll(/\s+/g, ' ').trim()
+    const cleanedCellValue = cellValue.replaceAll(/\s+/gv, ' ').trim()
 
     // Extraire le code et le nom à partir de la chaîne
-    const match = cleanedCellValue.match(/^(\d{3})\s+(.*)$/)
+    const match = cleanedCellValue.match(/^(\d{3})\s+(.*)$/v)
     if (!match) {
       errors.push({
         message: `L'en-tête de la colonne ${colNum + 1} n'est pas au format attendu. Trouvé : '${cellValue}'.`,

@@ -31,7 +31,7 @@ function normalizeString(str) {
     .replaceAll('μ', 'u') // Micro grec
     .replaceAll('°', '')
     // Supprimer les espaces superflus
-    .replaceAll(/\s+/g, ' ')
+    .replaceAll(/\s+/gv, ' ')
     .trim()
 }
 

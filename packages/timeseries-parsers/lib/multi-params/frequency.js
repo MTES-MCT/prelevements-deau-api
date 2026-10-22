@@ -15,14 +15,14 @@ export function normalizeOutputFrequency(freq) {
 
   // Normaliser les espaces pour gérer '1heure', '1 heure', etc.
   const normalized = freq.toLowerCase().trim()
-    .replace(/1\s*heure/, 'heure')
-    .replace(/1\s*minute/, 'minute')
-    .replace(/1\s*seconde/, 'seconde')
-    .replace(/1\s*jour/, 'jour')
-    .replace(/1\s*mois/, 'mois')
-    .replace(/1\s*trimestre/, 'trimestre')
-    .replace(/1\s*année/, 'année')
-    .replace(/15\s*m(in|n)?$/, '15 minutes')
+    .replace(/1\s*heure/v, 'heure')
+    .replace(/1\s*minute/v, 'minute')
+    .replace(/1\s*seconde/v, 'seconde')
+    .replace(/1\s*jour/v, 'jour')
+    .replace(/1\s*mois/v, 'mois')
+    .replace(/1\s*trimestre/v, 'trimestre')
+    .replace(/1\s*année/v, 'année')
+    .replace(/15\s*m(in|n)?$/v, '15 minutes')
 
   switch (normalized) {
     case '15 minutes': {

@@ -14,7 +14,7 @@ function parseArgValue(args, argName) {
   }
 
   const value = arg.split('=').slice(1).join('=')
-  return value.replaceAll(/^["']|["']$/g, '')
+  return value.replaceAll(/^["']|["']$/gv, '')
 }
 
 async function main() {

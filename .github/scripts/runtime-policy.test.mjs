@@ -10,7 +10,7 @@ const lockfile = JSON.parse(read('package-lock.json'))
 
 test('Scalingo, CI and local tooling require the same patched Node release', () => {
   const version = read('.nvmrc').trim()
-  assert.match(version, /^\d+\.\d+\.\d+$/)
+  assert.match(version, /^\d+\.\d+\.\d+$/v)
   assert.equal(manifest.engines.node, version)
   assert.equal(process.versions.node, version)
   assert.deepEqual(lockfile.packages[''].engines, manifest.engines)

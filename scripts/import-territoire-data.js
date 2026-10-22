@@ -1,6 +1,5 @@
 /* eslint-disable n/prefer-global/process */
 /* eslint-disable unicorn/no-process-exit */
-/* eslint-disable promise/prefer-await-to-then */
 /* eslint-disable no-await-in-loop */
 import 'dotenv/config'
 
@@ -70,7 +69,7 @@ function parseAutresNoms(autresNoms) {
     return null
   }
 
-  const cleanedStr = autresNoms.replaceAll(/[{}"]/g, '')
+  const cleanedStr = autresNoms.replaceAll(/[\{\}"]/gv, '')
   const result = [...new Set(cleanedStr.split(','))].join(', ')
 
   return result
@@ -230,7 +229,7 @@ async function importPreleveurs(preleveurs, codeTerritoire, nomTerritoire) {
     if (preleveur.email) {
       // Split sur | et , pour gérer les différents formats de séparation
       const emails = preleveur.email
-        .split(/[|,]/)
+        .split(/[\|,]/v)
         .map(email => email.trim().toLowerCase())
         .filter(email => email.length > 0)
       preleveur.email = emails[0] // Keep only the first email
@@ -576,7 +575,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
           dateStr = dateStr.split(' ')[0]
         }
 
-        return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : null
+        return /^\d{4}-\d{2}-\d{2}$/v.test(dateStr) ? dateStr : null
       })
       .filter(Boolean)
 
@@ -591,7 +590,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
     const maxDate = dateStrings.at(-1)
 
     // Extraire les dates uniques pour computed.integratedDays
-    const integratedDays = [...new Set(dateStrings)].sort()
+    const integratedDays = [...new Set(dateStrings)].toSorted()
 
     // Créer le document série avec l'ObjectId du point
     const seriesDoc = {
@@ -640,7 +639,7 @@ async function importSeries(csvData, codeTerritoire, nomTerritoire) {
       }
 
       // Valider le format de date
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/v
       if (!dateRegex.test(dateStr)) {
         console.warn(`Format de date invalide pour le résultat ${resultat.id_resultat}: ${resultat.date_heure_mesure}`)
         continue

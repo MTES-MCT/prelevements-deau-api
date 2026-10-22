@@ -47,7 +47,9 @@ class SyncProcess {
   constructor(demarcheNumber, {s3, onDossier}) {
     this.demarcheNumber = demarcheNumber
     this.s3 = s3
-    this.onDossier = onDossier || (() => {})
+    this.onDossier = onDossier || (() => {
+      // Aucun traitement additionnel demandé.
+    })
     this.database = null
     this.databaseChanges = 0
   }
@@ -127,7 +129,9 @@ class SyncProcess {
       for (const dossier of dossiers) {
         this.database.set(dossier.number, dossier)
       }
-    } catch {}
+    } catch {
+      // En l'absence de base, conserver la carte vide initialisée plus haut.
+    }
 
     this.databaseChanges = 0
   }
