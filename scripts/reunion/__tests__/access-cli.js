@@ -121,8 +121,8 @@ test('tunnels locally while authenticating TLS against the configured database e
 
 test('rejects unsupported targets, ambiguous tunnel ports, wrong database and TLS weakening', t => {
   const configuration = targetConfiguration('testing')
-  for (const target of [undefined, 'local', 'demo', 'production']) {
-    t.throws(() => accessConnectionOptions(configuration, {target, tunnelPort: '15432'}), {message: /cible explicite testing ou prod/u})
+  for (const target of [undefined, 'demo', 'production']) {
+    t.throws(() => accessConnectionOptions(configuration, {target, tunnelPort: '15432'}), {message: /cible explicite local, testing ou prod/u})
   }
 
   for (const tunnelPort of [undefined, '', '1023', '65536', '1e4', '15432x', '+15432']) {
@@ -171,4 +171,20 @@ test('the migration entrypoint dispatches access commands with sanitized errors 
   t.is(error.stdout, '')
   const {stdout} = await runFile(process.execPath, [entrypoint, '--help'])
   t.regex(stdout, /snapshot\|preflight\|apply\|verify\|all/u)
+})
+
+
+test('local access is restricted to the isolated reunion stack', t => {
+  const configuration = {APP_ENV: 'reunion-local', DATABASE_URL: 'postgresql://pe_reunion:synthetic@127.0.0.1:5433/pe_reunion'}
+  t.deepEqual(accessConnectionOptions(configuration, {target: 'local'}), {
+    host: '127.0.0.1', port: 5433, user: 'pe_reunion', password: 'synthetic', database: 'pe_reunion',
+    ssl: false, max: 2, connectionTimeoutMillis: 10_000
+  })
+  for (const replacement of [
+    {APP_ENV: 'testing'},
+    {DATABASE_URL: configuration.DATABASE_URL.replace('5433', '5432')},
+    {DATABASE_URL: configuration.DATABASE_URL.replace('127.0.0.1', 'example.test')},
+    {DATABASE_URL: `${configuration.DATABASE_URL}?options=-c%20search_path=other`}
+  ]) t.throws(() => accessConnectionOptions({...configuration, ...replacement}, {target: 'local'}))
+  t.throws(() => accessConnectionOptions(configuration, {target: 'local', tunnelPort: '5433'}))
 })
