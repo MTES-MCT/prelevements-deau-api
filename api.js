@@ -92,7 +92,7 @@ Sentry.setupExpressErrorHandler(app)
 app.use(errorHandler)
 
 // Start listening
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, process.env.API_BIND_HOST || undefined, () => {
   console.log(`Start listening on port ${PORT}`)
 })
 

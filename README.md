@@ -76,6 +76,14 @@ Les workers traitent notamment :
 
 La queue `process-declaration` est exposée pour le traitement des déclarations consommé par l'orchestration.
 
+Pour la reprise locale de La Réunion, suivre le [guide de migration](scripts/reunion/README.md).
+Il précise les configurations privées et les commandes pour l'API 5500, le
+front 3300 et l'orchestrateur 5501, avec Mailpit et sans planification de collecte.
+Le dépôt conserve le parcours de déclaration existant. La sélection des seuls
+dossiers historiques acceptés ne limite pas l'ouverture des deux formats futurs
+aux 244 préleveurs du référentiel. Cette recette ne vaut ni déploiement ni
+décommissionnement de l'ancienne instance.
+
 ## Scripts npm
 
 - `npm start` : démarre l'API Express.

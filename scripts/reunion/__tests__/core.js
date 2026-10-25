@@ -13,6 +13,7 @@ import {
   chooseDeclarantLoginEmail,
   deterministicStorageKey,
   groupManifestRecords,
+  migrationRecordGroups,
   legacyNestedString,
   manifestLines,
   normalizeUsageCodes,
@@ -469,4 +470,19 @@ test('préflight bloque une référence documentaire exploitation absente sauf e
   t.false(blocked.ok)
   t.true(blocked.issues.some(issue => issue.code === 'MISSING_EXPLOITATION_DOCUMENT_REFERENCE'))
   t.true(run([missingDocumentId]).ok)
+})
+
+
+test('skipping legacy grants preserves agent email reservations during declarant import', t => {
+  const email = 'synthetic-agent@example.test'
+  const declarant = {_id: 'source-declarant', email}
+  const {groups, sourceAgents} = migrationRecordGroups([
+    {kind: 'declarant', data: declarant},
+    {kind: 'agent', data: {email, roles: [{territoire: 'DEP-974', role: 'editor'}]}}
+  ], {skipAgents: true})
+  t.false(groups.has('agent'))
+  t.is(sourceAgents.length, 1)
+  t.is(groups.get('declarant')[0], declarant)
+  t.is(chooseDeclarantLoginEmail({declarant, sourceEmailOwners: new Map([[email, new Set(['source-declarant'])]]),
+    agentEmails: new Set(sourceAgents.map(agent => agent.email)), targetEmailOwners: new Map(), existingUserId: null}), null)
 })

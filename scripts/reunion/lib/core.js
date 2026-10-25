@@ -105,6 +105,11 @@ export function parseArguments(arguments_, defaults = {}) {
       continue
     }
 
+    if (argument === '--skip-agents') {
+      options.skipAgents = true
+      continue
+    }
+
     if (argument === '--skip-s3') {
       options.skipS3 = true
       continue
@@ -873,4 +878,12 @@ export function buildPreflight({groups, usageMap, pointOverrides, excludedDocume
       rules: rules.length
     }
   }
+}
+
+// Skipping legacy grants must not let a declarant take an agent's login address.
+export function migrationRecordGroups(records, {skipAgents = false} = {}) {
+  const groups = groupManifestRecords(records)
+  const sourceAgents = groups.get('agent') ?? []
+  if (skipAgents) groups.delete('agent')
+  return {groups, sourceAgents}
 }
