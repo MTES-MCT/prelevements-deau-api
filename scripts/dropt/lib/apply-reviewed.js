@@ -135,9 +135,14 @@ async function addExistingCollectorLinks(tx, before, imported, manifest) {
   // A successful import resolves both existing and newly created exploitations.
   // Only those manifest identities receive access, never neighbouring records
   // discovered while inspecting or consolidating a shared point.
-  const exploitationIds = unique(imported.objectIds.exploitations)
-  requireCondition(exploitationIds.every(id => manifest.exploitations.some(item => item.id === mappings.get(id)
+  const importedIds = unique(imported.objectIds.exploitations)
+  requireCondition(importedIds.every(id => manifest.exploitations.some(item => item.id === mappings.get(id)
     && item.sourceId?.startsWith(EXPLOITATION_PREFIX))), 'REVIEWED_COLLECTOR_EXPLOITATION_OUTSIDE_MANIFEST')
+  // AEP and leisure retain their autonomous collection policy. The database
+  // usage may have been corrected manually since this manifest was prepared.
+  const eligible = await tx.declarantPointPrelevement.findMany({where: {id: inIds(importedIds),
+    usage: {code: {notIn: ['5', '7']}}}, select: {id: true}})
+  const exploitationIds = unique(eligible.map(item => item.id))
   const existing = await tx.declarantCollecteurExploitation.findMany({where: {collecteurUserId: before.collector.id,
     exploitationId: inIds(exploitationIds)}, select: {exploitationId: true}})
   const addedExploitationIds = exploitationIds.filter(id => !existing.some(item => item.exploitationId === id))

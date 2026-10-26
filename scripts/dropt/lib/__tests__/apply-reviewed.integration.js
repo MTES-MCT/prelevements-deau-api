@@ -151,6 +151,42 @@ integration('les exploitations existantes hors du manifeste restent sans nouvell
   t.truthy(await prisma.declarantPointPrelevement.findUnique({where: {id: exploitations[1].id}}))
 })
 
+for (const usageCode of ['5', '7']) {
+  integration(`l’usage autonome ${usageCode} corrigé en base prime sur l’ancien manifeste irrigation, sans retirer les droits existants`, async t => {
+    const {initial, collectorId, exploitations} = await fixture({collector: true})
+    const usage = await prisma.sandreWaterUse.findUniqueOrThrow({where: {code: usageCode}})
+    await prisma.declarantPointPrelevement.updateMany({where: {id: inIds(initial.exploitations.map(item => item.id))}, data: {usageId: usage.id}})
+    const manifest = sign({...initial, exploitations: initial.exploitations.map(item => ({...item, previousUsageCode: '2'})),
+      reviewedConsolidationPlan: {scope: 'epidropt', merges: [], retirePointIds: [], retireExploitationIds: [], resetMeterIds: []}})
+    const originalLinks = await prisma.declarantCollecteurExploitation.findMany({where: {collecteurUserId: collectorId}})
+    const preview = await applyReviewedManifest(prisma, manifest, options)
+    t.true(preview.complete)
+    t.deepEqual(preview.collector.addedExploitationIds, [])
+    t.is(preview.changes.filter(change => change.field === 'usageId' && change.action === 'PRESERVED_MANUAL_VALUE').length, 2)
+    const applied = await applyReviewedManifest(prisma, manifest, {...options, apply: true, expectedReport: preview, backupEvidence: evidence(preview)})
+    t.true(applied.applied)
+    t.deepEqual(await prisma.declarantCollecteurExploitation.findMany({where: {collecteurUserId: collectorId}}), originalLinks)
+    t.is((await prisma.declarantPointPrelevement.findUnique({where: {id: exploitations[1].id}})).usageId, usage.id)
+    const replay = await applyReviewedManifest(prisma, manifest, options)
+    t.true(replay.complete)
+    t.deepEqual(replay.collector.addedExploitationIds, [])
+  })
+}
+
+integration('un ancien manifeste ne réintroduit pas un point archivé et annule les autres changements', async t => {
+  const {initial, points} = await fixture()
+  const archived = await prisma.pointPrelevement.update({where: {id: points[0].id}, data: {deletedAt: new Date()}})
+  const manifest = sign({...initial,
+    reviewedConsolidationPlan: {scope: 'epidropt', merges: [], retirePointIds: [], retireExploitationIds: [], resetMeterIds: []}})
+  const before = await inspect(manifest)
+  const preview = await applyReviewedManifest(prisma, manifest, options)
+  t.false(preview.complete)
+  t.false(preview.applied)
+  t.true(preview.executionIssues.some(issue => issue.code === 'POINT_SUPPRIME'))
+  t.deepEqual(await prisma.pointPrelevement.findUnique({where: {id: archived.id}}), archived)
+  t.is((await inspect(manifest)).stateHash, before.stateHash)
+})
+
 integration('une erreur d’import après consolidation annule également fusion, préleveur et point créés', async t => {
   const {manifest: valid} = await fixture()
   const manifest = sign({...valid, exploitations: valid.exploitations.map((item, index) => index === 2 ? {...item, usageCode: 'ABSENT-SYNTHETIC'} : item)})

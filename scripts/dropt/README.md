@@ -83,6 +83,8 @@ Un usage modifié dans la source n’est corrigé que si sa valeur en base corre
 
 Sans dates d’effet fiables, `resetMeterIds` peut lister les compteurs dont les dérivés doivent être supprimés, **sur autorisation explicite**. Le rapport chiffre ces suppressions ; les index, révisions et ingestions bruts restent intacts. Les flux concernés restent désactivés, sans recalcul ni rétroactivité. Le journal empêche une nouvelle suppression au rejeu ; toute nouvelle activation/publication exige une nouvelle revue. Les autres volumes sont conservés. Les liens manquants du collecteur déjà habilité sont ajoutés aux exploitations rapprochées du manifeste validé, existantes ou nouvelles, sans étendre les droits aux exploitations absentes du manifeste. Les autres collecteurs, les réglages de saisie rapide et la population des campagnes restent inchangés ; aucun compte ou campagne n’est créé.
 
+Les usages AEP et Loisirs restent autonomes : aucun nouveau lien collecteur n’est ajouté pour les codes 5 et 7 effectivement enregistrés en base après import, même si un ancien manifeste indique encore un usage d’irrigation. Les liens déjà présents sont conservés. Un point archivé reste protégé contre sa réintroduction par un ancien manifeste.
+
 ## Activer les connexions des préleveurs importés
 
 Après l’import du référentiel, `enable-logins` permet d’utiliser l’email source pour recevoir le lien de connexion habituel. Cette opération distincte ne modifie que les identifiants de connexion : aucun point, exploitation, compteur, volume, contact ou réglage de notification n’est réimporté. Aucun email ni mot de passe n’est envoyé ou généré.
