@@ -130,14 +130,17 @@ export async function inspectReviewedApplication(tx, manifest, consolidationPlan
 }
 
 async function addExistingCollectorLinks(tx, before, imported, manifest) {
-  const createdIds = imported.objectIds.exploitations.filter(id => !before.exploitationIds.includes(id))
   if (!before.collector.eligible) return {...before.collector, addedExploitationIds: []}
   const mappings = new Map(imported.mappings.exploitations.map(item => [item.id, item.manifestId]))
-  requireCondition(createdIds.every(id => manifest.exploitations.some(item => item.id === mappings.get(id)
-    && item.sourceId?.startsWith(EXPLOITATION_PREFIX))), 'REVIEWED_COLLECTOR_NEW_EXPLOITATION_OUTSIDE_MANIFEST')
+  // A successful import resolves both existing and newly created exploitations.
+  // Only those manifest identities receive access, never neighbouring records
+  // discovered while inspecting or consolidating a shared point.
+  const exploitationIds = unique(imported.objectIds.exploitations)
+  requireCondition(exploitationIds.every(id => manifest.exploitations.some(item => item.id === mappings.get(id)
+    && item.sourceId?.startsWith(EXPLOITATION_PREFIX))), 'REVIEWED_COLLECTOR_EXPLOITATION_OUTSIDE_MANIFEST')
   const existing = await tx.declarantCollecteurExploitation.findMany({where: {collecteurUserId: before.collector.id,
-    exploitationId: inIds(createdIds)}, select: {exploitationId: true}})
-  const addedExploitationIds = createdIds.filter(id => !existing.some(item => item.exploitationId === id)).sort()
+    exploitationId: inIds(exploitationIds)}, select: {exploitationId: true}})
+  const addedExploitationIds = exploitationIds.filter(id => !existing.some(item => item.exploitationId === id))
   if (addedExploitationIds.length) await tx.declarantCollecteurExploitation.createMany({data: addedExploitationIds.map(exploitationId => ({
     id: stableId(`dropt-reviewed:collector-link:${before.collector.id}:${exploitationId}`),
     collecteurUserId: before.collector.id, exploitationId

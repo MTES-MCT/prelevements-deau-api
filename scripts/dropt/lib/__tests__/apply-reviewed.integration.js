@@ -8,7 +8,7 @@ import {applyReviewedManifest, inspectReviewedApplication} from '../apply-review
 import {digest, stableId} from '../epidropt.js'
 
 const integration = process.env.DROPT_INTEGRATION_TESTS === '1' ? test.serial : test.skip
-const owned = {points: new Set(), users: new Set(), meters: new Set()}
+const owned = {points: new Set(), users: new Set(), meters: new Set(), campaigns: new Set()}
 const sign = ({manifestHash, ...payload}) => ({...payload, manifestHash: digest(payload)})
 const inIds = values => ({in: [...values]})
 const options = {target: 'disposable'}
@@ -25,6 +25,8 @@ test.before(() => {
 test.afterEach.always(async () => {
   if (!databaseValidated) return
   await prisma.$transaction(async tx => {
+    await tx.collectionResponse.deleteMany({where: {campaignId: inIds(owned.campaigns)}})
+    await tx.collectionCampaign.deleteMany({where: {id: inIds(owned.campaigns)}})
     await tx.meterAllocationVersion.deleteMany({where: {allocation: {compteurId: inIds(owned.meters)}}})
     await tx.meterAllocation.deleteMany({where: {compteurId: inIds(owned.meters)}})
     await tx.meterStream.deleteMany({where: {compteurId: inIds(owned.meters)}})
@@ -96,15 +98,24 @@ async function fixture({collector = false, resetMeter = false} = {}) {
 
 const inspect = manifest => inspectReviewedApplication(prisma, manifest, undefined, options)
 
-integration('simulation atomique puis application : fusion, nouvel import et droits du collecteur existant uniquement sur les nouvelles exploitations', async t => {
+integration('simulation atomique puis application : droits manquants sur les exploitations existantes et nouvelles du manifeste', async t => {
   const {manifest, initial, collectorId, points, exploitations} = await fixture({collector: true})
+  const otherCollectorId = randomUUID()
+  owned.users.add(otherCollectorId)
+  await prisma.user.create({data: {id: otherCollectorId, role: 'DECLARANT', declarant: {create: {declarantRole: 'COLLECTEUR'}}}})
+  const otherLink = await prisma.declarantCollecteurExploitation.create({data: {collecteurUserId: otherCollectorId, exploitationId: exploitations[1].id}})
+  await prisma.declarant.update({where: {userId: initial.declarants[0].id}, data: {quickDeclarationEnabled: false}})
+  await prisma.declarantPointPrelevement.update({where: {id: exploitations[0].id}, data: {excludeFromQuickDeclaration: true}})
+  const campaign = await prisma.collectionCampaign.create({data: {name: 'Synthetic preserved campaign', collecteurUserId: collectorId,
+    createdByUserId: collectorId, responses: {create: {exploitationId: exploitations[0].id, preleveurUserId: initial.declarants[0].id}}}, include: {responses: true}})
+  owned.campaigns.add(campaign.id)
   const before = await inspect(manifest)
   const oldUsers = await prisma.user.findMany({where: {id: inIds(initial.declarants.map(item => item.id))}, orderBy: {id: 'asc'}})
   const preview = await applyReviewedManifest(prisma, manifest, options)
   t.true(preview.complete, JSON.stringify(preview.executionIssues ?? preview.consolidation.blocked))
   t.false(preview.applied)
   t.is((await inspect(manifest)).stateHash, before.stateHash)
-  t.deepEqual(preview.collector.addedExploitationIds, [exploitations[2].id])
+  t.deepEqual(preview.collector.addedExploitationIds, [exploitations[1].id, exploitations[2].id].sort())
   const applied = await applyReviewedManifest(prisma, manifest, {...options, apply: true, expectedReport: preview, backupEvidence: evidence(preview)})
   t.true(applied.applied)
   t.true(applied.verification.complete)
@@ -113,13 +124,31 @@ integration('simulation atomique puis application : fusion, nouvel import et dro
   t.truthy((await prisma.pointPrelevement.findUnique({where: {id: points[1].id}})).deletedAt)
   t.is((await prisma.declarantPointPrelevement.findUnique({where: {id: exploitations[1].id}})).pointPrelevementId, points[0].id)
   const links = await prisma.declarantCollecteurExploitation.findMany({where: {collecteurUserId: collectorId}, orderBy: {exploitationId: 'asc'}})
-  t.deepEqual(links.map(item => item.exploitationId), [exploitations[0].id, exploitations[2].id].sort())
+  t.deepEqual(links.map(item => item.exploitationId), exploitations.map(item => item.id).sort())
+  t.deepEqual(await prisma.declarantCollecteurExploitation.findUnique({where: {id: otherLink.id}}), otherLink)
+  t.false((await prisma.declarant.findUnique({where: {userId: initial.declarants[0].id}})).quickDeclarationEnabled)
+  t.true((await prisma.declarantPointPrelevement.findUnique({where: {id: exploitations[0].id}})).excludeFromQuickDeclaration)
+  t.deepEqual(await prisma.collectionCampaign.findUnique({where: {id: campaign.id}, include: {responses: true}}), campaign)
   t.deepEqual(await prisma.user.findMany({where: {id: inIds(initial.declarants.map(item => item.id))}, orderBy: {id: 'asc'}}), oldUsers)
   const replay = await applyReviewedManifest(prisma, manifest, options)
   t.true(replay.complete)
   t.deepEqual(replay.changes, [])
   t.deepEqual(replay.collector.addedExploitationIds, [])
   t.is(replay.consolidation.counts.pointsMerged, 0)
+})
+
+integration('les exploitations existantes hors du manifeste restent sans nouvelle délégation', async t => {
+  const {initial, collectorId, exploitations} = await fixture({collector: true})
+  const manifest = sign({...initial, exploitations: [initial.exploitations[0]],
+    reviewedConsolidationPlan: {scope: 'epidropt', merges: [], retirePointIds: [], retireExploitationIds: [], resetMeterIds: []}})
+  const preview = await applyReviewedManifest(prisma, manifest, options)
+  t.true(preview.complete)
+  t.deepEqual(preview.collector.addedExploitationIds, [])
+  const applied = await applyReviewedManifest(prisma, manifest, {...options, apply: true, expectedReport: preview, backupEvidence: evidence(preview)})
+  t.true(applied.applied)
+  const links = await prisma.declarantCollecteurExploitation.findMany({where: {collecteurUserId: collectorId}})
+  t.deepEqual(links.map(item => item.exploitationId), [exploitations[0].id])
+  t.truthy(await prisma.declarantPointPrelevement.findUnique({where: {id: exploitations[1].id}}))
 })
 
 integration('une erreur d’import après consolidation annule également fusion, préleveur et point créés', async t => {
