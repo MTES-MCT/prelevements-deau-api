@@ -7,7 +7,7 @@ import {readFile} from 'node:fs/promises'
 import {GetObjectCommand} from '@aws-sdk/client-s3'
 import {loadEnv} from './lib/runtime.js'
 import {reservePrivateReport} from './lib/access-cli.js'
-import {historyTarget, historyPlanHash, HISTORY_TARGET_OPTIONS, historyTargetArguments} from './lib/history-target.js'
+import {historyTarget, historyPlanHash, bindHistoryTargetGlobals, HISTORY_TARGET_OPTIONS, historyTargetArguments} from './lib/history-target.js'
 import {HISTORICAL_TRANSFORMER_VERSION} from './lib/history-contract.js'
 
 const digest = value => createHash('sha256').update(value).digest('hex')
@@ -65,12 +65,15 @@ export async function verifyHistory({archive, prepared, targetEnv, reportFile, s
   const deleted = dn.deletedDossiers ?? JSON.parse(await verifiedBytes(path.join(root, 'dn/deletions.json'), (await readFile(path.join(root, 'dn/deletions.json.sha256'), 'utf8')).trim())).deleted
   const deletions = new Map(deleted.map(item => [item.number, item]))
   const sourceHash = historyPlanHash({preparationHash: digest(manifestBytes), deletions: deleted, sourcePolicy})
-  const {prisma, storage, close, attestation} = await historyTarget({target, configuration, sourceHash, targetEnv, ...targetOptions})
+  const context = await historyTarget({target, configuration, sourceHash, targetEnv, ...targetOptions})
+  const {prisma, storage, close, attestation} = context
   let output
+  let restoreGlobals
   const report = {version: 2, operation: 'history-verify', target, attestation, sourceHash, sourcePolicy, preparationHash: digest(manifestBytes), startedAt: new Date().toISOString(),
     counters: {materialized: 0, unassigned: 0, archiveOnly: 0, nonAcceptedArchived: 0, objectsVerified: 0, series: 0, values: 0, rejectedRows: 0, sampledValues: 0}, valuesByStatus: {}, seriesByStatus: {}, dossiers: [], failures: []}
   const objectsVerified = new Set()
   try {
+    restoreGlobals = bindHistoryTargetGlobals(context)
     output = await reservePrivateReport(reportFile)
     const {normalizeNativeValues} = await import('../../lib/declaration-importer/native.js')
     for (const row of manifest.dossiers) {
@@ -142,7 +145,7 @@ export async function verifyHistory({archive, prepared, targetEnv, reportFile, s
     await output.writeFile(`${JSON.stringify(report, null, 2)}\n`)
     console.log(JSON.stringify({stage: 'history-verified', ok: report.ok, failures: report.failures.length, ...report.counters}))
     return report
-  } finally { await output?.close(); await close(); await globalThis.prisma?.$disconnect(); await globalThis.pgPool?.end() }
+  } finally { try { restoreGlobals?.(); await output?.close() } finally { await close() } }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
   const {values} = parseArgs({options: {...HISTORY_TARGET_OPTIONS, archive: {type: 'string'}, prepared: {type: 'string'}, 'target-env': {type: 'string'}, report: {type: 'string'}, 'source-policy': {type: 'string', default: 'accepted'}}})

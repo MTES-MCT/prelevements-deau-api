@@ -8,7 +8,7 @@ import {readFile} from 'node:fs/promises'
 import {PutObjectCommand, HeadObjectCommand, GetObjectCommand} from '@aws-sdk/client-s3'
 import {loadEnv} from './lib/runtime.js'
 import {reservePrivateReport} from './lib/access-cli.js'
-import {historyTarget, historyPlanHash, assertHistorySimulation, HISTORY_TARGET_OPTIONS, historyTargetArguments} from './lib/history-target.js'
+import {historyTarget, historyPlanHash, assertHistorySimulation, bindHistoryTargetGlobals, HISTORY_TARGET_OPTIONS, historyTargetArguments} from './lib/history-target.js'
 import {HISTORICAL_TRANSFORMER_VERSION} from './lib/history-contract.js'
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -72,10 +72,12 @@ export async function importHistory({archive, prepared, targetEnv, reportFile, a
   const context = await historyTarget({target, configuration, sourceHash, targetEnv, apply, ...targetOptions})
   const {prisma, storage, close, attestation, expected, backup} = context
   let output
+  let restoreGlobals
   const report = {version: 2, operation: 'history-import', target, apply, sourcePolicy, sourceHash, attestation, backup,
     preparationHash: digest(bytes), startedAt: new Date().toISOString(),
     counters: {created: 0, updated: 0, unchanged: 0, materialized: 0, unassigned: 0, failed: 0, filesCreated: 0, filesUnchanged: 0, partsCreated: 0, partsUnchanged: 0, archiveOnly: 0, nonAcceptedArchived: 0}, dossiers: []}
   try {
+    if (apply) restoreGlobals = bindHistoryTargetGlobals(context)
     output = await reservePrivateReport(reportFile)
     const zone = await prisma.zone.findUniqueOrThrow({where: {type_code: {type: 'REGION', code: 'reg-04'}}})
     const declarants = await prisma.declarant.findMany({where: {sourceId: {startsWith: 'reunion:DEP-974:declarant:'}}, select: {userId: true, sourceId: true}})
@@ -157,9 +159,7 @@ export async function importHistory({archive, prepared, targetEnv, reportFile, a
     console.log(JSON.stringify({stage: 'history-import-complete', complete: report.complete, ...report.counters}))
     return report
   } finally {
-    await output?.close(); await close()
-    await globalThis.prisma?.$disconnect()
-    await globalThis.pgPool?.end()
+    try { restoreGlobals?.(); await output?.close() } finally { await close() }
   }
 }
 
