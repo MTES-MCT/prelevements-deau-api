@@ -14,10 +14,11 @@ Cette restriction concerne la migration du référentiel Mongo/S3. L’étape
 
 ## Répétition locale complète : historique DN et fichiers natifs
 
-Le parcours historique est séparé du migrateur de référentiel. Il ne possède
-aucune cible distante en écriture. Les destinations SQL/S3/Mongo sont celles
-fixes de la pile locale. Le clone PE production doit être restauré localement
-et les migrations Prisma appliquées avant les imports.
+Le parcours historique est séparé du migrateur de référentiel. La cible locale
+reste celle utilisée par défaut ; une reprise sur testing exige les attestations
+décrites plus bas. Pour la répétition locale, les destinations SQL/S3/Mongo sont
+celles fixes de la pile isolée. Le clone PE production doit être restauré
+localement et les migrations Prisma appliquées avant les imports.
 
 1. `prepare-local.js --output <archive>/runtime` produit des configurations
    privées pour API 5500, front 3300 et orchestrateur 5501. Les emails vont à
@@ -160,7 +161,45 @@ Le script vérifie les
 244 identités exactes du manifeste. Reprendre avec `--apply` et un rapport neuf,
 puis rejouer : 488 liens actifs sont attendus, sans doublon ni modification
 des autres formats ou droits, et le rejeu doit annoncer zéro changement.
-Cette étape ne possède aucune destination distante.
+La cible locale reste celle utilisée par défaut. Une reprise sur testing utilise
+les gardes décrits ci-dessous ; production reste refusée.
+
+### Reprise sur testing après recette locale
+
+Déployer les migrations API avant l'import historique. Conserver les décisions
+de la préparation validée : dossiers acceptés uniquement, dossiers supprimés à
+la demande des usagers et autres statuts en archive, identités non résolues sans
+attribution. Les scripts n'envoient aucun courriel et ne démarrent aucun worker.
+
+L'environnement cible doit conserver l'URL PostgreSQL native de testing avec
+`sslmode=verify-full` et son chemin de CA runtime. `--tunnel-port` change seulement
+le transport local : l'identité native, la CA et l'identité SQL connectée restent
+contrôlées. Le référentiel atteste `testing-documents` ; les historiques attestent
+séparément `testing-declarations`, dans la région fr-par avec versioning activé.
+
+1. Sauvegarder testing et vérifier une restauration isolée avant les migrations
+   et l'import. Contrôler la capacité disque pour les valeurs, index et WAL.
+2. Exécuter le référentiel avec `--target testing --tunnel-port <port>` et
+   `--skip-agents`, puis synchroniser les droits avec le registre ODS validé.
+3. Simuler chaque préparation historique immuable avec `import-history.js`,
+   `--target testing --tunnel-port <port>` et un rapport privé neuf hors Git.
+4. Appliquer avec les mêmes arguments, plus `--apply`,
+   `--against-report <simulation.json>`, `--confirm-target <confirmation>`
+   (valeur `attestation.confirmation` de la simulation) et
+   `--backup-evidence <preuve.json>`. La preuve suit le contrat des commandes
+   `access-apply` : sauvegarde de la même cible, empreinte vérifiée et restauration
+   réconciliée. L'état courant et les sources doivent encore correspondre à la
+   simulation ; sinon, refaire une simulation avant toute écriture.
+5. Vérifier chaque préparation avec `verify-history.js` et les mêmes options de
+   cible. Refaire une simulation puis une application de rejeu : aucun nouveau
+   dossier ni aucune mise à jour ne sont attendus.
+6. Exécuter `enable-local-formats.js` avec `--target testing`, les mêmes options
+   de transport, la date d'effet validée et une simulation neuve. L'application
+   exige également simulation, confirmation et preuve de sauvegarde. Rejouer
+   pour vérifier les 488 liens et zéro ajout, sans modification des autres droits.
+
+Les rapports incluent une empreinte liant cible, source et plan. Ne pas réutiliser
+les rapports de recette locale comme autorisation d'application sur testing.
 
 ### Limites de lecture des données natives
 

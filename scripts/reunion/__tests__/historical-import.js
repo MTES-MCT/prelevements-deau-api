@@ -8,7 +8,7 @@ import {extractManualHistory, localDate} from '../lib/manual-history.js'
 import {sanitizeArchive} from '../capture-legacy.js'
 import {reusePreparedDossier} from '../prepare-history.js'
 import {resolveHistoricalDeclarant} from '../lib/historical-declarants.js'
-import {importHistory} from '../import-history.js'
+import {importHistory, verifyHistoryAssets} from '../import-history.js'
 import {applyReviewedIdentity} from '../reconcile-history.js'
 import {localFormatScope} from '../enable-local-formats.js'
 import {manifestLines} from '../lib/core.js'
@@ -103,6 +103,21 @@ test('historical owner matching requires one exact legal name and corroborated p
 })
 test('historical import cannot include unaccepted DN dossiers', async t => {
   await t.throwsAsync(importHistory({sourcePolicy: 'all'}), {message: /Seuls les dossiers DN acceptés/})
+})
+test('historical asset preflight checks original and partition bytes before any application', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'reunion-assets-test-'))
+  t.teardown(() => rm(root, {recursive: true, force: true}))
+  await writeFile(path.join(root, 'original'), 'synthetic original')
+  await writeFile(path.join(root, 'partition'), 'synthetic partition')
+  const checksum = text => createHash('sha256').update(text).digest('hex')
+  const operations = [{disposition: 'created', row: {
+    fileLedger: [{archivePath: 'original', sha256: checksum('synthetic original')}],
+    parsedLedger: [{relativePath: 'partition', checksum: checksum('synthetic partition')}]
+  }}]
+  t.is(await verifyHistoryAssets(operations, root, root), 2)
+  await writeFile(path.join(root, 'partition'), 'modified')
+  await t.throwsAsync(verifyHistoryAssets(operations, root, root), {message: /Fichier préparé modifié/})
+  t.is(await verifyHistoryAssets([{...operations[0], disposition: 'ARCHIVE_ONLY_NON_ACCEPTED'}], root, root), 0)
 })
 test('reviewed identity changes only the declarant and rejects holds or stale associations', t => {
   const record = {externalId: '80149:1', files: [], payload: {declarantSourceId: null, type: 'reunion_multi_param', parsedFiles: [{checksum: 'synthetic'}]}}

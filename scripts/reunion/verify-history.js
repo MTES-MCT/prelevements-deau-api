@@ -3,10 +3,12 @@ import process from 'node:process'
 import path from 'node:path'
 import {parseArgs} from 'node:util'
 import {createHash} from 'node:crypto'
-import {readFile, writeFile} from 'node:fs/promises'
-import {S3Client, GetObjectCommand} from '@aws-sdk/client-s3'
-import {loadEnv, createTargetPrisma, attestTargetDatabase} from './lib/runtime.js'
-import {accessConnectionOptions} from './lib/access-cli.js'
+import {readFile} from 'node:fs/promises'
+import {GetObjectCommand} from '@aws-sdk/client-s3'
+import {loadEnv} from './lib/runtime.js'
+import {reservePrivateReport} from './lib/access-cli.js'
+import {historyTarget, historyPlanHash, HISTORY_TARGET_OPTIONS, historyTargetArguments} from './lib/history-target.js'
+import {HISTORICAL_TRANSFORMER_VERSION} from './lib/history-contract.js'
 
 const digest = value => createHash('sha256').update(value).digest('hex')
 const scaled = value => {
@@ -25,8 +27,8 @@ async function verifiedBytes(filename, checksum) {
   if (digest(bytes) !== checksum) throw new Error('Empreinte archive différente')
   return bytes
 }
-async function verifyObject(s3, storageKey, checksum) {
-  const response = await s3.send(new GetObjectCommand({Bucket: 'reunion-migration-declarations', Key: storageKey}))
+async function verifyObject(storage, storageKey, checksum) {
+  const response = await storage.client.send(new GetObjectCommand({Bucket: storage.bucket, Key: storageKey}))
   const hash = createHash('sha256')
   for await (const bytes of response.Body) hash.update(bytes)
   if (hash.digest('hex') !== checksum) throw new Error('Contenu S3 différent de l’archive')
@@ -50,27 +52,26 @@ async function verifySeries(prisma, chunk, expected) {
   return {ok, actual: stats._count._all, expected: expected.length, samples: samples.length, samplesMatch}
 }
 
-export async function verifyHistory({archive, prepared, targetEnv, reportFile, sourcePolicy = 'accepted'}) {
+export async function verifyHistory({archive, prepared, targetEnv, reportFile, sourcePolicy = 'accepted', target = 'local', ...targetOptions}) {
   if (sourcePolicy !== 'accepted') throw new Error('Seuls les dossiers DN acceptés peuvent être repris')
   process.umask(0o077)
   const configuration = await loadEnv(targetEnv)
-  accessConnectionOptions(configuration, {target: 'local'})
   Object.assign(process.env, configuration, {SENTRY_DSN: ''})
   const root = path.resolve(archive), preparation = path.resolve(prepared)
-  if (!preparation.startsWith(`${root}/`) || !path.resolve(reportFile).startsWith(`${root}/`)) throw new Error('Rapport privé dans archive obligatoire')
+  if (!preparation.startsWith(`${root}/`)) throw new Error('Préparation privée dans archive obligatoire')
   const manifestBytes = await verifiedBytes(path.join(preparation, 'manifest.json'), (await readFile(path.join(preparation, 'manifest.json.sha256'), 'utf8')).trim())
   const manifest = JSON.parse(manifestBytes)
   const dn = JSON.parse(await readFile(path.join(root, 'dn/manifest.json')))
   const deleted = dn.deletedDossiers ?? JSON.parse(await verifiedBytes(path.join(root, 'dn/deletions.json'), (await readFile(path.join(root, 'dn/deletions.json.sha256'), 'utf8')).trim())).deleted
   const deletions = new Map(deleted.map(item => [item.number, item]))
-  const {prisma, close} = await createTargetPrisma(configuration.DATABASE_URL)
-  const s3 = new S3Client({endpoint: 'http://127.0.0.1:9002', region: 'fr-par', forcePathStyle: true,
-    credentials: {accessKeyId: configuration.S3_ACCESS_KEY, secretAccessKey: configuration.S3_SECRET_KEY}})
-  const report = {version: 1, target: 'local', sourcePolicy, preparationHash: digest(manifestBytes), startedAt: new Date().toISOString(),
+  const sourceHash = historyPlanHash({preparationHash: digest(manifestBytes), deletions: deleted, sourcePolicy})
+  const {prisma, storage, close, attestation} = await historyTarget({target, configuration, sourceHash, targetEnv, ...targetOptions})
+  let output
+  const report = {version: 2, operation: 'history-verify', target, attestation, sourceHash, sourcePolicy, preparationHash: digest(manifestBytes), startedAt: new Date().toISOString(),
     counters: {materialized: 0, unassigned: 0, archiveOnly: 0, nonAcceptedArchived: 0, objectsVerified: 0, series: 0, values: 0, rejectedRows: 0, sampledValues: 0}, valuesByStatus: {}, seriesByStatus: {}, dossiers: [], failures: []}
   const objectsVerified = new Set()
   try {
-    await attestTargetDatabase(prisma, 'local')
+    output = await reservePrivateReport(reportFile)
     const {normalizeNativeValues} = await import('../../lib/declaration-importer/native.js')
     for (const row of manifest.dossiers) {
       const input = JSON.parse(await verifiedBytes(path.join(preparation, row.relativePath), row.sha256))
@@ -89,6 +90,12 @@ export async function verifyHistory({archive, prepared, targetEnv, reportFile, s
         continue
       }
       if (!record) { report.failures.push({externalId: row.externalId, code: 'MISSING_RECORD'}); continue }
+      input.payload.transformerVersion ??= HISTORICAL_TRANSFORMER_VERSION
+      if (deletions.has(row.number)) input.payload.sourceDeletion = deletions.get(row.number)
+      if (record.sourceHash !== digest(JSON.stringify({payload: input.payload, files: input.files})) || record.sourceStatus !== input.sourceStatus) {
+        report.failures.push({externalId: row.externalId, code: 'SOURCE_RECORD_DIFFER'})
+      }
+      if (!row.declarantSourceId && record.declarationId) report.failures.push({externalId: row.externalId, code: 'UNASSIGNED_RECORD_MATERIALIZED'})
       if (record.declarationId && row.declarantSourceId) {
         const declaration = await prisma.declaration.findUnique({where: {id: record.declarationId}, select: {declarant: {select: {sourceId: true}}, type: true}})
         if (declaration?.declarant.sourceId !== row.declarantSourceId || declaration.type !== input.payload.type) report.failures.push({externalId: row.externalId, code: 'DECLARATION_ASSOCIATION_DIFFER'})
@@ -99,11 +106,11 @@ export async function verifyHistory({archive, prepared, targetEnv, reportFile, s
       report.counters[record.declarationId ? 'materialized' : 'unassigned'] += 1
       const chunks = new Map((source?.chunks ?? []).map(chunk => [chunk.seriesKey, chunk]))
       for (const file of input.files.filter(file => file.available)) {
-        if (!objectsVerified.has(file.storageKey)) { await verifyObject(s3, file.storageKey, file.checksum); objectsVerified.add(file.storageKey) }
+        if (!objectsVerified.has(file.storageKey)) { await verifyObject(storage, file.storageKey, file.checksum); objectsVerified.add(file.storageKey) }
       }
       let actualValues = 0, expectedValues = 0
       for (const part of row.parsedLedger ?? []) {
-        if (!objectsVerified.has(part.storageKey)) { await verifyObject(s3, part.storageKey, part.checksum); objectsVerified.add(part.storageKey) }
+        if (!objectsVerified.has(part.storageKey)) { await verifyObject(storage, part.storageKey, part.checksum); objectsVerified.add(part.storageKey) }
         const parsed = JSON.parse(await verifiedBytes(path.join(preparation, part.relativePath), part.checksum))
         for (const series of parsed.data.series) {
           const normalized = normalizeNativeValues(series)
@@ -132,13 +139,13 @@ export async function verifyHistory({archive, prepared, targetEnv, reportFile, s
     }
     report.counters.objectsVerified = objectsVerified.size
     report.completedAt = new Date().toISOString(); report.ok = report.failures.length === 0
-    await writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`, {flag: 'wx', mode: 0o600})
+    await output.writeFile(`${JSON.stringify(report, null, 2)}\n`)
     console.log(JSON.stringify({stage: 'history-verified', ok: report.ok, failures: report.failures.length, ...report.counters}))
     return report
-  } finally { await close(); s3.destroy(); await globalThis.prisma?.$disconnect(); await globalThis.pgPool?.end() }
+  } finally { await output?.close(); await close(); await globalThis.prisma?.$disconnect(); await globalThis.pgPool?.end() }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
-  const {values} = parseArgs({options: {archive: {type: 'string'}, prepared: {type: 'string'}, 'target-env': {type: 'string'}, report: {type: 'string'}, 'source-policy': {type: 'string', default: 'accepted'}}})
-  verifyHistory({archive: values.archive, prepared: values.prepared, targetEnv: values['target-env'], reportFile: values.report, sourcePolicy: values['source-policy']})
+  const {values} = parseArgs({options: {...HISTORY_TARGET_OPTIONS, archive: {type: 'string'}, prepared: {type: 'string'}, 'target-env': {type: 'string'}, report: {type: 'string'}, 'source-policy': {type: 'string', default: 'accepted'}}})
+  verifyHistory({archive: values.archive, prepared: values.prepared, targetEnv: values['target-env'], reportFile: values.report, sourcePolicy: values['source-policy'], ...historyTargetArguments(values)})
     .then(report => { if (!report.ok) process.exitCode = 2 }).catch(error => { console.error(JSON.stringify({stage: 'history-verify-failed', error: error.name, code: error.code ?? null, message: error.message})); process.exitCode = 1 })
 }

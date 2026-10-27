@@ -3,6 +3,8 @@ import process from 'node:process'
 import {readFile} from 'node:fs/promises'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
+import {accessConnectionOptions} from './lib/access-cli.js'
+import {assertConnectedTestingAdminDatabase} from '../network/testing-database-target.js'
 
 import {
   EXCLUDED_DOCUMENT_ID,
@@ -31,6 +33,7 @@ import {
   parseUsageMap,
   partitionDocuments,
   partitionRules,
+  pointNameCollisions,
   readManifestContent,
   safeFilename,
   stableSourceId,
@@ -626,11 +629,8 @@ async function targetPreflight(prisma, inputs) {
     where: {OR: [{sourceId: {in: sourceIds}}, {name: {in: names}}]},
     select: {sourceId: true, name: true}
   })
-  const sourceIdByName = new Map(points.map(point => [point.nom, stableSourceId('point', point.id_point)]))
-  for (const targetPoint of targetPoints) {
-    if (sourceIdByName.get(targetPoint.name) !== targetPoint.sourceId) {
-      issues.push({code: 'TARGET_POINT_NAME_COLLISION', entity: 'point', legacyId: targetPoint.sourceId ?? 'existing'})
-    }
+  for (const targetPoint of pointNameCollisions(points, targetPoints)) {
+    issues.push({code: 'TARGET_POINT_NAME_COLLISION', entity: 'point', legacyId: targetPoint.sourceId ?? 'existing'})
   }
 
   const agentEmails = new Map()
@@ -2302,7 +2302,12 @@ async function main() {
         targetEnvironment,
         manifestSha256: inputs.manifestSha256
       })
-      await assertTargetCertificate(options.target, targetAttestation.sslRootCert)
+      const tunnelConnection = options.tunnelPort
+        ? accessConnectionOptions(targetEnvironment, {target: options.target, tunnelPort: options.tunnelPort})
+        : undefined
+      await assertTargetCertificate(options.target, tunnelConnection
+        ? path.resolve(import.meta.dirname, '../../deploy/certs/testing/postgres-ca.pem')
+        : targetAttestation.sslRootCert)
       const targetS3 = createS3Context(targetEnvironment, 'S3 cible')
       try {
         await assertVersionedS3Bucket(
@@ -2314,8 +2319,9 @@ async function main() {
         targetS3.client.destroy()
       }
 
-      targetContext = await createTargetPrisma(requireEnv(targetEnvironment, 'DATABASE_URL', 'base cible'))
+      targetContext = await createTargetPrisma(requireEnv(targetEnvironment, 'DATABASE_URL', 'base cible'), tunnelConnection)
       const database = await attestTargetDatabase(targetContext.prisma, options.target)
+      if (options.target === 'testing') await assertConnectedTestingAdminDatabase(targetContext.prisma)
       targetIdentity = {
         target: targetAttestation.target,
         appEnv: targetAttestation.appEnv,

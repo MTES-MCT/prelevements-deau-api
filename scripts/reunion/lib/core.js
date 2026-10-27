@@ -65,6 +65,7 @@ const OPTIONS_WITH_VALUE = new Set([
   '--source-s3-env',
   '--target',
   '--target-env',
+  '--tunnel-port',
   '--usage-map'
 ])
 
@@ -80,6 +81,7 @@ const OPTION_KEYS = new Map([
   ['--source-s3-env', 'sourceS3Env'],
   ['--target', 'target'],
   ['--target-env', 'targetEnv'],
+  ['--tunnel-port', 'tunnelPort'],
   ['--usage-map', 'usageMap']
 ])
 
@@ -288,6 +290,14 @@ export function stableSourceId(entity, legacyId, ownerId) {
   return ownerId === undefined || ownerId === null
     ? base
     : `${base}:owner:${String(ownerId)}`
+}
+
+export function pointNameCollisions(points, targetPoints) {
+  const sourceIds = new Set(points.map(point => stableSourceId('point', point.id_point)))
+  const names = new Set(points.map(point => point.nom))
+  // An immutable source identity permits refreshing a renamed point. A shared
+  // name alone must never attach or overwrite a point outside that reference.
+  return targetPoints.filter(point => !sourceIds.has(point.sourceId) && names.has(point.name))
 }
 
 export function rootUsageCode(value) {

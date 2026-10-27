@@ -21,11 +21,24 @@ import {
   parseUsageMap,
   partitionDocuments,
   partitionRules,
+  pointNameCollisions,
   readManifestContent,
   sha256,
   stableSourceId,
   toDateOnly
 } from '../lib/core.js'
+
+test('known point identities allow renamed or homonymous points while foreign name collisions remain blocked', t => {
+  const points = [{id_point: 1, nom: 'Nouveau nom'}, {id_point: 2, nom: 'Nouveau nom'}]
+  const targets = [
+    {sourceId: stableSourceId('point', 1), name: 'Ancien nom'},
+    {sourceId: stableSourceId('point', 2), name: 'Nouveau nom'},
+    {sourceId: 'other-territory:point:1', name: 'Nouveau nom'},
+    {sourceId: null, name: 'Nouveau nom'},
+    {sourceId: null, name: 'Autre point'}
+  ]
+  t.deepEqual(pointNameCollisions(points, targets), targets.slice(2, 4))
+})
 
 test('toDateOnly normalise un horodatage Mongo pour une colonne PostgreSQL date', t => {
   t.is(
