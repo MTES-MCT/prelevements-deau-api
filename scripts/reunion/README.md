@@ -49,6 +49,25 @@ une application de rejeu ; aucune ligne ne doit changer.
 
 ## Répétition locale complète : historique DN et fichiers natifs
 
+Le rapprochement natif identifie le PP par son `sourceId` exact, indépendamment
+des dates d’exploitation. Une exploitation n’est associée que si elle est unique
+pour ce préleveur et couvre toute la série. Sinon le PP reste identifié et un
+avertissement indique l’exploitation absente, ambiguë ou la période non couverte ;
+aucune exploitation ni autorisation n’est créée ou prolongée. Le statut interne
+`PENDING` est conservé dans ce cas : comme les autres données PE non rejetées,
+les mesures reconnues sont consultables sur le PP. Il ne constitue pas un nouveau
+circuit d’instruction. Les conflits de période d’un même PP/préleveur/dimension
+restent exclus, y compris avec une série `PENDING` déjà rattachée.
+La politique native existante `SKIP_NEW_CHUNK` écarte la série entière, même si
+le chevauchement est partiel ; toutes ses valeurs restent conservées. Cette
+reprise ne découpe pas une série et ne tranche pas entre valeurs contradictoires.
+
+Le rejeu d’une révision identique, ou d’un lot déjà reçu, peut réparer uniquement
+une association automatique encore absente. Il conserve les valeurs, UUID,
+empreintes et décisions manuelles. La reprise ciblée `repair-point-associations.js`
+utilise une liste explicite de séries sauvegardées, les mêmes attestations testing,
+une simulation et une preuve de restauration. Elle ne relance pas l’historique.
+
 Le parcours historique est séparé du migrateur de référentiel. La cible locale
 reste celle utilisée par défaut ; une reprise sur testing exige les attestations
 décrites plus bas. Pour la répétition locale, les destinations SQL/S3/Mongo sont
