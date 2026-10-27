@@ -48,6 +48,10 @@ integration('SQL simulation, targeted rename and replay preserve point UUID, oth
       t.is(replay.changes.length, 0)
       t.deepEqual(await client.pointPrelevement.findUnique({where: {id: point.id}}), after)
       t.is(replay.relationsHash, simulation.relationsHash)
+      await client.chunk.update({where: {id: source.chunks[0].id}, data: {updatedAt: new Date('2025-01-01T00:00:00Z')}})
+      const changedTimestamp = await synchronizePointIdentities(client, {points: [input]})
+      t.not(changedTimestamp.relationsHash, replay.relationsHash)
+      t.is(changedTimestamp.changes.length, 0)
       throw rollback
     })
   } catch (error) { if (error !== rollback) throw error }

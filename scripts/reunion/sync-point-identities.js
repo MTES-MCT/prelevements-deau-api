@@ -58,7 +58,7 @@ function unchangedPointFields(rows) {
 
 async function pointRelations(client, ids) {
   // No ChunkValue reads: stable point UUIDs retain all historical values.
-  return {
+  const relations = {
     zones: await client.pointPrelevementZone.findMany({where: {pointPrelevementId: {in: ids}}, orderBy: {id: 'asc'}}),
     exploitations: await client.declarantPointPrelevement.findMany({where: {pointPrelevementId: {in: ids}}, orderBy: {id: 'asc'}}),
     externalReferences: await client.externalReference.findMany({where: {pointPrelevementId: {in: ids}}, orderBy: {id: 'asc'}}),
@@ -67,6 +67,8 @@ async function pointRelations(client, ids) {
       preleveurUserId: true, contentHash: true, instructionStatus: true, updatedAt: true
     }})
   }
+  // Prisma returns Date objects; the legacy canonicalizer only handles JSON.
+  return JSON.parse(JSON.stringify(relations))
 }
 
 export function assertPointIdentityBackup(evidence, snapshot, plan, sourceHash) {
