@@ -35,6 +35,7 @@ import {
   partitionRules,
   pointNameCollisions,
   readManifestContent,
+  reunionPointIdentity,
   safeFilename,
   stableSourceId,
   toDate,
@@ -624,13 +625,20 @@ async function targetPreflight(prisma, inputs) {
   }
 
   const sourceIds = points.map(point => stableSourceId('point', point.id_point))
-  const names = points.map(point => point.nom)
+  const names = points.map(point => reunionPointIdentity(point).name)
   const targetPoints = await prisma.pointPrelevement.findMany({
     where: {OR: [{sourceId: {in: sourceIds}}, {name: {in: names}}]},
-    select: {sourceId: true, name: true}
+    select: {sourceId: true, name: true, identifiers: true}
   })
   for (const targetPoint of pointNameCollisions(points, targetPoints)) {
     issues.push({code: 'TARGET_POINT_NAME_COLLISION', entity: 'point', legacyId: targetPoint.sourceId ?? 'existing'})
+  }
+  for (const point of points) {
+    const current = targetPoints.find(row => row.sourceId === stableSourceId('point', point.id_point))
+    if (!current) continue
+    try { reunionPointIdentity(point, current.identifiers) } catch {
+      issues.push({code: 'TARGET_POINT_IDENTIFIER_CONFLICT', entity: 'point', legacyId: String(point.id_point)})
+    }
   }
 
   const agentEmails = new Map()
@@ -860,10 +868,9 @@ async function importDeclarants(prisma, inputs, maps, report) {
   }
 }
 
-function pointData(item, override) {
+function pointData(item, override, existingIdentifiers = {}) {
   return {
-    sourceId: stableSourceId('point', item.id_point),
-    name: item.nom,
+    ...reunionPointIdentity(item, existingIdentifiers),
     waterBodyType: getWaterBodyType(item, override),
     flowType: 'PRELEVEMENT',
     pointKind: 'PHYSIQUE',
@@ -915,9 +922,10 @@ async function importPoints({prisma, inputs, maps, report, zone}) {
       )
     }
 
-    const expected = pointData(item, override)
     const outcome = await prisma.$transaction(async transaction => {
-      const existing = await transaction.pointPrelevement.findUnique({where: {sourceId: expected.sourceId}})
+      const sourceId = stableSourceId('point', item.id_point)
+      const existing = await transaction.pointPrelevement.findUnique({where: {sourceId}})
+      const expected = pointData(item, override, existing?.identifiers)
       let point
       let changed = false
       let created = false
@@ -1623,6 +1631,7 @@ async function verifyPointSemantics(prisma, inputs, references) {
   const rows = await findManyBySourceIds(prisma.pointPrelevement, sourceIds, {
     sourceId: true,
     name: true,
+    identifiers: true,
     waterBodyType: true,
     flowType: true,
     pointKind: true,
@@ -1660,7 +1669,7 @@ async function verifyPointSemantics(prisma, inputs, references) {
       continue
     }
 
-    const point = pointData(item, inputs.pointOverrides.get(String(item.id_point)))
+    const point = pointData(item, inputs.pointOverrides.get(String(item.id_point)), row.identifiers)
     const expected = {
       ...prefixDataFields('point', point),
       coordinates: item.geom.coordinates.map(Number),

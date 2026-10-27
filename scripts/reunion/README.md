@@ -12,6 +12,41 @@ locales, y compris lors d'une simulation.
 Cette restriction concerne la migration du référentiel Mongo/S3. L’étape
 `access-*` ci-dessous accepte également une cible `prod` strictement attestée.
 
+## Noms et identifiants des points Réunion
+
+Les PP conservent le numéro métier `id_point` de l’ancienne application : le nom
+est `123 - Captage de ...` et `identifiers.REUNION` vaut la chaîne `123`.
+Le `sourceId` `reunion:DEP-974:point:123` et l’UUID PE restent stables. Les autres
+identifiants sont conservés ; un identifiant Réunion contradictoire ou un nom
+cible appartenant à un autre PP bloque la reprise. Le champ propre à l’Agence
+de l’eau n’est pas utilisé pour cet identifiant.
+
+Après une première migration, `sync-point-identities.js` reprend uniquement
+`name` et cette clé d’identifiant sur les 453 PP existants du manifeste intact.
+Il ne relance ni contacts/droits ODS, ni S3, ni historique ou calcul de volumes.
+Les autres champs et associations sont contrôlés avant/après ; le rejeu produit
+zéro modification. La version de cette règle est incluse dans l’empreinte du
+plan ciblé, indépendamment du contrat du manifeste source conservé.
+
+```sh
+node scripts/reunion/sync-point-identities.js \
+  --manifest <archive>/reference/manifest.jsonl \
+  --target testing --target-env <configuration-privée> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+Pour appliquer sur testing, ajouter `--apply`, `--confirm-target` issu de cette
+simulation, `--against-report` et `--backup-evidence`. Cette preuve doit porter
+sur une sauvegarde **actuelle et ciblée** des lignes `before` du rapport, avec
+restauration vérifiée en base locale jetable, et non sur le dump précédant
+l’import historique. Elle comporte `target`, `operation`, `sourceHash`,
+`planHash`, `rowsSha256`, `backupFile`, `backup.sha256`,
+`restore.success=true` et `restore.matchesPreflight=true`. Le fichier JSON
+sauvegardé contient `operation`, `sourceHash` et `rows`. Les empreintes, la
+simulation, l’état courant et la cible attestée doivent tous correspondre.
+Les fichiers restent privés hors Git. Refaire ensuite une simulation puis
+une application de rejeu ; aucune ligne ne doit changer.
+
 ## Répétition locale complète : historique DN et fichiers natifs
 
 Le parcours historique est séparé du migrateur de référentiel. La cible locale

@@ -23,21 +23,35 @@ import {
   partitionRules,
   pointNameCollisions,
   readManifestContent,
+  reunionPointIdentity,
   sha256,
   stableSourceId,
   toDateOnly
 } from '../lib/core.js'
 
-test('known point identities allow renamed or homonymous points while foreign name collisions remain blocked', t => {
+test('known point identities allow renaming while another point cannot own their final name', t => {
   const points = [{id_point: 1, nom: 'Nouveau nom'}, {id_point: 2, nom: 'Nouveau nom'}]
   const targets = [
     {sourceId: stableSourceId('point', 1), name: 'Ancien nom'},
-    {sourceId: stableSourceId('point', 2), name: 'Nouveau nom'},
-    {sourceId: 'other-territory:point:1', name: 'Nouveau nom'},
-    {sourceId: null, name: 'Nouveau nom'},
+    {sourceId: stableSourceId('point', 2), name: '2 - Nouveau nom'},
+    {sourceId: 'other-territory:point:1', name: '1 - Nouveau nom'},
+    {sourceId: null, name: '2 - Nouveau nom'},
+    {sourceId: stableSourceId('point', 2), name: '1 - Nouveau nom'},
     {sourceId: null, name: 'Autre point'}
   ]
-  t.deepEqual(pointNameCollisions(points, targets), targets.slice(2, 4))
+  t.deepEqual(pointNameCollisions(points, targets), targets.slice(2, 5))
+})
+
+test('Réunion point identity retains its business ID, stable source ID and other identifiers', t => {
+  const point = {id_point: 123, nom: 'Captage synthétique'}
+  const actual = reunionPointIdentity(point, {BSS: 'BSS-preserved', REUNION: 123})
+  t.deepEqual(actual, {sourceId: stableSourceId('point', 123), name: '123 - Captage synthétique',
+    identifiers: {BSS: 'BSS-preserved', REUNION: '123'}})
+  t.deepEqual(reunionPointIdentity(point, actual.identifiers), actual)
+  t.throws(() => reunionPointIdentity(point, {REUNION: '456'}), {message: /contradictoire/})
+  for (const id of [null, 0, -1, '123', 1.5]) t.throws(() => reunionPointIdentity({...point, id_point: id}))
+  t.throws(() => reunionPointIdentity({...point, nom: ' '}))
+  t.throws(() => reunionPointIdentity(point, []))
 })
 
 test('toDateOnly normalise un horodatage Mongo pour une colonne PostgreSQL date', t => {

@@ -292,12 +292,33 @@ export function stableSourceId(entity, legacyId, ownerId) {
     : `${base}:owner:${String(ownerId)}`
 }
 
+export function reunionPointIdentity(point, existingIdentifiers = {}) {
+  if (!Number.isSafeInteger(point.id_point) || point.id_point < 1
+    || typeof point.nom !== 'string' || !point.nom.trim()) {
+    throw new Error('Identifiant numérique et nom du point Réunion obligatoires')
+  }
+  if (!existingIdentifiers || Array.isArray(existingIdentifiers) || typeof existingIdentifiers !== 'object') {
+    throw new Error('Identifiants du point existant invalides')
+  }
+  const identifier = String(point.id_point)
+  if (Object.hasOwn(existingIdentifiers, 'REUNION') && String(existingIdentifiers.REUNION) !== identifier) {
+    throw new Error(`Identifiant Réunion contradictoire pour le point ${identifier}`)
+  }
+  return {
+    sourceId: stableSourceId('point', point.id_point),
+    name: `${identifier} - ${point.nom}`,
+    identifiers: {...existingIdentifiers, REUNION: identifier}
+  }
+}
+
 export function pointNameCollisions(points, targetPoints) {
-  const sourceIds = new Set(points.map(point => stableSourceId('point', point.id_point)))
-  const names = new Set(points.map(point => point.nom))
-  // An immutable source identity permits refreshing a renamed point. A shared
-  // name alone must never attach or overwrite a point outside that reference.
-  return targetPoints.filter(point => !sourceIds.has(point.sourceId) && names.has(point.name))
+  const sourceIdByName = new Map(points.map(point => {
+    const {sourceId, name} = reunionPointIdentity(point)
+    return [name, sourceId]
+  }))
+  // Names never establish identity, including between two migrated points.
+  return targetPoints.filter(point => sourceIdByName.has(point.name)
+    && sourceIdByName.get(point.name) !== point.sourceId)
 }
 
 export function rootUsageCode(value) {
