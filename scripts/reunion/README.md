@@ -62,6 +62,60 @@ La politique native existante `SKIP_NEW_CHUNK` écarte la série entière, même
 le chevauchement est partiel ; toutes ses valeurs restent conservées. Cette
 reprise ne découpe pas une série et ne tranche pas entre valeurs contradictoires.
 
+### Récupérer les valeurs sans conflit
+
+`recover-native-overlaps.js` reprend une liste explicite de séries Réunion DN
+acceptées, rejetées pour `OVERLAPPING_SERIES`. Un snapshot privé est produit avec
+`captureNativeOverlapSnapshot`, puis comparé à l'état courant en simulation.
+Chaque valeur est comparée aux publications existantes et à toute la cohorte :
+seuls les intervalles entièrement disjoints sont publiés. Les doublons strictement
+identiques sont conservés une fois ; les contradictions et périodes partiellement
+communes restent dans les originaux rejetés. Aucun intervalle n'est découpé.
+
+Les publications dérivées portent `nativeOverlapRecovery` avec le parent, son
+empreinte et la sélection ; chaque copie conserve l'UUID original dans sa
+provenance. Aucun original n'est effacé ou modifié. Les compteurs physiques
+incluent donc les copies : distinguer les valeurs conservées des valeurs visibles.
+
+L'application testing exige une simulation identique, la cible attestée et la
+preuve de restauration du snapshot actuel. Le rejeu est idempotent. Un réimport
+natif identique conserve les dérivés ; le changement ou retrait du parent les
+retire. Corriger d'abord les fichiers et rattachements justifiés, puis refaire le
+snapshot avant cette reprise. Aucun mode générique d'acceptation partielle n'est
+activé pour les autres imports.
+
+```sh
+node scripts/reunion/recover-native-overlaps.js \
+  --snapshot <snapshot-privé.json> --target testing \
+  --target-env <configuration-privée> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+### Restaurer un document réglementaire retrouvé
+
+`restore-document.js` complète un document explicitement manquant/exclu du
+manifeste source intact. Le PDF retrouvé doit avoir la taille exacte et
+l'empreinte attendue dans la clé de stockage historique. Le propriétaire, les
+exploitations et les règles proviennent uniquement de ce manifeste. L'objet S3
+est créé sans écrasement, puis relu et vérifié avant de créer le document et ses
+liens. Les valeurs des règles et les droits restent inchangés.
+
+```sh
+node scripts/reunion/restore-document.js \
+  --manifest <archive>/reference/manifest.jsonl \
+  --legacy-document-id <identifiant-source> --file <pdf-retrouvé> \
+  --source-url <url-publique-https> --target testing \
+  --target-env <configuration-privée> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+L'application exige les mêmes options de confirmation, simulation et sauvegarde
+restaurée que la reprise des identités, avec l'opération
+`reunion-recovered-document`. Conserver le PDF, sa provenance et les rapports hors
+Git. **Rejouer cette étape après toute nouvelle migration du référentiel** : son
+manifeste historique conserve volontairement l'exclusion initiale et peut remettre
+les liens de règles à vide. Cette étape les rétablit sans recréer le document.
+
 Le rejeu d’une révision identique, ou d’un lot déjà reçu, peut réparer uniquement
 une association automatique encore absente. Il conserve les valeurs, UUID,
 empreintes et décisions manuelles. La reprise ciblée `repair-point-associations.js`
