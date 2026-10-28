@@ -5075,6 +5075,16 @@ components:
             type: object
             additionalProperties: true
             properties:
+              pointPrelevement:
+                type: [object, 'null']
+                additionalProperties: true
+                description: Point de la série autorisée. Le détail source inclut sa position indépendamment du droit de rapprochement.
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  coordinates:
+                    oneOf:
+                      - {$ref: '#/components/schemas/GeoJsonPoint'}
+                      - type: 'null'
               metadata:
                 type: object
                 additionalProperties: true
