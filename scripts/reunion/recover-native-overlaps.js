@@ -199,6 +199,13 @@ export function assertNativeOverlapBackup(evidence, snapshot, {sourceHash, planH
   }
 }
 
+export function nativeOverlapTransactionOptions(apply = false) {
+  // A repeatable-read snapshot taken by the first dossier lock would miss an
+  // import committed before we acquire the point lock. APPLY re-reads only
+  // after acquiring every lock; previews retain one consistent read snapshot.
+  return {timeout: 1200000, isolationLevel: apply ? 'ReadCommitted' : 'RepeatableRead'}
+}
+
 export async function reconcileNativeOverlaps(client, {snapshot, apply = false, previousReport, validatePlan = () => {}, helpers}) {
   assertNativeOverlapSnapshot(snapshot)
   if (apply) {
@@ -292,7 +299,7 @@ export async function recoverNativeOverlaps({snapshotFile, targetEnv, reportFile
         }})
       if (apply) await persist({...base, ...result, complete: false, phase: 'PREPARED'})
       return result
-    }, {timeout: 1200000, isolationLevel: 'RepeatableRead'})
+    }, nativeOverlapTransactionOptions(apply))
     const report = {...base, ...result, complete: true, phase: apply ? 'COMMITTED' : 'SIMULATED'}
     await persist(report)
     console.log(JSON.stringify({operation: OVERLAP_OPERATION, target, apply, complete: true, publications: result.publications.length,

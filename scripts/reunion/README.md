@@ -58,6 +58,10 @@ aucune exploitation ni autorisation n’est créée ou prolongée. Le statut int
 les mesures reconnues sont consultables sur le PP. Il ne constitue pas un nouveau
 circuit d’instruction. Les conflits de période d’un même PP/préleveur/dimension
 restent exclus, y compris avec une série `PENDING` déjà rattachée.
+Un dossier importé par lots reste masqué tant que sa dernière partie n'est pas
+reçue. Les dates d'activité, totaux et caches sont rafraîchis au premier lot
+(retrait d'une publication précédente) puis au dernier (publication complète),
+sans rescanner l'historique à chaque fichier intermédiaire.
 La politique native existante `SKIP_NEW_CHUNK` écarte la série entière, même si
 le chevauchement est partiel ; toutes ses valeurs restent conservées. Cette
 reprise ne découpe pas une série et ne tranche pas entre valeurs contradictoires.
@@ -83,6 +87,9 @@ natif identique conserve les dérivés ; le changement ou retrait du parent les
 retire. Corriger d'abord les fichiers et rattachements justifiés, puis refaire le
 snapshot avant cette reprise. Aucun mode générique d'acceptation partielle n'est
 activé pour les autres imports.
+La simulation utilise un instantané cohérent ; l'application relit l'état et les
+valeurs concurrentes après acquisition des verrous, pour détecter aussi un import
+terminé pendant l'attente de ces verrous.
 
 ```sh
 node scripts/reunion/recover-native-overlaps.js \

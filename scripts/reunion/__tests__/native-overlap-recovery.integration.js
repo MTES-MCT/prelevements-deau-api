@@ -8,7 +8,7 @@ import {computeGlobalPointMatchingStatus} from '../../../lib/handlers/chunks.js'
 import {refreshMostRecentAvailableDateForDeclarantPoints} from '../../../lib/services/declaration-side-effects.js'
 import {refreshSourceDeclarantsLastDeclarationAt} from '../../../lib/models/declarant.js'
 import {refreshChunkValueSummaries} from '../../../lib/services/chunk-value-summaries.js'
-import {captureNativeOverlapSnapshot, reconcileNativeOverlaps, assertNativeOverlapSnapshot, OVERLAP_OPERATION} from '../recover-native-overlaps.js'
+import {captureNativeOverlapSnapshot, reconcileNativeOverlaps, assertNativeOverlapSnapshot, nativeOverlapTransactionOptions, OVERLAP_OPERATION} from '../recover-native-overlaps.js'
 
 const enabled = process.env.METER_INTEGRATION_TESTS === '1'
 const integration = enabled ? test.serial : test.skip
@@ -19,34 +19,48 @@ const batch = (index, id = 'native-recovery-replay') => ({index, total: 2, id})
 test.before(() => { if (enabled) requireDisposableDatabase() })
 test.after.always(async () => { await prisma.$disconnect(); await globalThis.pgPool?.end() })
 
-async function fixture(run) {
+async function fixture(run, {committed = false, withExploitation = true} = {}) {
   const rollback = new Error('ROLLBACK_NATIVE_OVERLAP_RECOVERY')
+  const created = {}
+  const work = async client => {
+    const owner = await client.user.create({data: {role: 'DECLARANT', declarant: {create: {preleveurType: 'GESTIONNAIRE_AEP'}}}})
+    created.ownerId = owner.id
+    const usage = await client.sandreWaterUse.findUniqueOrThrow({where: {code: '2'}})
+    const reference = String(randomInt(100000, 999999))
+    const point = await client.pointPrelevement.create({data: {name: 'Point synthétique', sourceId: `reunion:DEP-974:point:${reference}`,
+      identifiers: {REUNION: reference}, waterBodyType: 'SOUTERRAIN', flowType: 'PRELEVEMENT'}})
+    created.pointId = point.id
+    if (withExploitation) await client.declarantPointPrelevement.create({data: {declarantUserId: owner.id, pointPrelevementId: point.id, usageId: usage.id}})
+    const createDeclaration = () => client.declaration.create({data: {code: randomBytes(3).toString('hex'), importSourceId: `reunion:test:${randomBytes(6).toString('hex')}`,
+      type: 'reunion_multi_param', declarantUserId: owner.id, waterWithdrawalType: 'unknown', dataSourceType: 'SPREADSHEET'}})
+    const declaration = await createDeclaration(), baseline = await createDeclaration()
+    const series = (key, days) => ({nativeTemporal: true, seriesKey: key, pointPrelevement: point.sourceId,
+      parameter: 'volume', unit: 'm³', frequency: '1 day', valueType: 'cumulative', metadata: {timezone: 'Indian/Reunion'},
+      data: days.map(day => ({date: new Date(Date.UTC(2026, 0, day, 20)).toISOString(), periodStart: new Date(Date.UTC(2026, 0, day, 20)).toISOString(),
+        periodEnd: new Date(Date.UTC(2026, 0, day + 1, 20)).toISOString(), value: String(day * 100), metadata: {row: day + 12}}))})
+    const ingest = (items, part, target = declaration) => ingestDeclarationSeries({declarationId: target.id,
+      data: {nativeTemporal: true, conflictPolicy: 'SKIP_NEW_CHUNK', series: items, ...(part ? {batch: part} : {})},
+      processingMetadata: {provenance: 'DN', historicalAccepted: true}, logger, client})
+    const get = () => client.source.findUnique({where: {declarationId: declaration.id}, include: {chunks: {orderBy: {id: 'asc'}, include: {chunkValues: {orderBy: {id: 'asc'}}}}}})
+    await ingest([series('baseline', [1])], null, baseline)
+    const original = series('original', [1, 2, 3])
+    await ingest([original])
+    const parent = (await get()).chunks[0]
+    const snapshot = await captureNativeOverlapSnapshot(client, {chunkIds: [parent.id]})
+    const reconcile = options => reconcileNativeOverlaps(client, {snapshot, helpers, ...options})
+    await run({client, declaration, createDeclaration, series, ingest, get, original, parent, snapshot, reconcile})
+  }
+  if (committed) {
+    try { await work(prisma) } finally {
+      if (created.ownerId) await prisma.declaration.deleteMany({where: {declarantUserId: created.ownerId}})
+      if (created.pointId) await prisma.pointPrelevement.deleteMany({where: {id: created.pointId}})
+      if (created.ownerId) await prisma.user.deleteMany({where: {id: created.ownerId}})
+    }
+    return
+  }
   try {
     await prisma.$transaction(async client => {
-      const owner = await client.user.create({data: {role: 'DECLARANT', declarant: {create: {preleveurType: 'GESTIONNAIRE_AEP'}}}})
-      const usage = await client.sandreWaterUse.findUniqueOrThrow({where: {code: '2'}})
-      const reference = String(randomInt(100000, 999999))
-      const point = await client.pointPrelevement.create({data: {name: 'Point synthétique', sourceId: `reunion:DEP-974:point:${reference}`,
-        identifiers: {REUNION: reference}, waterBodyType: 'SOUTERRAIN', flowType: 'PRELEVEMENT'}})
-      await client.declarantPointPrelevement.create({data: {declarantUserId: owner.id, pointPrelevementId: point.id, usageId: usage.id}})
-      const createDeclaration = () => client.declaration.create({data: {code: randomBytes(3).toString('hex'), importSourceId: `reunion:test:${randomBytes(6).toString('hex')}`,
-        type: 'reunion_multi_param', declarantUserId: owner.id, waterWithdrawalType: 'unknown', dataSourceType: 'SPREADSHEET'}})
-      const declaration = await createDeclaration(), baseline = await createDeclaration()
-      const series = (key, days) => ({nativeTemporal: true, seriesKey: key, pointPrelevement: point.sourceId,
-        parameter: 'volume', unit: 'm³', frequency: '1 day', valueType: 'cumulative', metadata: {timezone: 'Indian/Reunion'},
-        data: days.map(day => ({date: new Date(Date.UTC(2026, 0, day, 20)).toISOString(), periodStart: new Date(Date.UTC(2026, 0, day, 20)).toISOString(),
-          periodEnd: new Date(Date.UTC(2026, 0, day + 1, 20)).toISOString(), value: String(day * 100), metadata: {row: day + 12}}))})
-      const ingest = (items, part, target = declaration) => ingestDeclarationSeries({declarationId: target.id,
-        data: {nativeTemporal: true, conflictPolicy: 'SKIP_NEW_CHUNK', series: items, ...(part ? {batch: part} : {})},
-        processingMetadata: {provenance: 'DN', historicalAccepted: true}, logger, client})
-      const get = () => client.source.findUnique({where: {declarationId: declaration.id}, include: {chunks: {orderBy: {id: 'asc'}, include: {chunkValues: {orderBy: {id: 'asc'}}}}}})
-      await ingest([series('baseline', [1])], null, baseline)
-      const original = series('original', [1, 2, 3])
-      await ingest([original])
-      const parent = (await get()).chunks[0]
-      const snapshot = await captureNativeOverlapSnapshot(client, {chunkIds: [parent.id]})
-      const reconcile = options => reconcileNativeOverlaps(client, {snapshot, helpers, ...options})
-      await run({client, declaration, createDeclaration, series, ingest, get, original, parent, snapshot, reconcile})
+      await work(client)
       throw rollback
     }, {timeout: 60000})
   } catch (error) { if (error !== rollback) throw error }
@@ -164,4 +178,27 @@ integration('reprise : rejeu natif par lots conserve les copies puis retire le p
     t.true(removed.chunks.find(row => row.id === childId).metadata.superseded)
     t.is(removed.metadata.totalWaterVolumeWithdrawn, 800)
   })
+})
+
+integration('reprise : un import concurrent terminé après le premier verrou invalide le plan avant toute copie', async t => {
+  await fixture(async ({client, declaration, createDeclaration, series, ingest, snapshot, reconcile, get}) => {
+    const preview = await reconcile({})
+    const other = await createDeclaration()
+    // Keep actor activity unchanged: only the newly published candidate can
+    // invalidate the preview, not an incidental declarant date update.
+    await client.declaration.update({where: {id: other.id}, data: {createdAt: new Date('2020-01-01T00:00:00Z')}})
+    const outcome = await t.throwsAsync(() => prisma.$transaction(async recovery => {
+      // The first lock establishes RR's stale snapshot. The other real native
+      // import then commits before recovery obtains the point/advisory locks.
+      await recovery.$queryRaw`SELECT id FROM "Declaration" WHERE id = ${declaration.id}::uuid FOR UPDATE`
+      await ingest([series('concurrent', [2])], null, other)
+      return reconcileNativeOverlaps(recovery, {snapshot, helpers, apply: true, validatePlan: plan => {
+        if (plan.planHash !== preview.planHash) throw new Error('CONCURRENT_PUBLICATION_DETECTED')
+        throw new Error('STALE_PLAN_WOULD_BE_APPLIED')
+      }})
+    }, nativeOverlapTransactionOptions(true)))
+    t.is(outcome.message, 'CONCURRENT_PUBLICATION_DETECTED')
+    t.is((await get()).chunks.length, 1)
+    t.is((await reconcile({})).publications[0].values.length, 1)
+  }, {committed: true, withExploitation: false})
 })
