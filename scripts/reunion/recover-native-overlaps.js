@@ -124,7 +124,7 @@ export function partitionNativeOverlapValues(chunk, values, candidates, {allowId
   return {accepted, excluded}
 }
 
-async function readCandidates(client, chunk, values) {
+export async function readCandidates(client, chunk, values) {
   const min = new Date(Math.min(...values.map(value => +new Date(value.periodStart))))
   const max = new Date(Math.max(...values.map(value => +new Date(value.periodEnd))))
   const rows = await client.chunkValue.findMany({where: {
@@ -137,7 +137,7 @@ async function readCandidates(client, chunk, values) {
   return clean(rows).sort((a, b) => a.id.localeCompare(b.id))
 }
 
-function createRecovery(chunk, values) {
+export function createRecovery(chunk, values) {
   const selectionHash = hash(values), id = nativeRecoveryId(OVERLAP_OPERATION, `${chunk.id}:${chunk.contentHash}:${selectionHash}`)
   const min = new Date(Math.min(...values.map(value => +new Date(value.periodStart))))
   const max = new Date(Math.max(...values.map(value => +new Date(value.periodEnd) - (+new Date(value.periodEnd) > +new Date(value.periodStart) ? 1 : 0))))

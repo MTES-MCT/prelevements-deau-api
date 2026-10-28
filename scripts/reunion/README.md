@@ -98,6 +98,42 @@ node scripts/reunion/recover-native-overlaps.js \
   --report <rapport-simulation-neuf.json>
 ```
 
+### Arbitrer des chevauchements selon le dernier dépôt DN
+
+Après arbitrage explicite, `resolve-latest-deposits.js` traite au plus huit
+paires précisément identifiées. La revue désigne chaque valeur, sa série et son
+dossier, avec la `dateDepot` originale et les empreintes de l'archive DN (ou du
+Mongo historique pour un dossier expiré). Le script relit ces preuves : une date
+d'import PE, de modification ou de décision administrative ne départage jamais
+les valeurs. Une égalité de dates ou un chevauchement supplémentaire bloque la
+reprise, y compris avec une copie déjà publiée.
+
+Créer le snapshot avec `captureLatestDepositSnapshot(client, {review})` une fois
+les autres imports terminés, puis simuler :
+
+```sh
+node scripts/reunion/resolve-latest-deposits.js \
+  --review <revue-privee.json> --snapshot <snapshot-prive.json> \
+  --target testing --target-env <configuration-privee> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+Le gagnant rejeté est publié dans une copie `nativeOverlapRecovery`. L'ancienne
+valeur visible est conservée intégralement dans `ChunkValueReplacement`, avec ses
+UUID, périodes, métadonnées, remarque et preuves, avant son retrait des valeurs
+publiées. Les périodes restent entières : aucun volume n'est estimé ni découpé.
+Les autres valeurs et copies sont conservées ; les bornes, totaux, résumés et
+dates de disponibilité sont recalculés. Une série vidée devient rejetée.
+
+L'application exige `--apply`, la confirmation de cible, `--against-report` et
+une sauvegarde actuelle restaurée et vérifiée, liée aux mêmes `sourceHash`,
+`planHash`, `rowsSha256` et empreinte du snapshot, pour l'opération
+`reunion-latest-dn-deposit`. Après application, refaire une simulation avec
+`--against-report` désignant le rapport appliqué, puis appliquer cette simulation :
+le rejeu ne réécrit rien. Le rejeu natif identique conserve aussi l'arbitrage. Une nouvelle révision du
+parent retire ses anciennes copies et nécessite une nouvelle revue. Les archives
+sources restent intactes. Cet outil ne change pas la politique des imports courants.
+
 ### Restaurer un document réglementaire retrouvé
 
 `restore-document.js` complète un document explicitement manquant/exclu du
