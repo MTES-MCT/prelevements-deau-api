@@ -218,6 +218,12 @@ fichiers 0600, hors Git. Les scripts de capture exigent un dossier sous
 `~/.local/share/preservonsleau/imports/`. Les imports historiques ne constituent
 ni une validation de décommissionnement ni une autorisation de déploiement.
 
+Les déclarations `reunion:DN:*` se rejouent avec `import-history.js` et la dernière
+préparation revue. Le rejeu générique de l'interface est refusé pour ces dossiers :
+il relirait les fichiers originaux et perdrait les corrections de rattachement,
+de période ou de cellules documentées dans la préparation. Les nouveaux dépôts
+PE conservent leur rejeu habituel.
+
 ### Démarrer la recette locale
 
 Après installation des dépendances, préparation des configurations privées,
