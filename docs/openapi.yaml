@@ -1404,6 +1404,20 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Source'}
         default: {$ref: '#/components/responses/Error'}
+  /sources/{sourceId}/chunks/{chunkId}/values:
+    get:
+      tags: [Sources]
+      operationId: listNativeValues
+      summary: Lire les valeurs originales par page
+      description: Réservé aux agents autorisés et au déclarant ou collecteur autorisé à lire cette déclaration. Décimales exactes sous forme de chaînes, périodes UTC natives, remarque et provenance conservées. Une mesure instantanée a un début égal à sa fin.
+      parameters:
+        - $ref: '#/components/parameters/SourceId'
+        - $ref: '#/components/parameters/ChunkId'
+        - {name: cursor, in: query, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: "Enveloppe success/data contenant data (valeurs), total et nextCursor (null en fin)"}
+        default: {$ref: '#/components/responses/Error'}
   /chunks/{chunkId}/instruction:
     post:
       tags: [Instruction]
@@ -2657,7 +2671,11 @@ paths:
       tags: [Series]
       operationId: getSeriesValues
       summary: Lire les valeurs d'une série
-      description: Retourne les valeurs temporelles d'une série.
+      description: >-
+        Retourne les valeurs temporelles d'une série. Pour une série native,
+        une demande dépassant 50 000 valeurs renvoie une erreur 400 avant
+        chargement complet. Réduire la période ou utiliser la lecture paginée
+        des valeurs du détail de déclaration. Les séries legacy sont inchangées.
       parameters:
         - $ref: '#/components/parameters/SeriesId'
       responses:
@@ -2936,6 +2954,15 @@ paths:
                   type: object
                   required: [conflictPolicy, series]
                   properties:
+                    nativeTemporal: {type: boolean, description: "Réservé aux formats Réunion natifs; conserve valeurs décimales et périodes originales."}
+                    batch:
+                      type: object
+                      description: Parties séquentielles de taille bornée. La source reste PROCESSING et non publiée jusqu'à la dernière partie. Rejeu identique idempotent; ordre ou contenu contradictoire retourne 409.
+                      required: [id, index, total]
+                      properties:
+                        id: {type: string, minLength: 16, maxLength: 128}
+                        index: {type: integer, minimum: 0}
+                        total: {type: integer, minimum: 1, maximum: 10000}
                     conflictPolicy: {type: string}
                     series:
                       type: array
@@ -5048,6 +5075,16 @@ components:
             type: object
             additionalProperties: true
             properties:
+              pointPrelevement:
+                type: [object, 'null']
+                additionalProperties: true
+                description: Point de la série autorisée. Le détail source inclut sa position indépendamment du droit de rapprochement.
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  coordinates:
+                    oneOf:
+                      - {$ref: '#/components/schemas/GeoJsonPoint'}
+                      - type: 'null'
               metadata:
                 type: object
                 additionalProperties: true

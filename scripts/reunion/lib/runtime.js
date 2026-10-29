@@ -464,8 +464,8 @@ export async function copyS3Object({
   return outcome
 }
 
-export async function createTargetPrisma(databaseUrl) {
-  const pool = new Pool(getPostgresConnectionOptions(databaseUrl, {max: 4}))
+export async function createTargetPrisma(databaseUrl, connectionOptions) {
+  const pool = new Pool(connectionOptions ?? getPostgresConnectionOptions(databaseUrl, {max: 4}))
   const prisma = new PrismaClient({adapter: new PrismaPg(pool)})
 
   return {

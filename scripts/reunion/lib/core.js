@@ -65,6 +65,7 @@ const OPTIONS_WITH_VALUE = new Set([
   '--source-s3-env',
   '--target',
   '--target-env',
+  '--tunnel-port',
   '--usage-map'
 ])
 
@@ -80,6 +81,7 @@ const OPTION_KEYS = new Map([
   ['--source-s3-env', 'sourceS3Env'],
   ['--target', 'target'],
   ['--target-env', 'targetEnv'],
+  ['--tunnel-port', 'tunnelPort'],
   ['--usage-map', 'usageMap']
 ])
 
@@ -102,6 +104,11 @@ export function parseArguments(arguments_, defaults = {}) {
 
     if (argument === '--apply') {
       options.apply = true
+      continue
+    }
+
+    if (argument === '--skip-agents') {
+      options.skipAgents = true
       continue
     }
 
@@ -283,6 +290,35 @@ export function stableSourceId(entity, legacyId, ownerId) {
   return ownerId === undefined || ownerId === null
     ? base
     : `${base}:owner:${String(ownerId)}`
+}
+
+export function reunionPointIdentity(point, existingIdentifiers = {}) {
+  if (!Number.isSafeInteger(point.id_point) || point.id_point < 1
+    || typeof point.nom !== 'string' || !point.nom.trim()) {
+    throw new Error('Identifiant numérique et nom du point Réunion obligatoires')
+  }
+  if (!existingIdentifiers || Array.isArray(existingIdentifiers) || typeof existingIdentifiers !== 'object') {
+    throw new Error('Identifiants du point existant invalides')
+  }
+  const identifier = String(point.id_point)
+  if (Object.hasOwn(existingIdentifiers, 'REUNION') && String(existingIdentifiers.REUNION) !== identifier) {
+    throw new Error(`Identifiant Réunion contradictoire pour le point ${identifier}`)
+  }
+  return {
+    sourceId: stableSourceId('point', point.id_point),
+    name: `${identifier} - ${point.nom}`,
+    identifiers: {...existingIdentifiers, REUNION: identifier}
+  }
+}
+
+export function pointNameCollisions(points, targetPoints) {
+  const sourceIdByName = new Map(points.map(point => {
+    const {sourceId, name} = reunionPointIdentity(point)
+    return [name, sourceId]
+  }))
+  // Names never establish identity, including between two migrated points.
+  return targetPoints.filter(point => sourceIdByName.has(point.name)
+    && sourceIdByName.get(point.name) !== point.sourceId)
 }
 
 export function rootUsageCode(value) {
@@ -873,4 +909,12 @@ export function buildPreflight({groups, usageMap, pointOverrides, excludedDocume
       rules: rules.length
     }
   }
+}
+
+// Skipping legacy grants must not let a declarant take an agent's login address.
+export function migrationRecordGroups(records, {skipAgents = false} = {}) {
+  const groups = groupManifestRecords(records)
+  const sourceAgents = groups.get('agent') ?? []
+  if (skipAgents) groups.delete('agent')
+  return {groups, sourceAgents}
 }

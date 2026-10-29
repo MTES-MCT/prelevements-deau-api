@@ -3,6 +3,8 @@ import process from 'node:process'
 import {readFile} from 'node:fs/promises'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
+import {accessConnectionOptions} from './lib/access-cli.js'
+import {assertConnectedTestingAdminDatabase} from '../network/testing-database-target.js'
 
 import {
   EXCLUDED_DOCUMENT_ID,
@@ -20,7 +22,7 @@ import {
   getDeclarantEmails,
   getExploitationStatus,
   getWaterBodyType,
-  groupManifestRecords,
+  migrationRecordGroups,
   legacyId,
   legacyNestedString,
   manifestLines,
@@ -31,7 +33,9 @@ import {
   parseUsageMap,
   partitionDocuments,
   partitionRules,
+  pointNameCollisions,
   readManifestContent,
+  reunionPointIdentity,
   safeFilename,
   stableSourceId,
   toDate,
@@ -79,7 +83,7 @@ Accès ODS (étape distincte après import du référentiel) :
   --access-file <fichier.ods>       Original privé conservé
   --effective-date <YYYY-MM-DD>     Date stable pour les retraits et dates manquantes
   --mappings <fichier.json>         Structures -> sourceId et politique administration
-  --target <testing|prod>          Cible explicite de l’étape accès
+  --target <local|testing|prod>    Cible explicite de l’étape accès
   --target-env <fichier.env>        DATABASE_URL native avec TLS verify-full
   --tunnel-port <port>             Tunnel local vers cette cible
   --report <nouveau.json>          Rapport privé hors Git
@@ -94,6 +98,7 @@ Options communes:
   --report <fichier.json>           Rapport anonymisé (0600)
   --target <local|testing>           Cible; production est toujours refusée
   --target-env <fichier.env>         DATABASE_URL et configuration S3 cible
+  --skip-agents                      Référentiel seul; droits via registre ODS séparé
   --apply                            Autorise les écritures pour apply/all
   --confirm-target <confirmation>   local, ou testing:<empreinte du préflight>
 
@@ -431,7 +436,7 @@ async function loadInputs(options) {
   return {
     manifestSha256: manifest.sha256,
     header: parsed.header,
-    groups: groupManifestRecords(parsed.records),
+    ...migrationRecordGroups(parsed.records, {skipAgents: options.skipAgents}),
     usageMap: parseUsageMap(usageMapContent.toString('utf8')),
     pointOverrides: parsePointOverrides(pointOverridesContent.toString('utf8')),
     documentExclusions: parseDocumentExclusions(documentExclusionsContent.toString('utf8'))
@@ -620,15 +625,19 @@ async function targetPreflight(prisma, inputs) {
   }
 
   const sourceIds = points.map(point => stableSourceId('point', point.id_point))
-  const names = points.map(point => point.nom)
+  const names = points.map(point => reunionPointIdentity(point).name)
   const targetPoints = await prisma.pointPrelevement.findMany({
     where: {OR: [{sourceId: {in: sourceIds}}, {name: {in: names}}]},
-    select: {sourceId: true, name: true}
+    select: {sourceId: true, name: true, identifiers: true}
   })
-  const sourceIdByName = new Map(points.map(point => [point.nom, stableSourceId('point', point.id_point)]))
-  for (const targetPoint of targetPoints) {
-    if (sourceIdByName.get(targetPoint.name) !== targetPoint.sourceId) {
-      issues.push({code: 'TARGET_POINT_NAME_COLLISION', entity: 'point', legacyId: targetPoint.sourceId ?? 'existing'})
+  for (const targetPoint of pointNameCollisions(points, targetPoints)) {
+    issues.push({code: 'TARGET_POINT_NAME_COLLISION', entity: 'point', legacyId: targetPoint.sourceId ?? 'existing'})
+  }
+  for (const point of points) {
+    const current = targetPoints.find(row => row.sourceId === stableSourceId('point', point.id_point))
+    if (!current) continue
+    try { reunionPointIdentity(point, current.identifiers) } catch {
+      issues.push({code: 'TARGET_POINT_IDENTIFIER_CONFLICT', entity: 'point', legacyId: String(point.id_point)})
     }
   }
 
@@ -770,7 +779,7 @@ async function syncDeclarantContacts(transaction, userId, declarantLegacyId, ema
 
 async function importDeclarants(prisma, inputs, maps, report) {
   const items = inputs.groups.get('declarant') ?? []
-  const agents = inputs.groups.get('agent') ?? []
+  const agents = inputs.sourceAgents ?? inputs.groups.get('agent') ?? []
   const sourceEmailOwners = new Map()
   for (const item of items) {
     for (const email of getDeclarantEmails(item)) {
@@ -859,10 +868,9 @@ async function importDeclarants(prisma, inputs, maps, report) {
   }
 }
 
-function pointData(item, override) {
+function pointData(item, override, existingIdentifiers = {}) {
   return {
-    sourceId: stableSourceId('point', item.id_point),
-    name: item.nom,
+    ...reunionPointIdentity(item, existingIdentifiers),
     waterBodyType: getWaterBodyType(item, override),
     flowType: 'PRELEVEMENT',
     pointKind: 'PHYSIQUE',
@@ -914,9 +922,10 @@ async function importPoints({prisma, inputs, maps, report, zone}) {
       )
     }
 
-    const expected = pointData(item, override)
     const outcome = await prisma.$transaction(async transaction => {
-      const existing = await transaction.pointPrelevement.findUnique({where: {sourceId: expected.sourceId}})
+      const sourceId = stableSourceId('point', item.id_point)
+      const existing = await transaction.pointPrelevement.findUnique({where: {sourceId}})
+      const expected = pointData(item, override, existing?.identifiers)
       let point
       let changed = false
       let created = false
@@ -931,7 +940,8 @@ async function importPoints({prisma, inputs, maps, report, zone}) {
         created = true
       }
 
-      changed ||= await syncPointCoordinates(transaction, point.id, item.geom.coordinates)
+      const coordinatesChanged = await syncPointCoordinates(transaction, point.id, item.geom.coordinates)
+      changed ||= coordinatesChanged
       const zoneLink = await transaction.pointPrelevementZone.findUnique({
         where: {pointPrelevementId_zoneId: {pointPrelevementId: point.id, zoneId: zone.id}}
       })
@@ -1008,7 +1018,8 @@ async function importExploitations({prisma, inputs, maps, report, zone, usagesBy
         created = true
       }
 
-      changed ||= await syncSecondaryUsages(transaction, exploitation.id, secondaryUsageIds)
+      const secondaryUsagesChanged = await syncSecondaryUsages(transaction, exploitation.id, secondaryUsageIds)
+      changed ||= secondaryUsagesChanged
       const declarantZone = await transaction.declarantZone.findUnique({
         where: {declarantUserId_zoneId: {declarantUserId, zoneId: zone.id}}
       })
@@ -1163,13 +1174,14 @@ async function importAgents({prisma, inputs, maps, report, zone}) {
         created = true
       }
 
-      changed ||= await syncInstructorZone({
+      const zoneChanged = await syncInstructorZone({
         transaction,
         instructorUserId: user.id,
         zoneId: zone.id,
         role: sourceRole,
         startDate: toDateOnly(item.createdAt) ?? new Date('1970-01-01T00:00:00.000Z')
       })
+      changed ||= zoneChanged
       maps.agents.set(mongoId, user.id)
       return created ? 'created' : (changed ? 'updated' : 'unchanged')
     })
@@ -1266,7 +1278,8 @@ async function importDocuments({prisma, inputs, maps, report, s3}) {
         created = true
       }
 
-      changed ||= await syncDocumentLinks(transaction, document.id, exploitationIds)
+      const documentLinksChanged = await syncDocumentLinks(transaction, document.id, exploitationIds)
+      changed ||= documentLinksChanged
       maps.documents.set(`${plan.documentId}:${plan.ownerId}`, document.id)
       return created ? 'created' : (changed ? 'updated' : 'unchanged')
     })
@@ -1345,7 +1358,8 @@ async function importRules(prisma, inputs, maps, report) {
         created = true
       }
 
-      changed ||= await syncRuleLinks(transaction, rule.id, exploitationIds)
+      const ruleLinksChanged = await syncRuleLinks(transaction, rule.id, exploitationIds)
+      changed ||= ruleLinksChanged
       return created ? 'created' : (changed ? 'updated' : 'unchanged')
     })
     increment(report.rules, outcome)
@@ -1537,7 +1551,7 @@ async function verifyDeclarantSemantics(prisma, inputs, references) {
   }
 
   const agentEmails = new Set(
-    references.agents.map(item => normalizeEmail(item.email)).filter(Boolean)
+    (inputs.sourceAgents ?? references.agents).map(item => normalizeEmail(item.email)).filter(Boolean)
   )
   const zonedDeclarantSourceIds = new Set(references.exploitations.map(item => (
     references.declarantSourceIdByLegacyId.get(legacyId(item.preleveur))
@@ -1617,6 +1631,7 @@ async function verifyPointSemantics(prisma, inputs, references) {
   const rows = await findManyBySourceIds(prisma.pointPrelevement, sourceIds, {
     sourceId: true,
     name: true,
+    identifiers: true,
     waterBodyType: true,
     flowType: true,
     pointKind: true,
@@ -1654,7 +1669,7 @@ async function verifyPointSemantics(prisma, inputs, references) {
       continue
     }
 
-    const point = pointData(item, inputs.pointOverrides.get(String(item.id_point)))
+    const point = pointData(item, inputs.pointOverrides.get(String(item.id_point)), row.identifiers)
     const expected = {
       ...prefixDataFields('point', point),
       coordinates: item.geom.coordinates.map(Number),
@@ -2296,7 +2311,12 @@ async function main() {
         targetEnvironment,
         manifestSha256: inputs.manifestSha256
       })
-      await assertTargetCertificate(options.target, targetAttestation.sslRootCert)
+      const tunnelConnection = options.tunnelPort
+        ? accessConnectionOptions(targetEnvironment, {target: options.target, tunnelPort: options.tunnelPort})
+        : undefined
+      await assertTargetCertificate(options.target, tunnelConnection
+        ? path.resolve(import.meta.dirname, '../../deploy/certs/testing/postgres-ca.pem')
+        : targetAttestation.sslRootCert)
       const targetS3 = createS3Context(targetEnvironment, 'S3 cible')
       try {
         await assertVersionedS3Bucket(
@@ -2308,8 +2328,9 @@ async function main() {
         targetS3.client.destroy()
       }
 
-      targetContext = await createTargetPrisma(requireEnv(targetEnvironment, 'DATABASE_URL', 'base cible'))
+      targetContext = await createTargetPrisma(requireEnv(targetEnvironment, 'DATABASE_URL', 'base cible'), tunnelConnection)
       const database = await attestTargetDatabase(targetContext.prisma, options.target)
+      if (options.target === 'testing') await assertConnectedTestingAdminDatabase(targetContext.prisma)
       targetIdentity = {
         target: targetAttestation.target,
         appEnv: targetAttestation.appEnv,
@@ -2340,6 +2361,7 @@ async function main() {
 
     const report = {
       command: options.command,
+      skipAgents: Boolean(options.skipAgents),
       target: options.target,
       manifestSha256: inputs.manifestSha256,
       snapshot: snapshotReport,

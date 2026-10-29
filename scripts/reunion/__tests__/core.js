@@ -13,6 +13,7 @@ import {
   chooseDeclarantLoginEmail,
   deterministicStorageKey,
   groupManifestRecords,
+  migrationRecordGroups,
   legacyNestedString,
   manifestLines,
   normalizeUsageCodes,
@@ -20,11 +21,38 @@ import {
   parseUsageMap,
   partitionDocuments,
   partitionRules,
+  pointNameCollisions,
   readManifestContent,
+  reunionPointIdentity,
   sha256,
   stableSourceId,
   toDateOnly
 } from '../lib/core.js'
+
+test('known point identities allow renaming while another point cannot own their final name', t => {
+  const points = [{id_point: 1, nom: 'Nouveau nom'}, {id_point: 2, nom: 'Nouveau nom'}]
+  const targets = [
+    {sourceId: stableSourceId('point', 1), name: 'Ancien nom'},
+    {sourceId: stableSourceId('point', 2), name: '2 - Nouveau nom'},
+    {sourceId: 'other-territory:point:1', name: '1 - Nouveau nom'},
+    {sourceId: null, name: '2 - Nouveau nom'},
+    {sourceId: stableSourceId('point', 2), name: '1 - Nouveau nom'},
+    {sourceId: null, name: 'Autre point'}
+  ]
+  t.deepEqual(pointNameCollisions(points, targets), targets.slice(2, 5))
+})
+
+test('Réunion point identity retains its business ID, stable source ID and other identifiers', t => {
+  const point = {id_point: 123, nom: 'Captage synthétique'}
+  const actual = reunionPointIdentity(point, {BSS: 'BSS-preserved', REUNION: 123})
+  t.deepEqual(actual, {sourceId: stableSourceId('point', 123), name: '123 - Captage synthétique',
+    identifiers: {BSS: 'BSS-preserved', REUNION: '123'}})
+  t.deepEqual(reunionPointIdentity(point, actual.identifiers), actual)
+  t.throws(() => reunionPointIdentity(point, {REUNION: '456'}), {message: /contradictoire/})
+  for (const id of [null, 0, -1, '123', 1.5]) t.throws(() => reunionPointIdentity({...point, id_point: id}))
+  t.throws(() => reunionPointIdentity({...point, nom: ' '}))
+  t.throws(() => reunionPointIdentity(point, []))
+})
 
 test('toDateOnly normalise un horodatage Mongo pour une colonne PostgreSQL date', t => {
   t.is(
@@ -469,4 +497,19 @@ test('préflight bloque une référence documentaire exploitation absente sauf e
   t.false(blocked.ok)
   t.true(blocked.issues.some(issue => issue.code === 'MISSING_EXPLOITATION_DOCUMENT_REFERENCE'))
   t.true(run([missingDocumentId]).ok)
+})
+
+
+test('skipping legacy grants preserves agent email reservations during declarant import', t => {
+  const email = 'synthetic-agent@example.test'
+  const declarant = {_id: 'source-declarant', email}
+  const {groups, sourceAgents} = migrationRecordGroups([
+    {kind: 'declarant', data: declarant},
+    {kind: 'agent', data: {email, roles: [{territoire: 'DEP-974', role: 'editor'}]}}
+  ], {skipAgents: true})
+  t.false(groups.has('agent'))
+  t.is(sourceAgents.length, 1)
+  t.is(groups.get('declarant')[0], declarant)
+  t.is(chooseDeclarantLoginEmail({declarant, sourceEmailOwners: new Map([[email, new Set(['source-declarant'])]]),
+    agentEmails: new Set(sourceAgents.map(agent => agent.email)), targetEmailOwners: new Map(), existingUserId: null}), null)
 })

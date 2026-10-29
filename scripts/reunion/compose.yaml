@@ -59,8 +59,31 @@ services:
         mc alias set local http://minio:9000 reunion_local reunion_local_password
         && mc mb --ignore-existing local/reunion-migration-documents
         && mc version enable local/reunion-migration-documents
+        && mc mb --ignore-existing local/reunion-migration-declarations
+        && mc mb --ignore-existing local/reunion-source-documents
+        && mc mb --ignore-existing local/reunion-source-ds
+
+  redis:
+    image: redis:7-alpine@sha256:7a7c6b5c49a6896d0a58ee0c6dc0dcabe14f30f0a2f7d2d1362d276fa2d43166
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "127.0.0.1:6382:6379"
+    volumes:
+      - reunion-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit@sha256:757f22b56c1da03570afdb3d259effe5091018008a81bbedc8158cee7e16fdbc
+    ports:
+      - "127.0.0.1:1026:1025"
+      - "127.0.0.1:8026:8025"
 
 volumes:
   reunion-mongo:
   reunion-postgres:
   reunion-minio:
+  reunion-redis:

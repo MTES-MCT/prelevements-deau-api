@@ -15,6 +15,7 @@ import {validateTestingAdminDatabaseUrl, assertConnectedTestingAdminDatabase} fr
 import {validateProdAdminDatabaseUrl, assertConnectedProdAdminDatabase} from '../../network/prod-database-target.js'
 import {loadAccessSource} from './access-source.js'
 import {syncAccess, verifyAccess} from './access-apply.js'
+import {attestTargetDatabase} from './runtime.js'
 
 const run = promisify(execFile)
 const ROOT = path.resolve(import.meta.dirname, '../../..')
@@ -49,7 +50,18 @@ export async function validateAccessBackup(filename, target) {
 }
 
 export function accessConnectionOptions(configuration, {target, tunnelPort}) {
-  if (!['testing', 'prod'].includes(target)) throw new Error('Les accès exigent une cible explicite testing ou prod.')
+  if (target === 'local') {
+    let url
+    try { url = new URL(configuration.DATABASE_URL) } catch { throw new Error('Cible locale invalide.') }
+    if (configuration.APP_ENV !== 'reunion-local' || !['postgresql:', 'postgres:'].includes(url.protocol)
+      || url.hostname !== '127.0.0.1' || url.port !== '5433' || url.pathname !== '/pe_reunion'
+      || url.username !== 'pe_reunion' || !url.password || url.search || tunnelPort) {
+      throw new Error('Les accès locaux exigent la pile Réunion isolée attestée, sans tunnel.')
+    }
+    return {host: '127.0.0.1', port: 5433, user: 'pe_reunion', password: decodeURIComponent(url.password),
+      database: 'pe_reunion', ssl: false, max: 2, connectionTimeoutMillis: 10_000}
+  }
+  if (!['testing', 'prod'].includes(target)) throw new Error('Les accès exigent une cible explicite local, testing ou prod.')
   if (!/^\d+$/.test(tunnelPort ?? '') || Number(tunnelPort) < 1024 || Number(tunnelPort) > 65535) {
     throw new Error('--tunnel-port local explicite obligatoire.')
   }
@@ -118,7 +130,8 @@ export async function runAccessCommand(arguments_) {
       const configuration = await readTargetEnvironment(values['target-env'])
       pool = new pg.Pool(accessConnectionOptions(configuration, {target: values.target, tunnelPort: values['tunnel-port']}))
       prisma = new prismaPkg.PrismaClient({adapter: new PrismaPg(pool)})
-      const assertTarget = values.target === 'testing' ? assertConnectedTestingAdminDatabase : assertConnectedProdAdminDatabase
+      const assertTarget = values.target === 'local' ? client => attestTargetDatabase(client, 'local')
+        : (values.target === 'testing' ? assertConnectedTestingAdminDatabase : assertConnectedProdAdminDatabase)
       await assertTarget(prisma)
       const options = {target: values.target, mappings, apply: values.apply, expectedReport, assertTarget,
         onBeforeApply: async snapshot => {

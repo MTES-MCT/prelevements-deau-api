@@ -12,6 +12,362 @@ locales, y compris lors d'une simulation.
 Cette restriction concerne la migration du référentiel Mongo/S3. L’étape
 `access-*` ci-dessous accepte également une cible `prod` strictement attestée.
 
+## Noms et identifiants des points Réunion
+
+Les PP conservent le numéro métier `id_point` de l’ancienne application : le nom
+est `123 - Captage de ...` et `identifiers.REUNION` vaut la chaîne `123`.
+Le `sourceId` `reunion:DEP-974:point:123` et l’UUID PE restent stables. Les autres
+identifiants sont conservés ; un identifiant Réunion contradictoire ou un nom
+cible appartenant à un autre PP bloque la reprise. Le champ propre à l’Agence
+de l’eau n’est pas utilisé pour cet identifiant.
+
+Après une première migration, `sync-point-identities.js` reprend uniquement
+`name` et cette clé d’identifiant sur les 453 PP existants du manifeste intact.
+Il ne relance ni contacts/droits ODS, ni S3, ni historique ou calcul de volumes.
+Les autres champs et associations sont contrôlés avant/après ; le rejeu produit
+zéro modification. La version de cette règle est incluse dans l’empreinte du
+plan ciblé, indépendamment du contrat du manifeste source conservé.
+
+```sh
+node scripts/reunion/sync-point-identities.js \
+  --manifest <archive>/reference/manifest.jsonl \
+  --target testing --target-env <configuration-privée> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+Pour appliquer sur testing, ajouter `--apply`, `--confirm-target` issu de cette
+simulation, `--against-report` et `--backup-evidence`. Cette preuve doit porter
+sur une sauvegarde **actuelle et ciblée** des lignes `before` du rapport, avec
+restauration vérifiée en base locale jetable, et non sur le dump précédant
+l’import historique. Elle comporte `target`, `operation`, `sourceHash`,
+`planHash`, `rowsSha256`, `backupFile`, `backup.sha256`,
+`restore.success=true` et `restore.matchesPreflight=true`. Le fichier JSON
+sauvegardé contient `operation`, `sourceHash` et `rows`. Les empreintes, la
+simulation, l’état courant et la cible attestée doivent tous correspondre.
+Les fichiers restent privés hors Git. Refaire ensuite une simulation puis
+une application de rejeu ; aucune ligne ne doit changer.
+
+## Répétition locale complète : historique DN et fichiers natifs
+
+Le rapprochement natif identifie le PP par son `sourceId` exact, indépendamment
+des dates d’exploitation. Une exploitation n’est associée que si elle est unique
+pour ce préleveur et couvre toute la série. Sinon le PP reste identifié et un
+avertissement indique l’exploitation absente, ambiguë ou la période non couverte ;
+aucune exploitation ni autorisation n’est créée ou prolongée. Le statut interne
+`PENDING` est conservé dans ce cas : comme les autres données PE non rejetées,
+les mesures reconnues sont consultables sur le PP. Il ne constitue pas un nouveau
+circuit d’instruction. Les conflits de période d’un même PP/préleveur/dimension
+restent exclus, y compris avec une série `PENDING` déjà rattachée.
+Un dossier importé par lots reste masqué tant que sa dernière partie n'est pas
+reçue. Les dates d'activité, totaux et caches sont rafraîchis au premier lot
+(retrait d'une publication précédente) puis au dernier (publication complète),
+sans rescanner l'historique à chaque fichier intermédiaire.
+La politique native existante `SKIP_NEW_CHUNK` écarte la série entière, même si
+le chevauchement est partiel ; toutes ses valeurs restent conservées. Cette
+reprise ne découpe pas une série et ne tranche pas entre valeurs contradictoires.
+
+### Récupérer les valeurs sans conflit
+
+`recover-native-overlaps.js` reprend une liste explicite de séries Réunion DN
+acceptées, rejetées pour `OVERLAPPING_SERIES`. Un snapshot privé est produit avec
+`captureNativeOverlapSnapshot`, puis comparé à l'état courant en simulation.
+Chaque valeur est comparée aux publications existantes et à toute la cohorte :
+seuls les intervalles entièrement disjoints sont publiés. Les doublons strictement
+identiques sont conservés une fois ; les contradictions et périodes partiellement
+communes restent dans les originaux rejetés. Aucun intervalle n'est découpé.
+
+Les publications dérivées portent `nativeOverlapRecovery` avec le parent, son
+empreinte et la sélection ; chaque copie conserve l'UUID original dans sa
+provenance. Aucun original n'est effacé ou modifié. Les compteurs physiques
+incluent donc les copies : distinguer les valeurs conservées des valeurs visibles.
+
+L'application testing exige une simulation identique, la cible attestée et la
+preuve de restauration du snapshot actuel. Le rejeu est idempotent. Un réimport
+natif identique conserve les dérivés ; le changement ou retrait du parent les
+retire. Corriger d'abord les fichiers et rattachements justifiés, puis refaire le
+snapshot avant cette reprise. Aucun mode générique d'acceptation partielle n'est
+activé pour les autres imports.
+La simulation utilise un instantané cohérent ; l'application relit l'état et les
+valeurs concurrentes après acquisition des verrous, pour détecter aussi un import
+terminé pendant l'attente de ces verrous.
+
+```sh
+node scripts/reunion/recover-native-overlaps.js \
+  --snapshot <snapshot-privé.json> --target testing \
+  --target-env <configuration-privée> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+### Arbitrer des chevauchements selon le dernier dépôt DN
+
+Après arbitrage explicite, `resolve-latest-deposits.js` traite au plus huit
+paires précisément identifiées. La revue désigne chaque valeur, sa série et son
+dossier, avec la `dateDepot` originale et les empreintes de l'archive DN (ou du
+Mongo historique pour un dossier expiré). Le script relit ces preuves : une date
+d'import PE, de modification ou de décision administrative ne départage jamais
+les valeurs. Une égalité de dates ou un chevauchement supplémentaire bloque la
+reprise, y compris avec une copie déjà publiée.
+
+Créer le snapshot avec `captureLatestDepositSnapshot(client, {review})` une fois
+les autres imports terminés, puis simuler :
+
+```sh
+node scripts/reunion/resolve-latest-deposits.js \
+  --review <revue-privee.json> --snapshot <snapshot-prive.json> \
+  --target testing --target-env <configuration-privee> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+Le gagnant rejeté est publié dans une copie `nativeOverlapRecovery`. L'ancienne
+valeur visible est conservée intégralement dans `ChunkValueReplacement`, avec ses
+UUID, périodes, métadonnées, remarque et preuves, avant son retrait des valeurs
+publiées. Les périodes restent entières : aucun volume n'est estimé ni découpé.
+Les autres valeurs et copies sont conservées ; les bornes, totaux, résumés et
+dates de disponibilité sont recalculés. Une série vidée devient rejetée.
+
+L'application exige `--apply`, la confirmation de cible, `--against-report` et
+une sauvegarde actuelle restaurée et vérifiée, liée aux mêmes `sourceHash`,
+`planHash`, `rowsSha256` et empreinte du snapshot, pour l'opération
+`reunion-latest-dn-deposit`. Après application, refaire une simulation avec
+`--against-report` désignant le rapport appliqué, puis appliquer cette simulation :
+le rejeu ne réécrit rien. Le rejeu natif identique conserve aussi l'arbitrage. Une nouvelle révision du
+parent retire ses anciennes copies et nécessite une nouvelle revue. Les archives
+sources restent intactes. Cet outil ne change pas la politique des imports courants.
+
+### Restaurer un document réglementaire retrouvé
+
+`restore-document.js` complète un document explicitement manquant/exclu du
+manifeste source intact. Le PDF retrouvé doit avoir la taille exacte et
+l'empreinte attendue dans la clé de stockage historique. Le propriétaire, les
+exploitations et les règles proviennent uniquement de ce manifeste. L'objet S3
+est créé sans écrasement, puis relu et vérifié avant de créer le document et ses
+liens. Les valeurs des règles et les droits restent inchangés.
+
+```sh
+node scripts/reunion/restore-document.js \
+  --manifest <archive>/reference/manifest.jsonl \
+  --legacy-document-id <identifiant-source> --file <pdf-retrouvé> \
+  --source-url <url-publique-https> --target testing \
+  --target-env <configuration-privée> --tunnel-port <port> \
+  --report <rapport-simulation-neuf.json>
+```
+
+L'application exige les mêmes options de confirmation, simulation et sauvegarde
+restaurée que la reprise des identités, avec l'opération
+`reunion-recovered-document`. Conserver le PDF, sa provenance et les rapports hors
+Git. **Rejouer cette étape après toute nouvelle migration du référentiel** : son
+manifeste historique conserve volontairement l'exclusion initiale et peut remettre
+les liens de règles à vide. Cette étape les rétablit sans recréer le document.
+
+Le rejeu d’une révision identique, ou d’un lot déjà reçu, peut réparer uniquement
+une association automatique encore absente. Il conserve les valeurs, UUID,
+empreintes et décisions manuelles. La reprise ciblée `repair-point-associations.js`
+utilise une liste explicite de séries sauvegardées, les mêmes attestations testing,
+une simulation et une preuve de restauration. Elle ne relance pas l’historique.
+
+Le parcours historique est séparé du migrateur de référentiel. La cible locale
+reste celle utilisée par défaut ; une reprise sur testing exige les attestations
+décrites plus bas. Pour la répétition locale, les destinations SQL/S3/Mongo sont
+celles fixes de la pile isolée. Le clone PE production doit être restauré
+localement et les migrations Prisma appliquées avant les imports.
+
+1. `prepare-local.js --output <archive>/runtime` produit des configurations
+   privées pour API 5500, front 3300 et orchestrateur 5501. Les emails vont à
+   Mailpit 1026/8026, Sentry et les fournisseurs distants restent désactivés.
+   L'orchestrateur doit utiliser `SCHEDULER_ENABLED=false` et
+   `WORKER_JOBS=process-declaration`. Ne pas lancer le worker API général.
+2. `capture-legacy.js --output <archive> --mongo-tunnel-port <port>` lit
+   l'application Scalingo `prelevement-deau-api` : collections métier sans
+   authentification, pièces démarche 80149 et documents Réunion référencés.
+   Sur l'ancien serveur Mongo, passer `--mongo-driver` vers le module
+   `mongodb/lib/index.js` de l'installation historique (driver 6), le driver
+   applicatif 7 étant incompatible avec ce serveur. Aucun contournement TLS.
+3. `capture-dn.js --archive <archive>` interroge uniquement la démarche 80149
+   via le nouvel endpoint DN. Il archive les dossiers et récupère les pièces
+   absentes du S3 historique, avec contrôle du checksum. Les URL signées et
+   jetons ne sont pas conservés. Aucun webhook ni synchronisation récurrente.
+4. `restore-archive.js --archive <archive> --mongo-driver <module>` vérifie les
+   empreintes en simulation ; ajouter `--apply` pour restaurer dans
+   `reunion_source_20261025` sur Mongo local et les buckets `reunion-source-*`.
+   Les anciennes bases locales restent préservées.
+5. Exécuter le snapshot et le référentiel ci-dessous avec le Mongo/S3 locaux,
+   les mappings privés actualisés et **`--skip-agents`** pour chaque
+   préflight/application/vérification. Les droits doivent ensuite venir du
+   registre ODS et de son mapping validé incluant les retraits d'octobre.
+6. `prepare-history.js --archive <archive> --parser-module <orchestration>/dist/src/connectors/reunion.js --output <archive>/prepared-01`
+   relit chaque original et produit un dossier par numéro DN, les séries
+   natives, anomalies, provenance et un bilan fichier par fichier. Les valeurs
+   restent dans des partitions JSON privées par fichier (`parsedFiles`), jamais
+   dans un unique JSONB de plusieurs centaines de Mo. Chaque partition conserve
+   toutes ses erreurs ; le dossier ne porte qu’un résumé. Le dossier
+   de sortie doit être neuf. Les index manuels et volumes saisis dans DN sont
+   aussi repris ; les dates ambiguës restent des anomalies avec leur valeur
+   brute. Un volume annuel reste annuel, sans répartition quotidienne fictive.
+   Après interruption, `--resume-from <préparation précédente>` réutilise les
+   dossiers terminés après contrôle des sources et empreintes des partitions,
+   dans un nouveau dossier de sortie. Conserver la même version des parseurs
+   pour cette reprise ; l'archive précédente reste intacte.
+   Après correction ciblée d'un parseur, ajouter `--reparse-dossier <numéro>`
+   relit uniquement ce dossier ; les autres partitions et identités revues
+   restent conservées. Vérifier les empreintes avant/après pour confirmer le
+   périmètre de la nouvelle préparation.
+   Une revue d'identités approuvée peut ensuite être appliquée avec
+   `reconcile-history.js --archive <archive> --prepared <préparation> --identity-review <revue.json> --output <nouvelle-préparation>`.
+   La revue doit désigner la préparation et chaque dossier par SHA-256, un
+   préleveur source existant et des preuves précises. Seules ses lignes
+   `IDENTITY_PROVEN` changent le déclarant ; les lignes HOLD restent sans
+   association. Les PP, exploitations, dates d'accès et droits restent ceux
+   du référentiel. Les originaux et les valeurs préparées sont inchangés.
+7. `import-history.js --archive <archive> --prepared <archive>/prepared-01 --target-env <archive>/runtime/target-local.env --report <archive>/history-simulation.json`
+   simule les associations. Les dossiers supprimés dans DN à la demande de
+   l’usager restent dans l’archive et sont exclus des écrans et des données PE.
+   Les dossiers acceptés expirés conservent leur décision historique, avec le
+   motif d’archivage. Les suppressions sans contenu récupérable sont inventoriées.
+   La sélection `--source-policy accepted` est appliquée par défaut et est la
+   seule autorisée : les autres statuts DN restent archivés, sans enregistrement
+   applicatif ni déclaration PE.
+   Reprendre avec `--apply` et un nouveau rapport
+   pour importer. Les dossiers sans déclarant restent dans
+   `ExternalDeclarationRecord` ; aucun compte fictif n'est créé. Cette sélection
+   de l'historique ne limite pas les futurs dépôts : les deux formats Réunion
+   sont ouverts aux 244 préleveurs par l'étape `enable-local-formats.js`
+   décrite ci-dessous, indépendamment du statut de leurs anciens dossiers.
+8. `verify-history.js --archive <archive> --prepared <archive>/prepared-01 --target-env <archive>/runtime/target-local.env --report <archive>/history-verification.json`
+   relit les objets S3 et contrôle les empreintes, associations, complétude,
+   nombres de valeurs, bornes temporelles, sommes décimales exactes et cinq
+   échantillons répartis par série (valeur, dates, unité, remarque, provenance).
+   Rejouer l'import avec les mêmes sources et un rapport neuf. Les identités
+   restent stables et la provenance historique DN est conservée. Les lignes
+   valides et rapprochées d'un fichier partiellement incorrect sont reprises
+   selon le fonctionnement existant de PE. Les données non rapprochées et les
+   anomalies restent identifiées dans les rapports et le registre local.
+   Aucun parcours d'instruction supplémentaire n'est ajouté.
+9. Après import du référentiel, `prepare-local.js --output <archive>/runtime --credentials`
+   crée le compte de service local et ses périmètres sans afficher son secret.
+   Lancer les processus avec `node --env-file=<fichier-privé> ...`. Pour le front
+   HTTP local, utiliser `next dev --webpack --hostname 127.0.0.1 --port 3300`
+   (cookies de développement), pas le serveur standalone de production.
+   NextAuth utilise `/auth/nextauth` ; Crisp, Matomo et Sentry sont désactivés.
+
+Les archives et rapports contiennent des données personnelles : dossiers 0700,
+fichiers 0600, hors Git. Les scripts de capture exigent un dossier sous
+`~/.local/share/preservonsleau/imports/`. Les imports historiques ne constituent
+ni une validation de décommissionnement ni une autorisation de déploiement.
+
+Les déclarations `reunion:DN:*` se rejouent avec `import-history.js` et la dernière
+préparation revue. Le rejeu générique de l'interface est refusé pour ces dossiers :
+il relirait les fichiers originaux et perdrait les corrections de rattachement,
+de période ou de cellules documentées dans la préparation. Les nouveaux dépôts
+PE conservent leur rejeu habituel.
+
+### Démarrer la recette locale
+
+Après installation des dépendances, préparation des configurations privées,
+restauration locale et création du compte de service de l'étape 9, lancer les
+trois processus dans des terminaux séparés. Définir dans chacun
+`reunion_runtime="$HOME/.local/share/preservonsleau/imports/reunion-local-20261025/runtime"`
+et se placer à la racine du dépôt indiqué.
+
+API :
+
+```sh
+API_BIND_HOST=127.0.0.1 node --env-file="$reunion_runtime/api-local.env" api.js
+```
+
+Orchestrateur :
+
+```sh
+npm run build
+BIND_HOST=127.0.0.1 SCHEDULER_ENABLED=false WORKER_JOBS=process-declaration \
+  node --env-file="$reunion_runtime/orchestration-local.env" dist/index.js
+```
+
+Front :
+
+```sh
+npm run prepare-maplibre
+npx --no-install react-dsfr update-icons
+node --env-file="$reunion_runtime/front-local.env" node_modules/next/dist/bin/next \
+  dev --webpack --hostname 127.0.0.1 --port 3300
+```
+
+Le front est accessible sur `http://127.0.0.1:3300`, l'API sur le port 5500
+et l'orchestrateur sur le port 5501. Les liens de connexion arrivent uniquement
+dans Mailpit, consultable sur `http://127.0.0.1:8026`. Ne pas démarrer le worker
+API général pour cette recette. Le parcours de déclaration existant est
+conservé ; aucun écran d'instruction ou d'affectation supplémentaire n'est requis.
+La vérification locale, le déploiement et le décommissionnement restent trois
+étapes distinctes.
+
+### Formats des futurs dépôts
+
+La décision de reprise est de proposer les **deux formats Réunion aux 244
+préleveurs** du référentiel validé, même si leurs dossiers historiques ne sont
+pas acceptés. L'archivage d'un dossier ne supprime pas l'accès aux futurs dépôts.
+
+Après les imports historiques, lancer depuis la racine de l'API :
+
+```sh
+reunion_archive="$HOME/.local/share/preservonsleau/imports/reunion-local-20261025"
+node scripts/reunion/enable-local-formats.js --archive "$reunion_archive" \
+  --target-env "$reunion_archive/runtime/target-local.env" --effective-date 2026-10-25 \
+  --report "$reunion_archive/formats-simulation.json"
+```
+
+Le script vérifie les
+244 identités exactes du manifeste. Reprendre avec `--apply` et un rapport neuf,
+puis rejouer : 488 liens actifs sont attendus, sans doublon ni modification
+des autres formats ou droits, et le rejeu doit annoncer zéro changement.
+La cible locale reste celle utilisée par défaut. Une reprise sur testing utilise
+les gardes décrits ci-dessous ; production reste refusée.
+
+### Reprise sur testing après recette locale
+
+Déployer les migrations API avant l'import historique. Conserver les décisions
+de la préparation validée : dossiers acceptés uniquement, dossiers supprimés à
+la demande des usagers et autres statuts en archive, identités non résolues sans
+attribution. Les scripts n'envoient aucun courriel et ne démarrent aucun worker.
+
+L'environnement cible doit conserver l'URL PostgreSQL native de testing avec
+`sslmode=verify-full` et son chemin de CA runtime. `--tunnel-port` change seulement
+le transport local : l'identité native, la CA et l'identité SQL connectée restent
+contrôlées. Le référentiel atteste `testing-documents` ; les historiques attestent
+séparément `testing-declarations`, dans la région fr-par avec versioning activé.
+
+1. Sauvegarder testing et vérifier une restauration isolée avant les migrations
+   et l'import. Contrôler la capacité disque pour les valeurs, index et WAL.
+2. Exécuter le référentiel avec `--target testing --tunnel-port <port>` et
+   `--skip-agents`, puis synchroniser les droits avec le registre ODS validé.
+3. Simuler chaque préparation historique immuable avec `import-history.js`,
+   `--target testing --tunnel-port <port>` et un rapport privé neuf hors Git.
+4. Appliquer avec les mêmes arguments, plus `--apply`,
+   `--against-report <simulation.json>`, `--confirm-target <confirmation>`
+   (valeur `attestation.confirmation` de la simulation) et
+   `--backup-evidence <preuve.json>`. La preuve suit le contrat des commandes
+   `access-apply` : sauvegarde de la même cible, empreinte vérifiée et restauration
+   réconciliée. L'état courant et les sources doivent encore correspondre à la
+   simulation ; sinon, refaire une simulation avant toute écriture.
+5. Vérifier chaque préparation avec `verify-history.js` et les mêmes options de
+   cible. Refaire une simulation puis une application de rejeu : aucun nouveau
+   dossier ni aucune mise à jour ne sont attendus.
+6. Exécuter `enable-local-formats.js` avec `--target testing`, les mêmes options
+   de transport, la date d'effet validée et une simulation neuve. L'application
+   exige également simulation, confirmation et preuve de sauvegarde. Rejouer
+   pour vérifier les 488 liens et zéro ajout, sans modification des autres droits.
+
+Les rapports incluent une empreinte liant cible, source et plan. Ne pas réutiliser
+les rapports de recette locale comme autorisation d'application sur testing.
+
+### Limites de lecture des données natives
+
+La lecture brute `GET /series/:seriesId/values` accepte au plus 50 000 valeurs
+natives par demande. Au-delà, elle refuse la lecture et invite à réduire la
+période ou à utiliser les valeurs paginées du détail de déclaration.
+Les exports vérifient en SQL, avec leurs filtres et droits habituels, qu'ils
+ne dépassent pas 100 000 valeurs natives avant de charger les lignes et de
+construire le classeur. Un dépassement demande de réduire la période ou le
+périmètre. Ces limites ne changent pas les lectures et exports purement legacy.
+
 ## Appliquer le registre des accès ODS
 
 L’étape d’accès s’exécute **après** l’import du référentiel. Elle possède sa
@@ -109,10 +465,14 @@ et leur état sont liés à la simulation ; une dérive annule la transaction.
 Une identité déjà supprimée ne provoque ni nouvelle suppression ni nouvel audit
 au rejeu. Conserver ce mapping complété pour rejouer la même opération en prod.
 
-Le fichier cible conserve la `DATABASE_URL` native attendue par
+La cible `local` exige APP_ENV=reunion-local et exactement la base isolée
+127.0.0.1:5433/pe_reunion avec le rôle pe_reunion, sans tunnel ni paramètre URL.
+Les mêmes simulations, preuves de sauvegarde et vérifications sont requises.
+
+Pour une cible distante, le fichier cible conserve la `DATABASE_URL` native attendue par
 `scripts/network/{testing,prod}-database-target.js`, avec `sslmode=verify-full`
 et `sslrootcert=/usr/local/share/ca-certificates/scw-postgres-ca.crt`.
-Le transport emprunte un tunnel local déjà ouvert ; le certificat de la cible
+Pour testing et prod, le transport emprunte un tunnel local déjà ouvert ; le certificat de la cible
 est vérifié via `deploy/certs/<cible>/postgres-ca.pem`. L’identité SQL est
 contrôlée avant la simulation et à l’intérieur de chaque transaction.
 
@@ -203,8 +563,8 @@ install -m 600 scripts/reunion/target-local.env.example "$migration_dir/target-l
 ```
 
 Attendre les contrôles de santé et la création du bucket local avant de continuer.
-Cette pile isole MongoDB, PostgreSQL et MinIO des services de développement
-habituels. Elle ne lance pas l'API ou le front.
+Cette pile isole MongoDB, PostgreSQL, MinIO, Redis et Mailpit des services de
+développement habituels. Elle ne lance pas l'API, l'orchestrateur ou le front.
 
 Restaurer le backup Mongo validé dans cette pile. Configurer ensuite les commandes
 Prisma et d'import des zones pour la même base locale que `target-local.env`,

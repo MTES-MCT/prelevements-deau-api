@@ -19,4 +19,4 @@ g.prisma ||= new PrismaClient({
   adapter: g.prismaAdapter
 })
 
-export const {prisma} = g
+export const {prisma, pgPool} = g
