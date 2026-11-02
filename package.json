@@ -63,7 +63,7 @@
     "hash-object": "^5.1.0",
     "http-errors": "^2.0.1",
     "ioredis": "^6.0.0",
-    "joi": "^18.2.9",
+    "joi": "^18.3.1",
     "lodash-es": "^4.18.1",
     "mjml": "^5.4.1",
     "moment": "^2.30.1",
@@ -111,6 +111,9 @@
     ]
   },
   "overrides": {
+    "glob@13.0.6": "14.0.2",
+    "minimatch@10.2.5": "11.0.1",
+    "minimatch@10.2.6": "11.0.1",
     "@prisma/config@7.10.0": {
       "deepmerge-ts": "8.0.2"
     },
