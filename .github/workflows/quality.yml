@@ -29,7 +29,7 @@ jobs:
       - name: Test CI sharding and private cache guards
         run: node --test .github/scripts/ci-guards.test.mjs
       - name: Test audit policy
-        run: npx --no-install ava scripts/security/__tests__/audit-dependencies.js
+        run: npx --no-install ava scripts/security/__tests__/audit-dependencies.js scripts/security/__tests__/audit-image.js
       - name: Audit all dependencies with bounded expiring exceptions
         run: node scripts/security/audit-dependencies.js
       - name: Audit production dependencies

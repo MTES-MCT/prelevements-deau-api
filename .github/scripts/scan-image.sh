@@ -7,5 +7,9 @@ if [[ ! "$image_ref" =~ @sha256:[0-9a-f]{64}$ && ! "$image_ref" =~ ^sha256:[0-9a
   exit 1
 fi
 mkdir -p .artifacts/security
+# Never let a failed scan reuse a report from an earlier candidate.
+rm -f .artifacts/security/image-audit.json
+scan_status=0
 trivy image --scanners vuln --format json --timeout 15m \
-  --exit-code 1 --exit-on-eol 1 --output .artifacts/security/image-audit.json "$image_ref"
+  --exit-code 2 --exit-on-eol 1 --output .artifacts/security/image-audit.json "$image_ref" || scan_status=$?
+node scripts/security/audit-image.js .artifacts/security/image-audit.json "$image_ref" "$scan_status"

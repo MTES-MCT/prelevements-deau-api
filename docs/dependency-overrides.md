@@ -79,6 +79,17 @@ les migrations restent obligatoires. Retirer cette exception dès qu’une mise
 à jour compatible supprime ces chemins, puis vérifier les deux audits et les
 tests ; à l’expiration, les mêmes alertes bloquent automatiquement les livraisons.
 
+Le même avis est identifié par **CVE-2026-118764** dans Trivy ; cette
+correspondance figure dans l’avis primaire GitHub et les références du rapport.
+La même dérogation couvre les deux alertes `MEDIUM` de l’image, uniquement pour
+`app/node_modules/minimatch/package.json` en `3.1.5` et
+`app/node_modules/readdir-glob/node_modules/minimatch/package.json` en `5.1.9`.
+Le contrôle conserve le rapport brut et son lien avec le digest du candidat,
+vérifie l’inventaire des paquets et réutilise la même échéance. Le code de sortie
+Trivy `2` identifie les alertes à examiner ; les erreurs du scanner et la fin
+de support du système restent bloquantes (`--exit-on-eol 1`), même si le rapport
+contient aussi les alertes autorisées. Aucune autre CVE n’est exemptée.
+
 ## Prisma 7.10.0 et deepmerge-ts
 
 Au 11 septembre 2026, Prisma 7.10.0 était la dernière version stable publiée ;
