@@ -4,6 +4,7 @@ import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import {fileURLToPath} from 'node:url'
+import {isTemporaryMinimatchPath, MINIMATCH_EXCEPTION} from './minimatch-exception.js'
 
 export const AUDIT_EXCEPTIONS = Object.freeze(JSON.parse(readFileSync(new URL('./npm-audit-exceptions.json', import.meta.url), 'utf8')).map(policy => Object.freeze(policy)))
 const APPROVED_EXCEPTIONS = {
@@ -93,19 +94,22 @@ export function evaluateAudit({report, exitCode, lockfile, now = Date.now(), pol
   }
   const waived = []
   const blocked = []
-  for (const [name] of vulnerabilities) (exempt(name) ? waived : blocked).push(name)
+  for (const [name] of vulnerabilities) (exempt(name) || isTemporaryMinimatchPath(name, report, lockfile, now) ? waived : blocked).push(name)
   const exceptions = policies.map(policy => ({packageName: policy.packageName, version: policy.version,
-    advisoryUrl: policy.advisoryUrl, expiresAt: policy.expiresAt,
+    advisoryUrl: policy.advisoryUrl, expiresAt: policy.expiresAt, developmentOnly: policy.developmentOnly,
     expired: Number(now) >= Date.parse(policy.expiresAt), applied: waived.includes(policy.packageName)}))
+  exceptions.push({...MINIMATCH_EXCEPTION, expired: Number(now) >= Date.parse(MINIMATCH_EXCEPTION.expiresAt),
+    applied: waived.includes('minimatch')})
   return {ok: blocked.length === 0, waived, blocked, exceptions,
     expired: exceptions.some(policy => policy.expired && Object.hasOwn(report.vulnerabilities, policy.packageName)),
     totalVulnerablePackages: vulnerabilities.length}
 }
 
-export async function runDependencyAudit({cwd = process.cwd(), now, execute = execFile} = {}) {
-  const result = await new Promise(resolve => execute('npm', ['audit', '--include=dev', '--audit-level=low', '--json'],
+export async function runDependencyAudit({cwd = process.cwd(), now, execute = execFile, scope = 'all'} = {}) {
+  ensure(scope === 'all' || scope === 'production', 'Périmètre d’audit invalide.')
+  const result = await new Promise(resolve => execute('npm', ['audit', scope === 'production' ? '--omit=dev' : '--include=dev', '--audit-level=low', '--json'],
     {cwd, encoding: 'utf8', timeout: 120_000, maxBuffer: 20 * 1024 * 1024}, (error, stdout) => resolve({stdout: stdout ?? '', exitCode: error ? error.code : 0})))
-  const destination = path.join(cwd, '.artifacts/security/npm-audit-all.json')
+  const destination = path.join(cwd, `.artifacts/security/npm-audit-${scope}.json`)
   await mkdir(path.dirname(destination), {recursive: true})
   // Retain the unmodified report even if JSON is invalid, npm failed or the gate
   // refuses an exception. This artifact must never suggest a zero-vulnerability audit.
@@ -117,9 +121,12 @@ export async function runDependencyAudit({cwd = process.cwd(), now, execute = ex
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const result = await runDependencyAudit()
+    const args = process.argv.slice(2)
+    ensure(args.length === 0 || (args.length === 1 && args[0] === '--production'), 'Arguments d’audit invalides.')
+    const scope = args.length ? 'production' : 'all'
+    const result = await runDependencyAudit({scope})
     for (const policy of result.exceptions.filter(policy => policy.applied)) {
-      console.warn(`::warning::Exception de sécurité TEMPORAIRE : ${policy.advisoryUrl}, ${policy.packageName}@${policy.version} uniquement en développement ; expiration ${policy.expiresAt}. Rapport brut conservé dans .artifacts/security/npm-audit-all.json.`)
+      console.warn(`::warning::Exception de sécurité TEMPORAIRE : ${policy.advisoryUrl}, ${policy.packageName}@${policy.version} ${policy.developmentOnly ? 'uniquement en développement' : 'sur les chemins verrouillés de production et développement'} ; expiration ${policy.expiresAt}. Rapport brut conservé dans .artifacts/security/npm-audit-${scope}.json.`)
     }
     if (!result.ok) {
       console.error(`Audit BLOQUÉ${result.expired ? ' (exception expirée)' : ''} : ${result.blocked.join(', ')}.`)

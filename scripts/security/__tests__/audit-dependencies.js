@@ -3,6 +3,120 @@ import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import path from 'node:path'
 import {AUDIT_EXCEPTIONS, evaluateAudit, runDependencyAudit} from '../audit-dependencies.js'
+import {MINIMATCH_EXCEPTION} from '../minimatch-exception.js'
+
+function minimatchFixture({development = false} = {}) {
+  const entries = {
+    minimatch: {version: '3.1.5', via: [{source: 1244012, name: 'minimatch', dependency: 'minimatch',
+      title: 'Synthetic minimatch advisory', url: MINIMATCH_EXCEPTION.advisoryUrl, severity: 'moderate', range: '<11.0.1'}]},
+    glob: {version: '7.2.3', via: ['minimatch']},
+    rimraf: {version: '2.7.1', via: ['glob']},
+    'archiver-utils': {version: '2.1.0', via: ['glob']},
+    'zip-stream': {version: '4.1.1', via: ['archiver-utils']},
+    'readdir-glob': {version: '1.1.3', via: ['minimatch']},
+    archiver: {version: '5.3.2', via: ['archiver-utils', 'readdir-glob', 'zip-stream']},
+    exceljs: {version: '4.4.0', via: ['archiver']},
+    ...(development ? {'@stoplight/spectral-core': {version: '1.23.1', via: ['minimatch'], dev: true}} : {})
+  }
+  const input = fixture()
+  input.now = Date.parse('2026-11-02T12:00:00Z')
+  input.report.vulnerabilities = Object.fromEntries(Object.entries(entries).map(([name, entry]) =>
+    [name, {...vulnerability(name, entry.via), severity: 'moderate'}]))
+  input.lockfile.packages = Object.fromEntries(Object.entries(entries).map(([name, entry]) =>
+    [`node_modules/${name}`, {version: entry.version, ...(entry.dev ? {dev: true} : {})}]))
+  for (const [name, node, version] of [
+    ['minimatch', 'node_modules/readdir-glob/node_modules/minimatch', '5.1.9'],
+    ['archiver-utils', 'node_modules/zip-stream/node_modules/archiver-utils', '3.0.4']
+  ]) {
+    input.report.vulnerabilities[name].nodes.push(node)
+    input.lockfile.packages[node] = {version}
+  }
+  const total = Object.keys(entries).length
+  input.report.metadata.vulnerabilities = {info: 0, low: 0, moderate: total, high: 0, critical: 0, total}
+  input.report.metadata.dependencies = {prod: 10, dev: development ? 1 : 0, optional: 0, peer: 0, peerOptional: 0, total: development ? 11 : 10}
+  return input
+}
+
+test('minimatch covers only the reviewed runtime paths and known development parent', t => {
+  for (const development of [false, true]) {
+    const input = minimatchFixture({development})
+    const before = structuredClone(input)
+    const result = evaluateAudit(input)
+    t.true(result.ok)
+    t.is(result.waived.length, development ? 9 : 8)
+    t.deepEqual(result.exceptions.filter(policy => policy.applied).map(policy => policy.packageName), ['minimatch'])
+    t.deepEqual(input, before)
+  }
+})
+
+test('minimatch expires exactly at November 9 midnight Paris without reviving braces', t => {
+  t.is(MINIMATCH_EXCEPTION.expiresAt, '2026-11-08T23:00:00Z')
+  t.true(evaluateAudit({...minimatchFixture(), now: Date.parse('2026-11-08T22:59:59.999Z')}).ok)
+  const expired = evaluateAudit({...minimatchFixture(), now: Date.parse(MINIMATCH_EXCEPTION.expiresAt)})
+  t.false(expired.ok)
+  t.true(expired.expired)
+  t.deepEqual(expired.waived, [])
+  const braces = evaluateAudit({...fixture(), now: Date.parse('2026-11-02T12:00:00Z')})
+  t.false(braces.ok)
+  t.true(braces.expired)
+})
+
+test('minimatch refuses any extra advisory, package, path, version, scope or dependency branch', t => {
+  const changes = [
+    input => { input.report.vulnerabilities.minimatch.via[0].url = 'https://github.com/advisories/GHSA-other' },
+    input => { input.report.vulnerabilities.minimatch.via[0].source += 1 },
+    input => { input.report.vulnerabilities.minimatch.via[0].severity = 'high' },
+    input => { input.report.vulnerabilities.minimatch.via[0].range = '<12' },
+    input => { input.report.vulnerabilities.minimatch.via.push({...advisory(), name: 'minimatch', dependency: 'minimatch'}) },
+    input => { input.lockfile.packages['node_modules/minimatch'].version = '3.1.4' },
+    input => { input.lockfile.packages['node_modules/readdir-glob/node_modules/minimatch'].version = '5.1.8' },
+    input => { input.lockfile.packages['node_modules/exceljs'].version = '4.5.0' },
+    input => { input.lockfile.packages['node_modules/minimatch'].dev = true },
+    input => { delete input.lockfile.packages['node_modules/minimatch'] },
+    input => { input.report.vulnerabilities.minimatch.nodes.pop() },
+    input => {
+      const node = 'node_modules/other/node_modules/minimatch'
+      input.report.vulnerabilities.minimatch.nodes.push(node)
+      input.lockfile.packages[node] = {version: '3.1.5'}
+    },
+    input => { input.report.vulnerabilities.glob.via.push({...advisory(), name: 'glob', dependency: 'glob'}) },
+    input => { input.report.vulnerabilities.glob.via = ['rimraf'] },
+    input => { input.report.vulnerabilities.exceljs.via.push('unknown') },
+    input => { input.report.vulnerabilities.exceljs.via = ['minimatch'] }
+  ]
+  for (const change of changes) {
+    const input = minimatchFixture()
+    change(input)
+    t.false(evaluateAudit(input).ok)
+  }
+  const input = minimatchFixture()
+  input.report.vulnerabilities.unknown = {...vulnerability('unknown', ['minimatch']), severity: 'moderate'}
+  input.lockfile.packages['node_modules/unknown'] = {version: '1.0.0'}
+  input.report.metadata.vulnerabilities.moderate += 1
+  input.report.metadata.vulnerabilities.total += 1
+  t.true(evaluateAudit(input).blocked.includes('unknown'))
+  const dev = minimatchFixture({development: true})
+  delete dev.lockfile.packages['node_modules/@stoplight/spectral-core'].dev
+  t.true(evaluateAudit(dev).blocked.includes('@stoplight/spectral-core'))
+})
+
+test('production runner audits production dependencies and archives the complete raw report', async t => {
+  const cwd = await mkdtemp(path.join(tmpdir(), 'pe-audit-production-test-'))
+  t.teardown(() => rm(cwd, {recursive: true, force: true}))
+  const input = minimatchFixture()
+  const raw = JSON.stringify(input.report, null, 2) + '\n'
+  await writeFile(path.join(cwd, 'package-lock.json'), JSON.stringify(input.lockfile))
+  const execute = (command, args, options, callback) => {
+    t.is(command, 'npm')
+    t.deepEqual(args, ['audit', '--omit=dev', '--audit-level=low', '--json'])
+    callback({code: 1}, raw)
+  }
+  t.true((await runDependencyAudit({cwd, execute, now: input.now, scope: 'production'})).ok)
+  t.is(await readFile(path.join(cwd, '.artifacts/security/npm-audit-production.json'), 'utf8'), raw)
+  await t.throwsAsync(runDependencyAudit({cwd, execute, scope: 'invalid'}))
+  await t.throwsAsync(runDependencyAudit({cwd, scope: 'production', execute: (command, args, options, callback) => callback({code: 'EAI_AGAIN'}, 'network failure')}))
+  t.is(await readFile(path.join(cwd, '.artifacts/security/npm-audit-production.json'), 'utf8'), 'network failure')
+})
 
 const AUDIT_EXCEPTION = AUDIT_EXCEPTIONS.find(policy => policy.packageName === 'braces')
 const beforeExpiry = Date.parse(AUDIT_EXCEPTION.expiresAt) - 1

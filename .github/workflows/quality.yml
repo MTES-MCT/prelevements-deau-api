@@ -30,14 +30,11 @@ jobs:
         run: node --test .github/scripts/ci-guards.test.mjs
       - name: Test audit policy
         run: npx --no-install ava scripts/security/__tests__/audit-dependencies.js
-      - name: Audit all dependencies with expiring development exception
+      - name: Audit all dependencies with bounded expiring exceptions
         run: node scripts/security/audit-dependencies.js
       - name: Audit production dependencies
         if: ${{ !cancelled() }}
-        run: |
-          set -o pipefail
-          mkdir -p .artifacts/security
-          npm audit --omit=dev --audit-level=low --json | tee .artifacts/security/npm-audit-production.json
+        run: node scripts/security/audit-dependencies.js --production
       - name: Validate workflows and shell scripts
         if: ${{ !cancelled() }}
         run: bash .github/scripts/check-workflows.sh

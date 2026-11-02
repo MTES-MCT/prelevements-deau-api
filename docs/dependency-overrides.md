@@ -37,6 +37,48 @@ dépendance de production ou expiration bloque le contrôle. Aucun paquet instal
 n'est modifié. Retirer cette exception dès qu'un correctif officiel est disponible,
 puis rejouer les audits et les tests.
 
+## Acceptation temporaire de minimatch (2 novembre 2026)
+
+Le 2 novembre 2026, l’utilisateur a explicitement autorisé cette dérogation
+temporaire et le déploiement. Elle couvre uniquement le risque modéré de déni
+de service décrit par
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249),
+pour les versions verrouillées `minimatch@3.1.5` et `minimatch@5.1.9`.
+Elle expire le **9 novembre 2026 à 00 h, heure de Paris**
+(`2026-11-08T23:00:00Z`), sans prolonger les exceptions expirées `braces`
+et `sprintf-js`.
+
+Les chemins d’exécution passent par ExcelJS, Archiver, archiver-utils,
+readdir-glob et glob ; rimraf conserve aussi un chemin vers glob, via
+unzipper et fstream. Les chemins de développement passent par Spectral et
+son bundler Rollup. Le manifeste
+[`scripts/security/minimatch-exception.js`](../scripts/security/minimatch-exception.js)
+fixe chaque nœud, sa version, son statut développement/exécution et les liens
+transitifs autorisés. Une autre version, un autre chemin, une autre cause ou
+une sévérité différente restent bloquants.
+
+Joi a été corrigé en `18.3.1`. Les branches modernes de glob et minimatch ont
+été corrigées par des overrides bornés ; aucun remplacement incompatible de
+l’API des anciennes branches n’a été imposé. L’acceptation du risque résiduel
+ne corrige pas minimatch et ne constitue pas une garantie d’absence d’exposition.
+
+Les rapports du 2 novembre conservent **17 paquets signalés dans l’audit complet
+et 8 en production**, tous modérés et reliés au seul avis autorisé : ces audits
+ne sont pas présentés comme exempts de vulnérabilités. Le workflow exécute et
+archive les deux commandes npm au travers du même contrôle :
+
+```sh
+node scripts/security/audit-dependencies.js
+node scripts/security/audit-dependencies.js --production
+```
+
+Les rapports JSON bruts sont conservés dans `.artifacts/security/`. Une erreur
+réseau, un rapport incomplet ou mal formé, une autre alerte et l’expiration
+restent bloquants. Le scan de l’image, les tests, les contrôles de workflow et
+les migrations restent obligatoires. Retirer cette exception dès qu’une mise
+à jour compatible supprime ces chemins, puis vérifier les deux audits et les
+tests ; à l’expiration, les mêmes alertes bloquent automatiquement les livraisons.
+
 ## Prisma 7.10.0 et deepmerge-ts
 
 Au 11 septembre 2026, Prisma 7.10.0 était la dernière version stable publiée ;
