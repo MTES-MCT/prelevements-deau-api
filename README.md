@@ -98,6 +98,24 @@ décommissionnement de l'ancienne instance.
 - `npm run coverage` : lance les tests avec c8.
 - `npm run coverage:report` : génère un rapport de couverture HTML et texte.
 
+## Zones d'alerte SANDRE
+
+Le référentiel SUP/SOU utilise par défaut le service WFS
+`https://www.sandre.eaufrance.fr/zas/mapserver`. `SANDRE_ZAS_URL` permet de
+définir son URL complète, sans ajout de chemin. Le comptage et toutes les pages
+utilisent ce même endpoint ; une erreur HTTP est remontée sans repli automatique.
+
+L'ancienne variable `SANDRE_API_BASE_URL` reste compatible : `/geo/zas` est
+ajouté à sa valeur, uniquement si `SANDRE_ZAS_URL` est absent. Lors d'une bascule,
+définir `SANDRE_ZAS_URL` suffit donc même si l'ancienne variable est conservée.
+Dans le client, l'option explicite `endpoint` prime sur `SANDRE_ZAS_URL`, puis
+viennent l'option `baseURL`, `SANDRE_API_BASE_URL` et le service par défaut.
+Les URL doivent être HTTP(S), sans identifiants intégrés.
+
+Les codes `CdZAS` numériques sont normalisés en texte pour conserver l'identité
+des zones existantes. Le champ historique `gid`, absent du nouveau service, est
+désormais facultatif ; appliquer les migrations habituelles avant la synchronisation.
+
 ## BullBoard
 
 Si `BULLBOARD_PASSWORD` est défini, le dashboard BullBoard est disponible sur :

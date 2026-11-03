@@ -12,7 +12,7 @@ model SandreAlertZone {
   id String @id @default(uuid()) @db.Uuid
 
   codeSandre             String                                      @unique @db.Text
-  gid                    Int
+  gid                    Int?
   name                   String                                      @db.Text
   type                   SandreAlertZoneType
   status                 SandreAlertZoneStatus
