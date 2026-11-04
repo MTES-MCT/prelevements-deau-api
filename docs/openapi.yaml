@@ -200,6 +200,42 @@ paths:
               schema: {$ref: '#/components/schemas/CollectionEnvelope'}
         default: {$ref: '#/components/responses/Error'}
   /campaigns/{campaignId}/responses:
+    post:
+      tags: [Campagnes]
+      operationId: addCollectorCampaignParticipation
+      summary: Ajouter une exploitation à une campagne ouverte
+      description: >-
+        Collecteur humain habilité à gérer les points, désigné sur cette campagne et encore délégué sur
+        l’exploitation. Crée uniquement un formulaire vierge pour une exploitation active autorisant la saisie
+        manuelle. Un formulaire existant est retourné intact, même si la campagne a fermé depuis sa création.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [exploitationId]
+              properties:
+                exploitationId: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '201':
+          description: Formulaire créé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorCampaignParticipationResult'}
+        '200':
+          description: Formulaire déjà présent, sans modification
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorCampaignParticipationResult'}
+        default: {$ref: '#/components/responses/Error'}
     get:
       tags: [Campagnes]
       operationId: listCollectionResponses
@@ -1496,6 +1532,165 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DeclarantSearchResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/campaign-participation-options:
+    get:
+      tags: [Campagnes]
+      operationId: getCollectorCampaignParticipationOptions
+      summary: Consulter les possibilités d’inscription à une campagne
+      description: >-
+        Collecteur humain habilité. Sans exploitationId, retourne ses campagnes ouvertes. Avec exploitationId,
+        vérifie sa délégation et retourne aussi les formulaires déjà présents dans les campagnes lancées,
+        sans exposer leur contenu. eligible et reason indiquent si un ajout est possible.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: exploitationId
+          in: query
+          schema: {$ref: '#/components/schemas/Uuid'}
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, default: 1}
+        - name: pageSize
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        '200':
+          description: Possibilités d’inscription, dont la liste peut être vide
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [campaigns, total, page, pageSize]
+                properties:
+                  total: {type: integer}
+                  page: {type: integer}
+                  pageSize: {type: integer}
+                  campaigns:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, eligible]
+                      properties:
+                        id: {$ref: '#/components/schemas/Uuid'}
+                        name: {type: string}
+                        opensOn: {type: [string, 'null'], format: date}
+                        closesOn: {type: [string, 'null'], format: date}
+                        eligible: {type: boolean}
+                        reason: {type: string}
+                        responseId: {$ref: '#/components/schemas/Uuid'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/points-prelevement/{pointId}/exploitations:
+    post:
+      tags: [Points]
+      operationId: createCollectorExploitation
+      summary: Créer une exploitation sur un point déjà suivi
+      description: >-
+        Collecteur humain habilité, point déjà suivi dans ses zones autorisées. Préleveur déjà suivi ou nouveau
+        préleveur créé atomiquement avec sa première exploitation. Le rattachement au collecteur est imposé côté
+        serveur. campaignId facultatif crée également le formulaire dans la même transaction. Rejeu sans doublon.
+      security: [{BearerAuth: []}]
+      parameters:
+        - name: pointId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectorExploitationCreation'}
+      responses:
+        '201':
+          description: Exploitation créée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointCreationResult'}
+        '200':
+          description: Résultat de la demande déjà enregistrée
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorPointCreationResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/exploitations/{exploitationId}/form:
+    parameters:
+      - name: exploitationId
+        in: path
+        required: true
+        schema: {$ref: '#/components/schemas/Uuid'}
+    get:
+      tags: [Points]
+      operationId: getCollectorExploitationForm
+      summary: Charger le formulaire collecteur d’une exploitation active déléguée
+      description: Collecteur humain habilité. Les exploitations terminées restent consultables avec des capacités de modification désactivées.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Exploitation, point, compteurs, capacités et version de concurrence
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorExploitationForm'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Points]
+      operationId: updateCollectorExploitationForm
+      summary: Modifier les données courantes d’une exploitation déléguée
+      description: >-
+        Usages, dates, statut, motif d’abandon et code comptage uniquement, avec compteurs selon les protections
+        existantes. Titulaire, point et délégations sont immuables. Une clôture est refusée si une campagne ouverte
+        attend une réponse ou des modifications non transmises. Une réduction de période incompatible avec les
+        données historisées est refusée. Version obsolète ou conflit métier retourne 409.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectorExploitationChanges'}
+      responses:
+        '200':
+          description: Formulaire actualisé
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorExploitationForm'}
+        default: {$ref: '#/components/responses/Error'}
+  /collecteurs/me/preleveurs/{preleveurId}/contact-details:
+    parameters:
+      - name: preleveurId
+        in: path
+        required: true
+        schema: {$ref: '#/components/schemas/Uuid'}
+    get:
+      tags: [Declarants]
+      operationId: getCollectorPreleveurContactDetails
+      summary: Charger les coordonnées d’un préleveur actuellement suivi
+      description: Collecteur humain habilité suivant une exploitation active du préleveur. Version incluant les emails de contact partagés.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Identifiant du préleveur, coordonnées partagées et version incluant les emails de contact
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorContactDetailsForm'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Declarants]
+      operationId: updateCollectorPreleveurContactDetails
+      summary: Modifier les coordonnées d’un préleveur actuellement suivi
+      description: >-
+        Collecteur humain habilité. Téléphone, adresse postale et emails de contact uniquement. Ne modifie ni
+        l’identité juridique, ni les rôles, ni l’adresse de connexion ou les alias. Coordonnées partagées avec les
+        autres collecteurs du préleveur. Mise à jour atomique et versionnée, doublons de contact refusés.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectorContactDetailsChanges'}
+      responses:
+        '200':
+          description: Coordonnées et version actualisées
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectorContactDetailsForm'}
         default: {$ref: '#/components/responses/Error'}
   /collecteurs/me/point-management:
     get:
@@ -4608,6 +4803,9 @@ components:
         canRead: {type: boolean}
         canEdit: {type: boolean}
         canEditUsageName: {type: boolean}
+        canCreateExploitation: {type: boolean}
+        canEditCollectorDetails: {type: boolean}
+        canEditContactDetails: {type: boolean}
         isAdmin: {type: boolean}
         permissions:
           type: array
@@ -5097,6 +5295,131 @@ components:
                     type: string
                     format: date-time
                     description: Pour METER, fin exacte exclusive des valeurs de ce chunk autorisé.
+    CollectorCampaignParticipation:
+      type: object
+      required: [campaignId, responseId, created]
+      properties:
+        campaignId: {$ref: '#/components/schemas/Uuid'}
+        responseId: {$ref: '#/components/schemas/Uuid'}
+        created: {type: boolean}
+    CollectorCampaignParticipationResult:
+      type: object
+      required: [campaignParticipation]
+      properties:
+        campaignParticipation: {$ref: '#/components/schemas/CollectorCampaignParticipation'}
+    CollectorExploitationCreation:
+      type: object
+      additionalProperties: false
+      required: [requestId, exploitation]
+      oneOf:
+        - required: [preleveurId]
+          not: {required: [preleveur]}
+        - required: [preleveur]
+          not: {required: [preleveurId]}
+      properties:
+        requestId: {$ref: '#/components/schemas/Uuid'}
+        preleveurId: {$ref: '#/components/schemas/Uuid'}
+        preleveur: {$ref: '#/components/schemas/CollectorPointCreation/properties/preleveur'}
+        exploitation: {$ref: '#/components/schemas/CollectorPointCreation/properties/exploitation'}
+        campaignId: {$ref: '#/components/schemas/Uuid'}
+        notifyAccountCreation: {type: boolean, default: false}
+    CollectorExploitationForm:
+      type: object
+      required: [exploitation, meters, version, capabilities]
+      properties:
+        exploitation:
+          type: object
+          additionalProperties: true
+          required: [id, pointPrelevementId, declarantUserId, pointPrelevement]
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+            declarantUserId: {$ref: '#/components/schemas/Uuid'}
+            pointPrelevement:
+              type: object
+              additionalProperties: true
+        meters:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        version: {type: string, pattern: '^[a-f0-9]{64}$'}
+        capabilities:
+          type: object
+          properties:
+            canEdit: {type: boolean}
+            canAddMeter: {type: boolean}
+            editableFields:
+              type: array
+              items: {type: string}
+    CollectorContactDetailsForm:
+      type: object
+      required: [preleveurId, details, version, capabilities]
+      properties:
+        preleveurId: {$ref: '#/components/schemas/Uuid'}
+        details: {$ref: '#/components/schemas/CollectorContactDetailsChanges/properties/details'}
+        version: {type: string, pattern: '^[a-f0-9]{64}$'}
+        capabilities:
+          type: object
+          properties:
+            canEdit: {type: boolean}
+            sharedProfile: {type: boolean}
+            editableFields:
+              type: array
+              items: {type: string}
+    CollectorExploitationChanges:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: {type: string, pattern: '^[a-f0-9]{64}$'}
+        changes:
+          type: object
+          additionalProperties: false
+          properties:
+            usageId: {$ref: '#/components/schemas/Uuid'}
+            secondaryUsageIds:
+              type: array
+              items: {$ref: '#/components/schemas/Uuid'}
+            startDate: {type: [string, 'null'], format: date}
+            endDate: {type: [string, 'null'], format: date}
+            status: {type: string, enum: [EN_ACTIVITE, NON_RENSEIGNE, TERMINEE, ABANDONNEE]}
+            abandonReason: {type: [string, 'null']}
+            countingCode: {type: [string, 'null']}
+        meters:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            oneOf:
+              - {$ref: '#/components/schemas/CollectorMeterChanges'}
+              - {$ref: '#/components/schemas/CollectorNewMeter'}
+    CollectorContactDetailsChanges:
+      type: object
+      additionalProperties: false
+      required: [version, details]
+      properties:
+        version: {type: string, pattern: '^[a-f0-9]{64}$'}
+        details:
+          type: object
+          additionalProperties: false
+          properties:
+            phoneNumber: {type: [string, 'null']}
+            addressLine1: {type: [string, 'null']}
+            addressLine2: {type: [string, 'null']}
+            poBox: {type: [string, 'null']}
+            postalCode: {type: [string, 'null']}
+            city: {type: [string, 'null']}
+            contactEmails:
+              type: array
+              maxItems: 20
+              items:
+                type: object
+                additionalProperties: false
+                required: [email]
+                properties:
+                  email: {type: string, format: email}
+                  isPrimary: {type: boolean}
     CollectorPointManagement:
       type: object
       required: [enabled, zoneIds, zones]
@@ -5124,6 +5447,9 @@ components:
         - required: [preleveur]
           not: {required: [preleveurId]}
       properties:
+        campaignId:
+          $ref: '#/components/schemas/Uuid'
+          description: Facultatif et sans valeur par défaut. Inscription atomique à une campagne ouverte appartenant au collecteur.
         requestId:
           type: string
           format: uuid
@@ -5320,6 +5646,7 @@ components:
       type: object
       required: [point, preleveurId, exploitationId, notification, replayed]
       properties:
+        campaignParticipation: {$ref: '#/components/schemas/CollectorCampaignParticipation'}
         point: {$ref: '#/components/schemas/PointPrelevement'}
         preleveurId: {$ref: '#/components/schemas/Uuid'}
         exploitationId: {$ref: '#/components/schemas/Uuid'}
@@ -5349,6 +5676,7 @@ components:
               items: {type: string}
             isShared: {type: boolean}
             canEditLocation: {type: boolean}
+            canCreateExploitation: {type: boolean, description: Collecteur habilité suivant ce point dans une zone de création autorisée.}
         flowType:
           type: string
           enum: [PRELEVEMENT, REJET]
