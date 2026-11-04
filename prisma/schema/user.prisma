@@ -39,6 +39,7 @@ model User {
 
   authTokens         AuthToken[]
   sessionTokens      SessionToken[]
+  selectedProfileSessions SessionToken[] @relation("SelectedPreleveurProfile")
   emailAliases       UserEmailAlias[]
   emailVerifications UserEmailVerification[]
   dataExports        DataExport[]
@@ -288,6 +289,7 @@ model AuthToken {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   authVersion Int @default(0)
+  loginEmail String? @db.Citext
 
   createdAt DateTime @default(now())
   expiresAt DateTime
@@ -310,12 +312,18 @@ model SessionToken {
 
   authVersion               Int  @default(0)
   impersonatedByAuthVersion Int?
+  loginEmail String? @db.Citext
+  profileUserId String? @db.Uuid
+  profileUser User? @relation("SelectedPreleveurProfile", fields: [profileUserId], references: [id], onDelete: Cascade)
+  profileAuthVersion Int?
+  profileSelectionRequired Boolean @default(false)
 
   createdAt DateTime @default(now())
   expiresAt DateTime
 
   @@index([userId])
   @@index([impersonatedByUserId])
+  @@index([profileUserId])
   @@index([expiresAt])
 }
 

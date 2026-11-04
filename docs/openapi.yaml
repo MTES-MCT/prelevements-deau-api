@@ -578,6 +578,50 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/AuthSessionResponse'}
         default: {$ref: '#/components/responses/Error'}
+  /auth/preleveurs:
+    get:
+      tags: [Auth]
+      operationId: listAuthenticatedPreleveurs
+      summary: Choisir parmi les préleveurs liés à l’adresse authentifiée
+      description: >-
+        Session humaine vérifiée sur l’email principal explicite d’un préleveur. Les contacts secondaires,
+        alias historiques et comptes agents ou collecteurs ne donnent aucun accès supplémentaire.
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: Profils actuellement accessibles
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthenticatedPreleveurs'}
+        default: {$ref: '#/components/responses/Error'}
+  /auth/preleveurs/select:
+    post:
+      tags: [Auth]
+      operationId: selectAuthenticatedPreleveur
+      summary: Ouvrir la fiche d’un préleveur autorisé
+      description: >-
+        Revérifie le principal et les droits, révoque la session courante puis retourne un nouveau jeton,
+        sans prolonger l’expiration initiale. Seule la fiche choisie détermine les droits métier.
+        Avant ce choix, les routes métier répondent 409 PRELEVEUR_SELECTION_REQUIRED.
+        Les paramètres de connexion restent réservés à l’identité d’origine.
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [preleveurId]
+              properties:
+                preleveurId: {$ref: '#/components/schemas/Uuid'}
+      responses:
+        '200':
+          description: Nouvelle session pour la fiche choisie
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthSessionResponse'}
+        default: {$ref: '#/components/responses/Error'}
   /auth/logout:
     post:
       tags: [Auth]
@@ -5155,6 +5199,14 @@ components:
         role: {type: string, enum: [DECLARANT, INSTRUCTOR, ADMIN]}
         user: {$ref: '#/components/schemas/UserProfile'}
         expiresAt: {type: string, format: date-time}
+        preleveurProfiles:
+          type: object
+          required: [enabled, canSwitch, selectionRequired, canManageAccount]
+          properties:
+            enabled: {type: boolean}
+            canSwitch: {type: boolean}
+            selectionRequired: {type: boolean}
+            canManageAccount: {type: boolean}
         permissions:
           type: array
           items: {type: string}
@@ -5166,6 +5218,24 @@ components:
         success: {type: boolean, const: true}
         token: {type: string, writeOnly: true}
         expiresAt: {type: string, format: date-time}
+        profileSelectionRequired: {type: boolean}
+    AuthenticatedPreleveurs:
+      type: object
+      required: [preleveurs, currentPreleveurId, selectionRequired]
+      properties:
+        currentPreleveurId: {type: [string, 'null'], format: uuid}
+        selectionRequired: {type: boolean}
+        preleveurs:
+          type: array
+          items:
+            type: object
+            required: [id]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              firstName: {type: [string, 'null']}
+              lastName: {type: [string, 'null']}
+              socialReason: {type: [string, 'null']}
+              city: {type: [string, 'null']}
     PasswordAccess:
       type: object
       additionalProperties: false
