@@ -138,6 +138,10 @@ model Declarant {
   userId String @id @db.Uuid
   user   User   @relation("UserDeclarant", fields: [userId], references: [id], onDelete: Cascade)
 
+  // Business principal. Several preleveurs may share it; legacy User.email
+  // remains the independent, unique login identity during the rollout.
+  email String? @db.Citext
+
   declarations             Declaration[]                     @relation("DeclarationDeclarant")
   declarationsCreated      Declaration[]                     @relation("DeclarationCreatedByDeclarant")
   chunksAsPreleveur        Chunk[]                           @relation("ChunkPreleveur")
@@ -185,6 +189,7 @@ model Declarant {
   sourceId String? @db.Text
 
   @@unique([sourceId])
+  @@index([email])
   @@index([declarantRole])
   @@index([quickDeclarationEnabled])
   @@index([declarationNotificationsEnabled])
