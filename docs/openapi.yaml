@@ -1662,7 +1662,7 @@ paths:
       tags: [Declarants]
       operationId: getCollectorPreleveurContactDetails
       summary: Charger les coordonnées d’un préleveur actuellement suivi
-      description: Collecteur humain habilité suivant une exploitation active du préleveur. Version incluant les emails de contact partagés.
+      description: Collecteur humain habilité suivant une exploitation active du préleveur. Version incluant son adresse principale et les contacts historiques.
       security: [{BearerAuth: []}]
       responses:
         '200':
@@ -1676,9 +1676,10 @@ paths:
       operationId: updateCollectorPreleveurContactDetails
       summary: Modifier les coordonnées d’un préleveur actuellement suivi
       description: >-
-        Collecteur humain habilité. Téléphone, adresse postale et emails de contact uniquement. Ne modifie ni
-        l’identité juridique, ni les rôles, ni l’adresse de connexion ou les alias. Coordonnées partagées avec les
-        autres collecteurs du préleveur. Mise à jour atomique et versionnée, doublons de contact refusés.
+        Collecteur humain habilité. Téléphone, adresse postale et adresse principale uniquement. Une même adresse
+        principale peut appartenir à plusieurs préleveurs. Ne modifie ni l’identité juridique, ni les rôles,
+        ni les accès de connexion existants ou les alias. Les contacts historiques sont conservés lors de
+        l’édition de details.email. Mise à jour atomique et versionnée. Une adresse nulle reste vide après relecture.
       security: [{BearerAuth: []}]
       requestBody:
         required: true
@@ -4820,6 +4821,7 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        principalEmail: {type: [string, 'null'], format: email, description: Adresse à afficher. Une valeur nulle ne doit pas déclencher de repli vers les contacts ou le login.}
         loginEmail: {type: [string, 'null'], format: email}
         contactEmails:
           type: array
@@ -4859,6 +4861,7 @@ components:
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        principalEmail: {type: [string, 'null'], format: email, description: Adresse à afficher. Une valeur nulle reste vide.}
         loginEmail: {type: [string, 'null'], format: email}
         contactEmails:
           type: array
@@ -4989,6 +4992,7 @@ components:
         id: {$ref: '#/components/schemas/Uuid'}
         userId: {$ref: '#/components/schemas/Uuid'}
         email: {type: [string, 'null'], format: email}
+        principalEmail: {type: [string, 'null'], format: email, description: Adresse à afficher. Une valeur nulle reste vide.}
         loginEmail: {type: [string, 'null'], format: email}
         contactEmails:
           type: array
@@ -5410,7 +5414,13 @@ components:
             poBox: {type: [string, 'null']}
             postalCode: {type: [string, 'null']}
             city: {type: [string, 'null']}
+            email:
+              type: [string, 'null']
+              format: email
+              description: Adresse principale métier, partageable. Null retire le principal sans supprimer les contacts historiques ni changer les accès existants.
             contactEmails:
+              deprecated: true
+              description: Compatibilité avec l’ancien formulaire, incompatible avec email dans la même requête. Seul un contact explicitement principal peut renseigner l’adresse principale.
               type: array
               maxItems: 20
               items:
@@ -5654,7 +5664,7 @@ components:
           type: object
           required: [status]
           properties:
-            status: {type: string, enum: [not_requested, pending, sent, failed]}
+            status: {type: string, enum: [not_requested, pending, sent, failed, already_registered]}
         replayed: {type: boolean}
     PointPrelevement:
       type: object
