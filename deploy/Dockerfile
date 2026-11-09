@@ -1,5 +1,6 @@
 FROM node:24.22.1-alpine3.24@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
-RUN apk upgrade --no-cache
+# Keep the CVE-2026-4738 fix even when the base image or build cache predates it.
+RUN apk upgrade --no-cache && apk add --no-cache 'zlib>=1.4-r0'
 WORKDIR /app
 COPY package.json ./
 RUN npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
