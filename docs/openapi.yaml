@@ -5179,6 +5179,7 @@ components:
             - {$ref: '#/components/schemas/PreleveurType'}
             - type: 'null'
         socialReason: {type: [string, 'null']}
+        siret: {type: [string, 'null']}
         civility:
           oneOf:
             - type: string
@@ -5235,6 +5236,7 @@ components:
               firstName: {type: [string, 'null']}
               lastName: {type: [string, 'null']}
               socialReason: {type: [string, 'null']}
+              siret: {type: [string, 'null']}
               city: {type: [string, 'null']}
     PasswordAccess:
       type: object
