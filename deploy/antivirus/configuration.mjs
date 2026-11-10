@@ -32,7 +32,8 @@ export function expectedSettings(config) {
     // Public exposure is disabled; the scanner authenticates every scan with its own scoped token.
     enable_private_endpoint: true, enable_default_public_endpoint: false,
     scaling_option: {concurrent_requests_threshold: 2}, timeout: '180s',
-    startup_probe: {http: {path: '/readyz'}, interval: '3s', timeout: '2s', failure_threshold: 40},
+    // Scaleway requires probe intervals >= 5s; retain a 120s startup allowance.
+    startup_probe: {http: {path: '/readyz'}, interval: '5s', timeout: '2s', failure_threshold: 24},
     liveness_probe: {http: {path: '/readyz'}, interval: '30s', timeout: '2s', failure_threshold: 3},
     environment_variables: {}, secret_environment_variables: {}, command: [], args: [],
     tags: ['partageonsleau', 'antivirus', 'managed:antivirus-ci']
