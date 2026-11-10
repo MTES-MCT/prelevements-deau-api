@@ -1,0 +1,123 @@
+name: Refresh and deploy upload antivirus
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upload-antivirus-release
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and validate scanner and current signatures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      IMAGE_REPOSITORY: rg.fr-par.scw.cloud/prelevements-deau-api/upload-antivirus
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.22.1'
+      - name: Validate standalone scanner and deployment contracts
+        run: node --test deploy/antivirus/*.checks.mjs deploy/antivirus/scanner/*.checks.mjs
+      - name: Verify destination registry is private
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+        run: node deploy/antivirus/verify-registry.mjs
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: rg.fr-par.scw.cloud/prelevements-deau-api
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+      - name: Build one immutable image with refreshed signatures
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: deploy/antivirus/scanner
+          file: deploy/antivirus/scanner/Dockerfile
+          platforms: linux/amd64
+          push: true
+          cache-from: type=registry,ref=${{ env.IMAGE_REPOSITORY }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_REPOSITORY }}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+          build-args: |
+            SIGNATURE_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
+          tags: ${{ env.IMAGE_REPOSITORY }}:run-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+          cache: true
+      - name: Reject vulnerable or incomplete candidate images
+        env:
+          IMAGE_REF: ${{ env.IMAGE_REPOSITORY }}@${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p .artifacts/antivirus
+          status=0
+          trivy image --scanners vuln --format json --timeout 15m --exit-code 2 --exit-on-eol 1 \
+            --output .artifacts/antivirus/image-audit.json "$IMAGE_REF" || status=$?
+          node deploy/antivirus/scanner/audit-image.mjs .artifacts/antivirus/image-audit.json "$IMAGE_REF" "$status"
+      - name: Test real ClamAV image including EICAR and maximum file size
+        env:
+          IMAGE_REF: ${{ env.IMAGE_REPOSITORY }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "$IMAGE_REF"
+          node deploy/antivirus/scanner/smoke.mjs "$IMAGE_REF"
+      - name: Retain scanner validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: antivirus-image-${{ github.run_id }}
+          path: .artifacts/antivirus/
+          if-no-files-found: warn
+          retention-days: 14
+
+  deploy:
+    name: Deploy validated scanner (${{ matrix.environment }})
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: testing
+            namespace_variable: CLAMAV_TESTING_NAMESPACE_ID
+          - environment: demo
+            namespace_variable: CLAMAV_DEMO_NAMESPACE_ID
+          - environment: prod
+            namespace_variable: CLAMAV_PROD_NAMESPACE_ID
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.22.1'
+      - name: Create or update only the dedicated private scanner
+        env:
+          DEPLOY_ENV: ${{ matrix.environment }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          CLAMAV_NAMESPACE_ID: ${{ vars[matrix.namespace_variable] }}
+          IMAGE_REF: rg.fr-par.scw.cloud/prelevements-deau-api/upload-antivirus@${{ needs.image.outputs.digest }}
+        run: node deploy/antivirus/deploy.mjs
+      - name: Retain deployment and rollback references
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: antivirus-${{ matrix.environment }}-${{ github.run_id }}
+          path: .artifacts/antivirus/
+          if-no-files-found: warn
+          retention-days: 14
