@@ -1164,6 +1164,10 @@ paths:
         Le modèle PE accepte une colonne facultative code_comptage (ou « Code comptage »).
         Les anciens formats restent acceptés ; les lignes ambiguës sont conservées
         pour rapprochement, sans attribution arbitraire à une exploitation.
+        Chaque nouveau fichier est analysé par ClamAV avant enregistrement.
+        Tout le dépôt est refusé si un fichier est infecté ou ne peut pas être entièrement
+        analysé (422), ou si le scanner est indisponible ou dépasse 180 secondes (503).
+        Aucun fichier du dépôt n'est alors stocké et aucun traitement n'est déclenché.
       requestBody:
         required: true
         content:
@@ -1182,6 +1186,70 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Declaration'}
+        '422':
+          description: Fichier infecté ou impossible à analyser complètement ; dépôt refusé.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503':
+          description: Analyse antivirus temporairement indisponible ; réessayer ultérieurement.
+          headers:
+            Retry-After:
+              schema: {type: integer, example: 30}
+              description: Délai conseillé avant une nouvelle tentative, en secondes.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /preleveurs/{declarantId}/documents:
+    post:
+      tags: [Instruction]
+      operationId: createPreleveurDocument
+      summary: Ajouter un document à un préleveur
+      description: >-
+        Requiert le droit declarant.document.create. Analyse le nouveau document par
+        ClamAV avant toute écriture métier ou stockage. Un document refusé ou une analyse
+        indisponible ne crée aucun document. Les fichiers déjà présents ne sont pas analysés.
+      parameters:
+        - $ref: '#/components/parameters/DeclarantId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [document, nature, signatureDate]
+              properties:
+                document: {type: string, format: binary}
+                nature: {type: string}
+                signatureDate: {type: string, format: date}
+                title: {type: string}
+                reference: {type: string}
+                validityEndDate: {type: string, format: date}
+                comment: {type: string}
+                declarantPointPrelevementIds:
+                  type: array
+                  items: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Document créé et disponible au téléchargement.
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        '422':
+          description: Fichier infecté ou impossible à analyser complètement ; document refusé.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503':
+          description: Analyse antivirus temporairement indisponible ; réessayer ultérieurement.
+          headers:
+            Retry-After:
+              schema: {type: integer, example: 30}
+              description: Délai conseillé avant une nouvelle tentative, en secondes.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         default: {$ref: '#/components/responses/Error'}
   /declarations/quick:
     post:
