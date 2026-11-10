@@ -10,6 +10,10 @@ const configuration = environment => readConfiguration({DEPLOY_ENV: environment,
   CLAMAV_NAMESPACE_ID: '11111111-1111-4111-8111-111111111111', SCW_SECRET_KEY: 'synthetic-not-a-credential',
   IMAGE_REF: `${REGISTRY}/upload-antivirus@sha256:${'a'.repeat(64)}`})
 const scannerId = '22222222-2222-4222-8222-222222222222'
+const rejectedAllocation = candidate => candidate.mvcpu_limit === 500
+  && !(candidate.memory_limit_bytes >= 500000000 && candidate.memory_limit_bytes <= 2000000000)
+const allocationError = () => Response.json({type: 'invalid_arguments',
+  details: [{argument_name: 'memory_limit_bytes', reason: 'constraint'}]}, {status: 400})
 function fixture({existing = false, drift, failWrite = false, environment = 'testing', previousSizing = false} = {}) {
   const config = configuration(environment)
   const calls = []
@@ -21,6 +25,11 @@ function fixture({existing = false, drift, failWrite = false, environment = 'tes
     private_endpoint: `http://${scannerId}.${config.networkId}.internal`,
     public_endpoint: 'https://scanner.example.test', default_public_endpoint_enabled: false,
     ...(previousSizing ? {memory_limit_bytes: 4096000000, mvcpu_limit: 2000, min_scale: 0} : {}), ...drift}
+  const applyScannerUpdate = body => {
+    if (rejectedAllocation({...scanner, ...body})) return allocationError()
+    Object.assign(scanner, body)
+    return Response.json(scanner)
+  }
   const fetchRequest = async (url, options = {}) => {
     const parsed = new URL(url)
     const method = options.method ?? 'GET'
@@ -38,11 +47,10 @@ function fixture({existing = false, drift, failWrite = false, environment = 'tes
       const interval = Number.parseFloat(body.startup_probe?.interval)
       if (!(interval >= 5 && interval <= 120)) return Response.json({type: 'invalid_arguments',
         details: [{argument_name: 'startup_probe.interval', reason: 'constraint'}]}, {status: 400})
-      Object.assign(scanner, body)
-      return Response.json(scanner)
+      return applyScannerUpdate(body)
     }
     if (parsed.pathname.endsWith(`/containers/${scannerId}`)) {
-      if (method === 'PATCH') Object.assign(scanner, body)
+      if (method === 'PATCH') return applyScannerUpdate(body)
       return Response.json(scanner)
     }
     throw new Error('Unexpected resource access')
@@ -82,17 +90,30 @@ test('only the complete original sizing transitions, without rewriting variables
     const proof = await deploy()
     const minimum = environment === 'prod' ? 1 : 0
     assert.deepEqual(f.calls.filter(call => call.method !== 'GET').map(call => call.body), [{
-      image: f.config.image, memory_limit_bytes: 2048000000, mvcpu_limit: 500, min_scale: minimum
+      image: f.config.image, memory_limit_bytes: 2000000000, mvcpu_limit: 500, min_scale: minimum
     }])
     assert.deepEqual(proof.previousSizing, {memoryLimitBytes: 4096000000, mvcpuLimit: 2000, minScale: 0})
     assert.equal(proof.minScale, minimum)
-    assert.equal(proof.memoryLimitBytes, 2048000000)
+    assert.equal(proof.memoryLimitBytes, 2000000000)
     assert.equal(proof.mvcpuLimit, 500)
   }))
 })
+test('Scaleway rejects 2048 MB at 500 mvCPU before changing the resource', async () => {
+  const f = fixture({existing: true, previousSizing: true})
+  const url = `https://api.scaleway.com/containers/v1/regions/fr-par/containers/${scannerId}`
+  const options = {headers: {'X-Auth-Token': f.config.credential}, redirect: 'error'}
+  const rejected = await f.fetchRequest(url, {...options, method: 'PATCH', body: JSON.stringify({
+    image: f.config.image, memory_limit_bytes: 2048000000, mvcpu_limit: 500, min_scale: 0
+  })})
+  assert.equal(rejected.status, 400)
+  const unchanged = await (await f.fetchRequest(url, options)).json()
+  assert.equal(unchanged.memory_limit_bytes, 4096000000)
+  assert.equal(unchanged.mvcpu_limit, 2000)
+})
 test('configuration drift blocks a refresh before writes', async t => {
   const cases = [{drift: {min_scale: 1}}, {environment: 'prod', drift: {min_scale: 0}},
-    {previousSizing: true, drift: {mvcpu_limit: 500}}, {previousSizing: true, drift: {memory_limit_bytes: 2048000000}},
+    {drift: {memory_limit_bytes: 2048000000}},
+    {previousSizing: true, drift: {mvcpu_limit: 500}}, {previousSizing: true, drift: {memory_limit_bytes: 2000000000}},
     {previousSizing: true, drift: {max_scale: 2}}, {previousSizing: true, drift: {default_public_endpoint_enabled: true}},
     {previousSizing: true, drift: {secret_environment_variables: {OTHER_SECRET: 'unexpected'}}},
     {previousSizing: true, drift: {environment_variables: {DATABASE_URL: 'unexpected'}}}]

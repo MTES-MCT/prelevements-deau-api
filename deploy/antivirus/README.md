@@ -20,10 +20,12 @@ namespaces. Le workflow utilise les secrets Scaleway déjà disponibles au
 niveau du dépôt et vérifie explicitement projet, namespace, réseau et nom
 avant chaque écriture. Aucun service applicatif existant n'est modifié.
 
-Le conteneur utilise 2 048 Mo (2 048 000 000 octets), 0,5 vCPU, `max_scale=1`,
+Le conteneur utilise 2 Go (2 000 000 000 octets), 0,5 vCPU, `max_scale=1`,
 une concurrence de 2 et un délai de 180 secondes. En production, `min_scale=1`
 garde une instance disponible pour éviter le démarrage à froid lors d'un upload.
 En testing et demo, `min_scale=0` permet l'arrêt en l'absence de requêtes.
+Scaleway limite à 2 000 Mo la mémoire autorisée pour 500 mvCPU : une valeur
+de 2 048 000 000 octets est refusée par l'API.
 Il expose uniquement son endpoint privé,
 avec HTTPS et la CA régionale Scaleway côté client. Sa politique plateforme
 `privacy=public` signifie uniquement que l'authentification est assurée par

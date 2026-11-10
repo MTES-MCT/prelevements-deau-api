@@ -29,7 +29,8 @@ export function expectedSettings(config) {
   return {
     namespace_id: config.namespaceId, name: config.containerName, private_network_id: config.networkId,
     min_scale: config.environment === 'prod' ? 1 : 0, max_scale: 1,
-    memory_limit_bytes: 2048000000, mvcpu_limit: 500,
+    // Scaleway caps 500 mvCPU containers at exactly 2000 MB (decimal bytes).
+    memory_limit_bytes: 2000000000, mvcpu_limit: 500,
     privacy: 'public', protocol: 'http1', port: 8080, sandbox: 'v2', https_connections_only: true,
     // Public exposure is disabled; the scanner authenticates every scan with its own scoped token.
     enable_private_endpoint: true, enable_default_public_endpoint: false,

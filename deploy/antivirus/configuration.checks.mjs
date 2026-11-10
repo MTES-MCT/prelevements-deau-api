@@ -21,12 +21,12 @@ test('private-only scanner sizing and environment-specific minimum scale are man
   assert.doesNotThrow(() => assertContainer(container(), config))
   for (const name of ['testing', 'demo', 'prod']) {
     const settings = expectedSettings(readConfiguration({...env, DEPLOY_ENV: name}))
-    assert.equal(settings.memory_limit_bytes, 2048000000)
+    assert.equal(settings.memory_limit_bytes, 2000000000)
     assert.equal(settings.mvcpu_limit, 500)
     assert.equal(settings.min_scale, name === 'prod' ? 1 : 0)
     assert.equal(settings.max_scale, 1)
   }
-  for (const override of [{min_scale: 1}, {max_scale: 2}, {default_public_endpoint_enabled: true},
+  for (const override of [{min_scale: 1}, {max_scale: 2}, {memory_limit_bytes: 2048000000}, {default_public_endpoint_enabled: true},
     {private_endpoint: null}, {private_network_id: 'other'}, {namespace_id: 'other'},
     {secret_environment_variables: {DATABASE_URL: 'unexpected'}}, {environment_variables: {extra: 'unexpected'}},
     {scaling_option: {concurrent_requests_threshold: 80}}, {tags: ['unmanaged']}]) {
