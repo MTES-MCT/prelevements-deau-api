@@ -1,5 +1,5 @@
 import http from 'node:http'
-import {createHash, timingSafeEqual} from 'node:crypto'
+import {createHash, randomUUID, timingSafeEqual} from 'node:crypto'
 import {getEngineVersion, scanStream, ScannerError, MAX_FILE_BYTES} from './clamd.mjs'
 
 function respond(response, status, body) {
@@ -26,6 +26,8 @@ export function createScannerServer({version = getEngineVersion, scan = scanStre
   concurrency = 2, timeoutMs = 120_000, token = process.env.CLAMAV_INVOKE_TOKEN} = {}) {
   if (!/^[a-f0-9]{64}$/.test(token ?? '')) throw new Error('A 256-bit invocation token is required')
   const expectedAuthorization = createHash('sha256').update(`Bearer ${token}`).digest()
+  const bootId = randomUUID()
+  const startedAt = new Date().toISOString()
   let active = 0
   const server = http.createServer(async (request, response) => {
     if (request.url === '/readyz' && request.method === 'GET') {
@@ -38,7 +40,7 @@ export function createScannerServer({version = getEngineVersion, scan = scanStre
       return
     }
     if (request.url === '/healthz' && request.method === 'GET') {
-      try {respond(response, 200, {status: 'ready', ...await version()})} catch {respond(response, 503, {status: 'unavailable'})}
+      try {respond(response, 200, {status: 'ready', ...await version(), bootId, startedAt})} catch {respond(response, 503, {status: 'unavailable'})}
       return
     }
     if (request.url !== '/scan' || request.method !== 'POST') {
