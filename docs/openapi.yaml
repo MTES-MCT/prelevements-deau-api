@@ -4236,6 +4236,12 @@ components:
       required: [message]
       properties:
         message: {type: string}
+        messageIsPublic:
+          type: boolean
+          description: >-
+            Présent et vrai uniquement pour une erreur 503 dont le message métier
+            peut être affiché à l’utilisateur. Les détails internes des autres erreurs
+            serveur, notamment toutes les erreurs 500, restent masqués.
         code: {type: string}
         details: {}
     AdminAgentZone:
