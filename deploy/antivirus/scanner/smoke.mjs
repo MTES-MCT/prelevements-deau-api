@@ -13,7 +13,7 @@ const token = randomBytes(32).toString('hex')
 const directory = await mkdtemp(join(tmpdir(), 'clamav-smoke-'))
 const container = `clamav-smoke-${randomUUID()}`
 const started = Date.now()
-const memoryLimitBytes = 2_048_000_000
+const memoryLimitBytes = 2_000_000_000
 const cpuLimit = 0.5
 const report = {image, memoryLimitBytes, cpuLimit, swapDisabled: true, checks: []}
 const docker = (...args) => execFileSync('docker', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim()
