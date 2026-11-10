@@ -20,31 +20,47 @@ namespaces. Le workflow utilise les secrets Scaleway déjà disponibles au
 niveau du dépôt et vérifie explicitement projet, namespace, réseau et nom
 avant chaque écriture. Aucun service applicatif existant n'est modifié.
 
-Le conteneur utilise 4 096 Mo, 2 vCPU, `min_scale=0`, `max_scale=1`, concurrence
-2 et un délai de 180 secondes. Il expose uniquement son endpoint privé,
+Le conteneur utilise 2 048 Mo (2 048 000 000 octets), 0,5 vCPU, `max_scale=1`,
+une concurrence de 2 et un délai de 180 secondes. En production, `min_scale=1`
+garde une instance disponible pour éviter le démarrage à froid lors d'un upload.
+En testing et demo, `min_scale=0` permet l'arrêt en l'absence de requêtes.
+Il expose uniquement son endpoint privé,
 avec HTTPS et la CA régionale Scaleway côté client. Sa politique plateforme
 `privacy=public` signifie uniquement que l'authentification est assurée par
 le scanner : **l'endpoint Internet reste désactivé**, et chaque analyse exige
 `Authorization: Bearer <jeton>`. `/readyz` expose uniquement la disponibilité
 pour les probes internes ; `/healthz` et `/scan` nécessitent le jeton.
 
-Ne pas ajouter de cron HTTP ou de sonde externe périodique : ils empêcheraient
-l'arrêt après inactivité. Les probes Scaleway ne maintiennent pas d'instance
-supplémentaire. Les signatures sont intégrées à l'image ; aucun téléchargement
+Ne pas ajouter de cron HTTP ou de sonde externe périodique en testing/demo :
+ils empêcheraient l'arrêt après inactivité. Le délai réel de retour à zéro doit
+être contrôlé dans Cockpit : une valeur `min_scale=0` ne constitue pas à elle
+seule une preuve d'arrêt. Lors du contrôle du 10 novembre 2026, les métriques
+indiquaient encore une instance après plus de seize minutes sans upload ;
+le retour à zéro n'a donc pas été confirmé. Les signatures sont intégrées
+à l'image ; aucun téléchargement
 ni accès S3/DB n'est nécessaire au démarrage.
 
 ## Livraison et vérification
 
 Le workflow crée le conteneur manquant dans le namespace dédié ou modifie
-uniquement son image. Tout écart de configuration interrompt la livraison.
+uniquement son image s'il possède déjà le dimensionnement attendu. Il accepte
+aussi une transition contrôlée depuis l'ancienne configuration exacte
+4 096 000 000 octets / 2 000 mvCPU / `min_scale=0` : le PATCH contient alors
+uniquement l'image, la mémoire, le CPU et le minimum d'instances. Les variables
+et secrets ne sont jamais réécrits. Un dimensionnement intermédiaire ou tout
+autre écart de configuration interrompt la livraison.
 Les mutations ne sont pas répétées automatiquement en cas de réponse perdue.
-Les artefacts conservent le digest précédent pour un retour arrière ciblé.
+Les artefacts conservent le digest et le dimensionnement précédents pour un
+retour arrière ciblé.
 
 Avant activation d'une API, depuis son réseau privé : vérifier un refus sans
 jeton et avec un mauvais jeton, un fichier sain, EICAR, une archive infectée,
 un fichier chiffré, les limites et un fichier de 50 Mo après arrêt à zéro.
 Vérifier aussi l'inaccessibilité publique, la conservation des configurations
-applicatives et l'arrêt du scanner après quinze minutes sans requête.
+applicatives, l'instance disponible en production et le retour à zéro observé
+dans Cockpit en testing/demo après inactivité. Scaleway documente quinze
+minutes ; vérifier la mesure effective sans requête de surveillance qui
+réinitialiserait cette période.
 
 Un échec quotidien doit être traité via l'alerte du workflow GitHub ; les
 signatures âgées de plus de 72 heures rendent le scanner indisponible et les

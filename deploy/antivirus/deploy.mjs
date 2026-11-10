@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {appendFile, mkdir, writeFile} from 'node:fs/promises'
 import {setTimeout as sleep} from 'node:timers/promises'
 import {pathToFileURL} from 'node:url'
-import {readConfiguration, expectedSettings, assertNamespace, assertContainer, PROJECT_ID} from './configuration.mjs'
+import {readConfiguration, expectedSettings, assertNamespace, assertContainer, planContainerUpdate, PROJECT_ID} from './configuration.mjs'
 
 const origin = 'https://api.scaleway.com/containers/v1/regions/fr-par'
 
@@ -38,16 +38,18 @@ export async function deployAntivirus(config, {fetchRequest = fetch, wait = slee
   let before = listing.containers[0]
   let candidate
   if (before) {
-    assertContainer(before, config)
+    const update = planContainerUpdate(before, config)
     assert.equal(before.status, 'ready', 'Resolve previous scanner deployment before continuing')
-    candidate = await request('PATCH', `/containers/${before.id}`, {image: config.image})
+    candidate = await request('PATCH', `/containers/${before.id}`, update)
   } else {
     candidate = await request('POST', '/containers', {...expectedSettings(config), image: config.image,
-      description: 'On-demand antivirus for new uploads only; authenticated private endpoint'})
+      description: 'Antivirus for new uploads only; authenticated private endpoint'})
   }
   assert(candidate.id && candidate.name === config.containerName)
   const operation = {environment: config.environment, containerId: candidate.id, namespaceId: config.namespaceId,
-    created: !before, previousImage: before?.image ?? null, image: config.image, startedAt: new Date().toISOString()}
+    created: !before, previousImage: before?.image ?? null,
+    previousSizing: before ? {memoryLimitBytes: before.memory_limit_bytes, mvcpuLimit: before.mvcpu_limit, minScale: before.min_scale} : null,
+    image: config.image, startedAt: new Date().toISOString()}
   await mkdir(proofDirectory, {recursive: true})
   const proofPath = `${proofDirectory}/${config.environment}-deployment.json`
   await writeFile(proofPath, JSON.stringify(operation, null, 2))
@@ -74,7 +76,8 @@ export async function deployAntivirus(config, {fetchRequest = fetch, wait = slee
     assert.equal(publicResponse.status, 404, 'Scanner default public endpoint must be inaccessible')
   }
   Object.assign(operation, {ready: true, privateEndpoint: current.private_endpoint,
-    publicEndpointDisabled: true, minScale: 0, maxScale: 1, completedAt: new Date().toISOString()})
+    publicEndpointDisabled: true, minScale: current.min_scale, maxScale: current.max_scale,
+    memoryLimitBytes: current.memory_limit_bytes, mvcpuLimit: current.mvcpu_limit, completedAt: new Date().toISOString()})
   await writeFile(proofPath, JSON.stringify(operation, null, 2))
   return operation
 }
@@ -83,7 +86,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const proof = await deployAntivirus(readConfiguration())
     if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY,
-      `Antivirus ${proof.environment}: immutable image ready, public endpoint disabled, scale 0–1. Existing applications and secrets untouched.\n`)
+      `Antivirus ${proof.environment}: immutable image ready, public endpoint disabled, scale ${proof.minScale}–${proof.maxScale}, ${proof.memoryLimitBytes} bytes / ${proof.mvcpuLimit} mvCPU. Existing applications and secrets untouched.\n`)
     console.log(JSON.stringify({environment: proof.environment, ready: true, project: PROJECT_ID, publicEndpointDisabled: true}))
   } catch (error) {
     console.error(`Antivirus deployment blocked: ${error.message}`)

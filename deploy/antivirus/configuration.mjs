@@ -9,6 +9,7 @@ export const NETWORKS = Object.freeze({
   prod: '3a4a5621-4e6a-4195-b202-af3fc351e81c'
 })
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/
+const previousSizing = Object.freeze({memory_limit_bytes: 4096000000, mvcpu_limit: 2000, min_scale: 0})
 
 export function readConfiguration(environment = process.env) {
   const name = environment.DEPLOY_ENV
@@ -27,7 +28,8 @@ export function readConfiguration(environment = process.env) {
 export function expectedSettings(config) {
   return {
     namespace_id: config.namespaceId, name: config.containerName, private_network_id: config.networkId,
-    min_scale: 0, max_scale: 1, memory_limit_bytes: 4096000000, mvcpu_limit: 2000,
+    min_scale: config.environment === 'prod' ? 1 : 0, max_scale: 1,
+    memory_limit_bytes: 2048000000, mvcpu_limit: 500,
     privacy: 'public', protocol: 'http1', port: 8080, sandbox: 'v2', https_connections_only: true,
     // Public exposure is disabled; the scanner authenticates every scan with its own scoped token.
     enable_private_endpoint: true, enable_default_public_endpoint: false,
@@ -50,8 +52,7 @@ export function assertNamespace(namespace, config) {
   assert.deepEqual(Object.keys(namespace.secret_environment_variables ?? {}).sort(), ['CLAMAV_INVOKE_TOKEN'])
 }
 
-export function assertContainer(container, config) {
-  const expected = expectedSettings(config)
+function assertContainerSettings(container, config, expected) {
   for (const key of ['namespace_id', 'name', 'private_network_id', 'min_scale', 'max_scale',
     'memory_limit_bytes', 'mvcpu_limit', 'privacy', 'protocol', 'port', 'sandbox', 'https_connections_only']) {
     assert.equal(container[key], expected[key], `Antivirus configuration drift: ${key}`)
@@ -65,10 +66,25 @@ export function assertContainer(container, config) {
   assert.deepEqual(container.secret_environment_variables, {})
   assert.deepEqual(container.command ?? [], [])
   assert.deepEqual(container.args ?? [], [])
+  assert.deepEqual(container.tags, expected.tags)
   for (const key of ['liveness_probe', 'startup_probe']) {
     assert.equal(container[key]?.http?.path, '/readyz')
     assert.equal(Number.parseFloat(container[key]?.interval), Number.parseFloat(expected[key].interval))
     assert.equal(Number.parseFloat(container[key]?.timeout), 2)
     assert.equal(container[key]?.failure_threshold, expected[key].failure_threshold)
   }
+}
+
+export function assertContainer(container, config) {
+  assertContainerSettings(container, config, expectedSettings(config))
+}
+
+export function planContainerUpdate(container, config) {
+  const expected = expectedSettings(config)
+  const previous = Object.entries(previousSizing).every(([key, value]) => container[key] === value)
+  // Only the complete original sizing may transition; partial changes remain configuration drift.
+  assertContainerSettings(container, config, previous ? {...expected, ...previousSizing} : expected)
+  return {image: config.image, ...(previous ? {
+    memory_limit_bytes: expected.memory_limit_bytes, mvcpu_limit: expected.mvcpu_limit, min_scale: expected.min_scale
+  } : {})}
 }

@@ -6,19 +6,21 @@ import {join} from 'node:path'
 import {deployAntivirus} from './deploy.mjs'
 import {readConfiguration, expectedSettings, PROJECT_ID, REGISTRY} from './configuration.mjs'
 
-const config = readConfiguration({DEPLOY_ENV: 'testing', SCW_DEFAULT_PROJECT_ID: PROJECT_ID,
+const configuration = environment => readConfiguration({DEPLOY_ENV: environment, SCW_DEFAULT_PROJECT_ID: PROJECT_ID,
   CLAMAV_NAMESPACE_ID: '11111111-1111-4111-8111-111111111111', SCW_SECRET_KEY: 'synthetic-not-a-credential',
   IMAGE_REF: `${REGISTRY}/upload-antivirus@sha256:${'a'.repeat(64)}`})
 const scannerId = '22222222-2222-4222-8222-222222222222'
-function fixture({existing = false, drift, failWrite = false} = {}) {
+function fixture({existing = false, drift, failWrite = false, environment = 'testing', previousSizing = false} = {}) {
+  const config = configuration(environment)
   const calls = []
   const namespace = {id: config.namespaceId, name: config.namespaceName, project_id: PROJECT_ID,
-    region: 'fr-par', status: 'ready', environment_variables: {APP_ENV: 'testing'},
+    region: 'fr-par', status: 'ready', environment_variables: {APP_ENV: environment},
     secret_environment_variables: {CLAMAV_INVOKE_TOKEN: 'synthetic-hash'}}
   const scanner = {...expectedSettings(config), id: scannerId, region: 'fr-par', status: 'ready',
     image: `${REGISTRY}/upload-antivirus@sha256:${'b'.repeat(64)}`,
     private_endpoint: `http://${scannerId}.${config.networkId}.internal`,
-    public_endpoint: 'https://scanner.example.test', default_public_endpoint_enabled: false, ...drift}
+    public_endpoint: 'https://scanner.example.test', default_public_endpoint_enabled: false,
+    ...(previousSizing ? {memory_limit_bytes: 4096000000, mvcpu_limit: 2000, min_scale: 0} : {}), ...drift}
   const fetchRequest = async (url, options = {}) => {
     const parsed = new URL(url)
     const method = options.method ?? 'GET'
@@ -45,13 +47,13 @@ function fixture({existing = false, drift, failWrite = false} = {}) {
     }
     throw new Error('Unexpected resource access')
   }
-  return {calls, fetchRequest}
+  return {config, calls, fetchRequest}
 }
 async function run(t, options) {
   const proofDirectory = await mkdtemp(join(tmpdir(), 'antivirus-deploy-check-'))
   t.after(() => rm(proofDirectory, {recursive: true, force: true}))
   const f = fixture(options)
-  return {fixture: f, deploy: () => deployAntivirus(config, {fetchRequest: f.fetchRequest, wait: async () => {}, proofDirectory})}
+  return {fixture: f, deploy: () => deployAntivirus(f.config, {fetchRequest: f.fetchRequest, wait: async () => {}, proofDirectory})}
 }
 test('initial deployment creates only the private on-demand scanner', async t => {
   const {fixture: f, deploy} = await run(t)
@@ -67,15 +69,38 @@ test('initial deployment creates only the private on-demand scanner', async t =>
   assert(!f.calls.some(call => call.method === 'PATCH'))
 })
 test('signature refresh patches only the immutable image and preserves secrets', async t => {
-  const {fixture: f, deploy} = await run(t, {existing: true})
-  assert.equal((await deploy()).created, false)
-  assert.deepEqual(f.calls.filter(call => call.method === 'PATCH').map(call => call.body), [{image: config.image}])
-  assert(!f.calls.some(call => call.method !== 'GET' && call.pathname.includes('/namespaces/')))
+  await Promise.all(['testing', 'demo', 'prod'].map(async environment => {
+    const {fixture: f, deploy} = await run(t, {existing: true, environment})
+    assert.equal((await deploy()).created, false)
+    assert.deepEqual(f.calls.filter(call => call.method === 'PATCH').map(call => call.body), [{image: f.config.image}])
+    assert(!f.calls.some(call => call.method !== 'GET' && call.pathname.includes('/namespaces/')))
+  }))
+})
+test('only the complete original sizing transitions, without rewriting variables or secrets', async t => {
+  await Promise.all(['testing', 'demo', 'prod'].map(async environment => {
+    const {fixture: f, deploy} = await run(t, {existing: true, previousSizing: true, environment})
+    const proof = await deploy()
+    const minimum = environment === 'prod' ? 1 : 0
+    assert.deepEqual(f.calls.filter(call => call.method !== 'GET').map(call => call.body), [{
+      image: f.config.image, memory_limit_bytes: 2048000000, mvcpu_limit: 500, min_scale: minimum
+    }])
+    assert.deepEqual(proof.previousSizing, {memoryLimitBytes: 4096000000, mvcpuLimit: 2000, minScale: 0})
+    assert.equal(proof.minScale, minimum)
+    assert.equal(proof.memoryLimitBytes, 2048000000)
+    assert.equal(proof.mvcpuLimit, 500)
+  }))
 })
 test('configuration drift blocks a refresh before writes', async t => {
-  const {fixture: f, deploy} = await run(t, {existing: true, drift: {min_scale: 1}})
-  await assert.rejects(deploy(), /configuration drift/)
-  assert(f.calls.every(call => call.method === 'GET'))
+  const cases = [{drift: {min_scale: 1}}, {environment: 'prod', drift: {min_scale: 0}},
+    {previousSizing: true, drift: {mvcpu_limit: 500}}, {previousSizing: true, drift: {memory_limit_bytes: 2048000000}},
+    {previousSizing: true, drift: {max_scale: 2}}, {previousSizing: true, drift: {default_public_endpoint_enabled: true}},
+    {previousSizing: true, drift: {secret_environment_variables: {OTHER_SECRET: 'unexpected'}}},
+    {previousSizing: true, drift: {environment_variables: {DATABASE_URL: 'unexpected'}}}]
+  await Promise.all(cases.map(async options => {
+    const {fixture: f, deploy} = await run(t, {existing: true, ...options})
+    await assert.rejects(deploy())
+    assert(f.calls.every(call => call.method === 'GET'))
+  }))
 })
 test('failed mutation is not automatically replayed and error body stays private', async t => {
   const {fixture: f, deploy} = await run(t, {existing: true, failWrite: true})
