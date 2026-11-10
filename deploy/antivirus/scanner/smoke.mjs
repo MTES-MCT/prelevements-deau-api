@@ -112,6 +112,8 @@ try {
   await scan('eicar', eicar, 'infected')
   await scan('eicar-zip', zip(eicar), 'infected')
   await scan('encrypted-zip', zip(Buffer.from('protected content'), true), 'unscannable')
+  await scan('expanded-file-limit', zip(Buffer.alloc(200 * 1024 * 1024 + 1, 'A')), 'unscannable')
+  await scan('extractor-truncation-limit', zip(Buffer.alloc(400 * 1024 * 1024 + 1, 'A')), 'unscannable')
   await scan('maximum-50MB', Buffer.alloc(50_000_000, 'A'), 'clean')
   const oversized = await fetch(`${base}/scan`, {method: 'POST', headers: {
     Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream'

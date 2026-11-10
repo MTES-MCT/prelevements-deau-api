@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import net from 'node:net'
 import http from 'node:http'
 import {once} from 'node:events'
+import {readFile} from 'node:fs/promises'
 import {createHash} from 'node:crypto'
 import {Readable} from 'node:stream'
 import {setTimeout as delay} from 'node:timers/promises'
@@ -13,7 +14,7 @@ const token = 'a'.repeat(64)
 const metadata = {engineVersion: '1.4.6', signatureVersion: '12345', signatureUpdatedAt: new Date().toISOString()}
 const headers = {Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream'}
 
-async function mockClamd(t, result = 'stream: OK') {
+async function mockClamd(t, result = 'stream: OK', terminated = true) {
   const sockets = new Set()
   const bodies = []
   const daemon = net.createServer(socket => {
@@ -41,7 +42,7 @@ async function mockClamd(t, result = 'stream: OK') {
         if (incoming.length < length + 4) return
         if (!length) {
           bodies.push(Buffer.concat(chunks))
-          if (result !== null) socket.end(`${result}\0`)
+          if (result !== null) socket.end(`${result}${terminated ? '\0' : ''}`)
           return
         }
         chunks.push(incoming.subarray(4, length + 4))
@@ -90,6 +91,14 @@ test('only an exact ClamAV OK is accepted; encrypted and exceeded limits are not
   }
 })
 
+test('extractor truncation cannot bypass the total scan-size alert', async () => {
+  const configuration = await readFile(new URL('./clamd.conf', import.meta.url), 'utf8')
+  const fileLimit = Number(/^MaxFileSize (\d+)M$/m.exec(configuration)[1])
+  const totalLimit = Number(/^MaxScanSize (\d+)M$/m.exec(configuration)[1])
+  assert(fileLimit > totalLimit, 'ZIP extraction must not truncate below the total scan-size alert')
+  assert.match(configuration, /^AlertExceedsMax yes$/m)
+})
+
 test('streaming protocol transmits exactly the bytes hashed, with bounded size and exact length', async t => {
   const daemon = await mockClamd(t)
   const options = {port: daemon.port, signal: AbortSignal.timeout(2000), expectedBytes: 6, maxBytes: 6}
@@ -106,6 +115,8 @@ test('streaming protocol transmits exactly the bytes hashed, with bounded size a
 test('clamd failure and truncated replies cannot become a clean scan', async t => {
   const daemon = await mockClamd(t, 'stream: UNKNOWN ERROR')
   await assert.rejects(scanStream(Readable.from([Buffer.from('test')]), {port: daemon.port, signal: AbortSignal.timeout(1000)}), ScannerError)
+  const truncated = await mockClamd(t, 'stream: OK', false)
+  await assert.rejects(scanStream(Readable.from([Buffer.from('test')]), {port: truncated.port, signal: AbortSignal.timeout(1000)}), ScannerError)
 })
 
 test('a scan timeout closes the clamd connection and returns promptly', async t => {
@@ -128,7 +139,12 @@ test('HTTP requires an explicit secret and protects scans and detailed health', 
   assert.equal(calls, 0)
   const health = await fetch(`${base}/healthz`, {headers})
   assert.equal(health.status, 200)
-  assert.equal((await health.json()).signatureVersion, '12345')
+  const firstHealth = await health.json()
+  assert.equal(firstHealth.signatureVersion, '12345')
+  assert.match(firstHealth.bootId, /^[a-f0-9-]{36}$/)
+  assert(Number.isFinite(Date.parse(firstHealth.startedAt)))
+  const secondHealth = await (await fetch(`${base}/healthz`, {headers})).json()
+  assert.equal(firstHealth.bootId, secondHealth.bootId)
 })
 
 test('HTTP streams healthy files and reports actual integrity metadata', async t => {

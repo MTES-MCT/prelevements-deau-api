@@ -10,7 +10,9 @@ Node et ClamAV s’exécutent avec l’utilisateur non privilégié `clamav`.
 - `GET /readyz` : disponibilité minimale pour les sondes de plateforme ; aucune
   métadonnée ni authentification. Ne pas le sonder périodiquement depuis un service
   externe : cela empêcherait la descente à zéro instance.
-- `GET /healthz` : disponibilité et versions, authentifié.
+- `GET /healthz` : disponibilité, versions, `bootId` et `startedAt`, authentifié.
+  L’identifiant de démarrage permet de vérifier un redémarrage après inactivité
+  sans installer une surveillance externe qui garderait le service actif.
 - `POST /scan` : corps binaire `application/octet-stream`, authentifié ; aucune
   URL distante, chemin de fichier ou clé de stockage n’est accepté.
 
@@ -31,6 +33,11 @@ avec un argument `SIGNATURE_REFRESH` renouvelé par la CI quotidienne. Le scanne
 ne démarre ni `freshclam` ni téléchargement à l’exécution. Il refuse de rendre un
 verdict lorsque la date de la base chargée dépasse 72 heures. Les images précédentes
 ne peuvent donc pas masquer un échec prolongé de mise à jour.
+
+`MaxFileSize` est volontairement supérieur à `MaxScanSize` : l’extracteur ZIP de
+ClamAV peut tronquer avant de vérifier la taille d’un fichier extrait. Avec cette
+configuration, même un contenu tronqué dépasse le budget total et déclenche le
+refus. Le smoke couvre les deux limites avec de vraies archives synthétiques.
 
 ```sh
 node --test deploy/antivirus/scanner/*.checks.mjs
