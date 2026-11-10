@@ -13,7 +13,9 @@ const token = randomBytes(32).toString('hex')
 const directory = await mkdtemp(join(tmpdir(), 'clamav-smoke-'))
 const container = `clamav-smoke-${randomUUID()}`
 const started = Date.now()
-const report = {image, checks: []}
+const memoryLimitBytes = 2_048_000_000
+const cpuLimit = 0.5
+const report = {image, memoryLimitBytes, cpuLimit, swapDisabled: true, checks: []}
 const docker = (...args) => execFileSync('docker', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim()
 
 function zipCrypto(content, crc) {
@@ -70,7 +72,8 @@ try {
   report.nodeVersion = nodeVersion
   const environmentFile = join(directory, 'container.env')
   await writeFile(environmentFile, `CLAMAV_INVOKE_TOKEN=${token}\n`, {mode: 0o600})
-  docker('run', '--detach', '--rm', '--name', container, '--memory', '4g', '--cpus', '2',
+  docker('run', '--detach', '--rm', '--name', container, '--memory', String(memoryLimitBytes),
+    '--memory-swap', String(memoryLimitBytes), '--cpus', String(cpuLimit),
     '--env-file', environmentFile, '--publish', '127.0.0.1::8080', image)
   const binding = docker('port', container, '8080/tcp')
   assert.match(binding, /^127\.0\.0\.1:\d+$/)
@@ -115,6 +118,10 @@ try {
   await scan('expanded-file-limit', zip(Buffer.alloc(200 * 1024 * 1024 + 1, 'A')), 'unscannable')
   await scan('extractor-truncation-limit', zip(Buffer.alloc(400 * 1024 * 1024 + 1, 'A')), 'unscannable')
   await scan('maximum-50MB', Buffer.alloc(50_000_000, 'A'), 'clean')
+  await Promise.all([
+    scan('concurrent-1MB', Buffer.alloc(1_000_000, 'A'), 'clean'),
+    scan('concurrent-5MB', Buffer.alloc(5_000_000, 'B'), 'clean')
+  ])
   const oversized = await fetch(`${base}/scan`, {method: 'POST', headers: {
     Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream'
   }, body: Buffer.alloc(50_000_001), signal: AbortSignal.timeout(10_000)})
