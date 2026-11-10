@@ -1,3 +1,4 @@
+/* eslint-disable no-await-in-loop -- Control-plane retries and deployment polling must remain sequential. */
 import assert from 'node:assert/strict'
 import {appendFile, mkdir, writeFile} from 'node:fs/promises'
 import {setTimeout as sleep} from 'node:timers/promises'
