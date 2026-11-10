@@ -1,5 +1,10 @@
 const config = [
   {
+    // Standalone scanner code follows the production API's ESLint conventions.
+    // Default CI runs its dedicated lint and Node tests; application XO is unchanged.
+    ignores: ['deploy/antivirus/**']
+  },
+  {
     semicolon: false,
     space: 2,
     rules: {

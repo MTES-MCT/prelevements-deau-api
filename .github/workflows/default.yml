@@ -40,6 +40,10 @@ jobs:
     - run: npm ci
     - run: npm run test:runtime
     - run: npm run lint
+    - name: Lint standalone antivirus with production conventions
+      run: node node_modules/eslint/bin/eslint.js --no-config-lookup --config deploy/antivirus/eslint.config.mjs 'deploy/antivirus/**/*.mjs'
+    - name: Test standalone antivirus and deployment contracts
+      run: node --test deploy/antivirus/*.checks.mjs deploy/antivirus/scanner/*.checks.mjs
     - run: npm test
       env:
         NODE_ENV: test
