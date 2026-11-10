@@ -32,6 +32,10 @@ function fixture({existing = false, drift, failWrite = false} = {}) {
     if (parsed.pathname.endsWith(`/namespaces/${config.namespaceId}`)) return Response.json(namespace)
     if (method === 'GET' && parsed.pathname.endsWith('/containers')) return Response.json({total_count: existing ? 1 : 0, containers: existing ? [scanner] : []})
     if (method === 'POST' && parsed.pathname.endsWith('/containers')) {
+      // Real v1 API contract: 3s was rejected before creating any resource.
+      const interval = Number.parseFloat(body.startup_probe?.interval)
+      if (!(interval >= 5 && interval <= 120)) return Response.json({type: 'invalid_arguments',
+        details: [{argument_name: 'startup_probe.interval', reason: 'constraint'}]}, {status: 400})
       Object.assign(scanner, body)
       return Response.json(scanner)
     }
@@ -39,7 +43,6 @@ function fixture({existing = false, drift, failWrite = false} = {}) {
       if (method === 'PATCH') Object.assign(scanner, body)
       return Response.json(scanner)
     }
-    if (method === 'POST' && parsed.pathname.endsWith(`/containers/${scannerId}/deploy`)) return Response.json(scanner)
     throw new Error('Unexpected resource access')
   }
   return {calls, fetchRequest}
@@ -59,6 +62,7 @@ test('initial deployment creates only the private on-demand scanner', async t =>
   assert.equal(creation.body.enable_default_public_endpoint, false)
   assert.equal(creation.body.enable_private_endpoint, true)
   assert.equal(creation.body.min_scale, 0)
+  assert.equal(Number.parseFloat(creation.body.startup_probe.interval) * creation.body.startup_probe.failure_threshold, 120)
   assert.deepEqual(creation.body.secret_environment_variables, {})
   assert(!f.calls.some(call => call.method === 'PATCH'))
 })
