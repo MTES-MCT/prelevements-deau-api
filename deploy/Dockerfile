@@ -1,4 +1,4 @@
-FROM node:24.22.1-alpine3.24@sha256:6a1c190e17215d844926b0677f4bf87273ff7d5e54db06d3b5b5863ab0b09a3d AS base
+FROM node:24.22.3-alpine3.24@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS base
 # Keep the CVE-2026-4738 fix even when the base image or build cache predates it.
 RUN apk upgrade --no-cache && apk add --no-cache 'zlib>=1.4-r0'
 WORKDIR /app
