@@ -66,7 +66,7 @@ function zip(content, encrypted = false) {
 
 try {
   const nodeVersion = docker('run', '--rm', '--network', 'none', '--entrypoint', 'node', image, '--version')
-  assert.equal(nodeVersion, 'v24.22.1', 'Pinned Node runtime version')
+  assert.equal(nodeVersion, 'v24.22.3', 'Pinned Node runtime version')
   report.nodeVersion = nodeVersion
   const environmentFile = join(directory, 'container.env')
   await writeFile(environmentFile, `CLAMAV_INVOKE_TOKEN=${token}\n`, {mode: 0o600})
