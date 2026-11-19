@@ -1,6 +1,6 @@
 FROM node:24.22.3-alpine3.24@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS base
-# Keep the CVE-2026-4738 fix even when the base image or build cache predates it.
-RUN apk upgrade --no-cache && apk add --no-cache 'zlib>=1.4-r0'
+# Keep patched zlib and OpenSSL packages when the base image or build cache predates them.
+RUN apk upgrade --no-cache && apk add --no-cache 'zlib>=1.4-r0' 'openssl>=3.5.9-r1'
 WORKDIR /app
 COPY package.json ./
 RUN npm install --global "$(node -p 'require("./package.json").packageManager')" --ignore-scripts --no-audit --no-fund
@@ -9,8 +9,6 @@ FROM base AS builder
 WORKDIR /app
 
 ENV NODE_ENV=development
-
-RUN apk add --no-cache openssl
 
 COPY package.json package-lock.json .npmrc ./
 COPY prisma ./prisma
@@ -26,7 +24,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN apk add --no-cache ca-certificates openssl
+RUN apk add --no-cache ca-certificates
 
 # API, worker and private migrations run directly with Node; package managers are build-only.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
