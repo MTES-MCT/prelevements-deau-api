@@ -5340,6 +5340,10 @@ components:
         type: {type: string}
         status: {type: string}
         createdAt: {type: string, format: date-time}
+        source:
+          anyOf:
+            - {$ref: '#/components/schemas/Source'}
+            - {type: 'null'}
     DeclarationFeedEntry:
       type: object
       additionalProperties: false
@@ -5423,6 +5427,20 @@ components:
             type: object
             additionalProperties: true
             properties:
+              quickReadingHistory:
+                type: object
+                description: Historique récent des index déclarés et des volumes saisis ou calculés accessibles pour ce point, ce préleveur, cette exploitation et ce compteur. Une saisie rapide ordinaire d’index ou de volume inclut ces deux types de données jusqu’au jour du relevé ou au dernier jour inclus du volume.
+                required: [indexes, volumes]
+                properties:
+                  indexes: {type: array, items: {$ref: '#/components/schemas/QuickReadingHistoryValue'}}
+                  volumes: {type: array, items: {$ref: '#/components/schemas/QuickReadingHistoryValue'}}
+                  following:
+                    type: object
+                    description: Mesures accessibles des autres déclarations de la même série dont la date métier de fin suit celle de la fiche. Les listes sont chronologiques, limitées ensemble aux 12 mesures suivantes. Les mesures d’un même instant de clôture restent groupées à la limite de cette fenêtre.
+                    required: [indexes, volumes]
+                    properties:
+                      indexes: {type: array, items: {$ref: '#/components/schemas/QuickReadingHistoryValue'}}
+                      volumes: {type: array, items: {$ref: '#/components/schemas/QuickReadingHistoryValue'}}
               pointPrelevement:
                 type: [object, 'null']
                 additionalProperties: true
@@ -5994,6 +6012,20 @@ components:
         expectedCountingCode:
           allOf: [{$ref: '#/components/schemas/CountingCode'}]
           description: Valeur observée avant correction ; null si aucun code n'était renseigné. À fournir en édition lorsqu'on change effectivement le code.
+    QuickReadingHistoryValue:
+      type: object
+      required: [id, metricTypeCode, valueKind, value, unit, periodStart, periodEnd]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid'}
+        metricTypeCode: {type: string}
+        valueKind: {type: string, enum: [DECLARED, COMPUTED]}
+        value: {type: string, description: Valeur décimale du relevé ou du volume.}
+        unit: {type: [string, 'null']}
+        periodStart: {type: string, format: date-time}
+        periodEnd: {type: string, format: date-time}
+        readingDate: {type: string, format: date, description: Date civile du relevé d’index lorsqu’elle figure dans la déclaration.}
+        periodStartDate: {type: string, format: date, description: Date de début fournie lors de la saisie directe du volume.}
+        periodEndDate: {type: string, format: date, description: Date de fin inclusive fournie lors de la saisie directe du volume.}
     QuickDeclarationInput:
       type: object
       additionalProperties: false
