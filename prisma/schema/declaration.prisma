@@ -165,3 +165,17 @@ model ExternalDeclarationRecord {
   @@unique([provider, externalId])
   @@index([zoneId, declarationId])
 }
+
+// Private revision snapshots of online declarations. Never included in the declaration receipt.
+model QuickDeclarationRevision {
+  id String @id @default(uuid()) @db.Uuid
+  declarationId String @db.Uuid
+  revision Int
+  actorUserId String @db.Uuid
+  effectiveUserId String @db.Uuid
+  createdAt DateTime @default(now())
+  before Json
+  after Json
+
+  @@unique([declarationId, revision])
+}

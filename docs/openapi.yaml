@@ -1275,6 +1275,101 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Declaration'}
         default: {$ref: '#/components/responses/Error'}
+  /declarations/quick/preview:
+    post:
+      tags: [Declarations]
+      operationId: previewNewQuickDeclaration
+      summary: Vérifier une nouvelle saisie en ligne
+      description: Simule les mesures, leurs effets sur les volumes et les avertissements. Le jeton correspond au brouillon et aux données comparées.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuickDeclarationInput'}
+      responses:
+        '200':
+          description: Vérification avant confirmation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuickPreviewResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/{declarationId}/quick/preview:
+    parameters:
+      - $ref: '#/components/parameters/DeclarationId'
+    post:
+      tags: [Declarations]
+      operationId: previewEditedQuickDeclaration
+      summary: Vérifier la correction d’une saisie en ligne
+      description: Simule les mesures, leurs effets sur les volumes et les avertissements. Le jeton correspond au brouillon et aux données comparées.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuickCorrectionInput'}
+      responses:
+        '200':
+          description: Vérification avant confirmation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuickPreviewResponse'}
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/{declarationId}/quick:
+    parameters:
+      - $ref: '#/components/parameters/DeclarationId'
+    get:
+      tags: [Declarations]
+      operationId: getEditableQuickDeclaration
+      summary: Charger les mesures modifiables
+      description: Réservé au préleveur concerné, au collecteur habilité sur le dossier et à l’administrateur.
+      responses:
+        '200':
+          description: Dossier et lignes de saisie avec leur identité stable et leurs dates
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EditableQuickResponse'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [Declarations]
+      operationId: updateQuickDeclaration
+      summary: Confirmer la correction d’une saisie en ligne
+      description: Remplace les mesures dans le même dossier et recalcule les volumes. Une liste vide retire toutes les mesures. Un aperçu périmé renvoie 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/QuickCorrectionInput'}
+                - required: [previewToken]
+      responses:
+        '200':
+          description: Identifiant, numéro et nouvelle révision du dossier enregistré
+        default: {$ref: '#/components/responses/Error'}
+  /declarations/quick/contact:
+    post:
+      tags: [Declarations]
+      operationId: contactQuickDeclaration
+      summary: Contacter l’équipe au sujet d’une saisie
+      description: Envoie le message saisi par l’utilisateur, y compris avant la création du dossier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pointPrelevementId, message]
+              anyOf: [{required: [exploitationId]}, {required: [entryId, declarationId]}]
+              properties:
+                declarationId: {$ref: '#/components/schemas/Uuid'}
+                declarantUserId: {$ref: '#/components/schemas/Uuid'}
+                pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+                exploitationId: {$ref: '#/components/schemas/Uuid'}
+                entryId: {$ref: '#/components/schemas/Uuid', description: Ligne du dossier en cours de correction.}
+                message: {type: string, minLength: 1, maxLength: 5000}
+      responses:
+        '200':
+          description: Message envoyé
+        default: {$ref: '#/components/responses/Error'}
   /declarations/quick/conflicts:
     post:
       tags: [Declarations]
@@ -6036,9 +6131,10 @@ components:
         preleveurUserId: {$ref: '#/components/schemas/Uuid'}
         targetDeclarantUserId: {$ref: '#/components/schemas/Uuid'}
         measurementType: {type: string, enum: [INDEX, VOLUME, VOLUME_PRELEVE, VOLUME_REJETE], default: INDEX}
-        readingDate: {type: string, format: date, description: Date requise pour une saisie d'index.}
+        readingDate: {type: string, format: date, description: Date commune des index sans date spécifique sur leur ligne.}
         periodStartDate: {type: string, format: date}
         periodEndDate: {type: string, format: date, description: Dernier jour inclus pour les volumes.}
+        previewToken: {type: string, pattern: '^[a-fA-F0-9]{64}$'}
         comment: {type: string, maxLength: 20000}
         aotDecreeNumber: {type: string, maxLength: 255}
         pointUsageNames:
@@ -6054,21 +6150,109 @@ components:
           type: array
           minItems: 1
           maxItems: 500
+          items: {$ref: '#/components/schemas/QuickEntryInput'}
+    QuickEntryInput:
+      type: object
+      additionalProperties: false
+      required: [pointPrelevementId]
+      allOf:
+        - anyOf: [{required: [index]}, {required: [value]}]
+        - anyOf: [{required: [usageId]}, {required: [usage]}]
+      properties:
+        id: {$ref: '#/components/schemas/Uuid', description: Identité de la ligne existante pour une correction.}
+        readingDate: {type: string, format: date}
+        periodStartDate: {type: string, format: date}
+        periodEndDate: {type: string, format: date}
+        pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+        exploitationId: {$ref: '#/components/schemas/Uuid'}
+        countingCode: {$ref: '#/components/schemas/CountingCode'}
+        index: {type: number, minimum: 0}
+        value: {type: number, minimum: 0}
+        usageId: {$ref: '#/components/schemas/Uuid'}
+        usage: {type: string}
+    QuickCorrectionInput:
+      type: object
+      required: [measurementType, revision, entries]
+      properties:
+        measurementType: {type: string, enum: [INDEX, VOLUME]}
+        revision: {type: integer, minimum: 0}
+        previewToken: {type: string, pattern: '^[a-fA-F0-9]{64}$'}
+        readingDate: {type: string, format: date}
+        periodStartDate: {type: string, format: date}
+        periodEndDate: {type: string, format: date}
+        entries:
+          type: array
+          maxItems: 500
           items:
-            type: object
-            additionalProperties: false
-            required: [pointPrelevementId]
             allOf:
-              - anyOf: [{required: [index]}, {required: [value]}]
-              - anyOf: [{required: [usageId]}, {required: [usage]}]
-            properties:
-              pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
-              exploitationId: {$ref: '#/components/schemas/Uuid'}
-              countingCode: {$ref: '#/components/schemas/CountingCode'}
-              index: {type: number, minimum: 0}
-              value: {type: number, minimum: 0}
-              usageId: {$ref: '#/components/schemas/Uuid'}
-              usage: {type: string}
+              - {$ref: '#/components/schemas/QuickEntryInput'}
+              - required: [id]
+    EditableQuickResponse:
+      type: object
+      properties:
+        success: {type: boolean}
+        data:
+          type: object
+          properties:
+            id: {$ref: '#/components/schemas/Uuid'}
+            code: {type: string}
+            sourceId: {$ref: '#/components/schemas/Uuid'}
+            createdAt: {type: string, format: date-time}
+            revision: {type: integer}
+            measurementType: {type: string, enum: [INDEX, VOLUME]}
+            entries:
+              type: array
+              items:
+                type: object
+                required: [id, pointPrelevementId, value]
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+                  exploitationId: {$ref: '#/components/schemas/Uuid'}
+                  usageId: {$ref: '#/components/schemas/Uuid'}
+                  pointName: {type: string}
+                  compteurName: {type: [string, 'null']}
+                  countingCode: {type: [string, 'null']}
+                  previousReading:
+                    type: object
+                    properties:
+                      date: {type: string, format: date}
+                      value: {type: number}
+                  value: {type: number}
+                  readingDate: {type: string, format: date}
+                  periodStartDate: {type: string, format: date}
+                  periodEndDate: {type: string, format: date}
+    QuickPreviewResponse:
+      type: object
+      properties:
+        success: {type: boolean}
+        data:
+          type: object
+          required: [previewToken, changes, warnings]
+          properties:
+            previewToken: {type: string}
+            warnings:
+              type: array
+              items:
+                type: object
+                properties:
+                  message: {type: string}
+                  code: {type: string}
+                  entryId: {$ref: '#/components/schemas/Uuid', description: Ligne de correction concernée si elle est identifiable.}
+                  pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+                  exploitationId: {$ref: '#/components/schemas/Uuid'}
+            changes:
+              type: array
+              items:
+                type: object
+                properties:
+                  pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+                  exploitationId: {$ref: '#/components/schemas/Uuid'}
+                  pointName: {type: string}
+                  periodStartDate: {type: string, format: date}
+                  periodEndDate: {type: string, format: date}
+                  before: {type: [number, 'null']}
+                  after: {type: [number, 'null']}
     NormalizedDeclarationSeries:
       type: object
       additionalProperties: true
