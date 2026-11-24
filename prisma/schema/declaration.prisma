@@ -1,4 +1,5 @@
 model Declaration {
+  quickForm QuickDeclarationForm?
   collectionResponse CollectionResponse?
   id   String @id @default(uuid()) @db.Uuid
   code String @unique @db.VarChar(6)
@@ -178,4 +179,11 @@ model QuickDeclarationRevision {
   after Json
 
   @@unique([declarationId, revision])
+}
+
+// Fixed, private roster. An empty slot confers no right to the declaration.
+model QuickDeclarationForm {
+  declarationId String @id @db.Uuid
+  declaration Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  slots Json
 }

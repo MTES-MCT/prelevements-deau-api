@@ -1323,7 +1323,7 @@ paths:
       description: Réservé au préleveur concerné, au collecteur habilité sur le dossier et à l’administrateur.
       responses:
         '200':
-          description: Dossier, lignes actuelles et comptages accessibles pour un ajout
+          description: Dossier, mesures, cases vides attestées et carte des points du formulaire
           content:
             application/json:
               schema: {$ref: '#/components/schemas/EditableQuickResponse'}
@@ -6122,6 +6122,10 @@ components:
         periodStartDate: {type: string, format: date, description: Date de début fournie lors de la saisie directe du volume.}
         periodEndDate: {type: string, format: date, description: Date de fin inclusive fournie lors de la saisie directe du volume.}
     QuickDeclarationInput:
+      description: >-
+        Fournir readingDate pour tous les index, ou periodStartDate et periodEndDate pour tous
+        les volumes. Pour les anciens clients, des dates identiques sur chaque ligne sont aussi
+        acceptées. Toute différence avec une autre ligne ou avec la date commune renvoie 400.
       type: object
       additionalProperties: false
       required: [entries]
@@ -6131,7 +6135,7 @@ components:
         preleveurUserId: {$ref: '#/components/schemas/Uuid'}
         targetDeclarantUserId: {$ref: '#/components/schemas/Uuid'}
         measurementType: {type: string, enum: [INDEX, VOLUME, VOLUME_PRELEVE, VOLUME_REJETE], default: INDEX}
-        readingDate: {type: string, format: date, description: Date commune des index sans date spécifique sur leur ligne.}
+        readingDate: {type: string, format: date, description: Date commune à toutes les lignes de relevé d’index.}
         periodStartDate: {type: string, format: date}
         periodEndDate: {type: string, format: date, description: Dernier jour inclus pour les volumes.}
         previewToken: {type: string, pattern: '^[a-fA-F0-9]{64}$'}
@@ -6146,6 +6150,11 @@ components:
             properties:
               pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
               usageName: {type: [string, 'null'], maxLength: 200}
+        formExploitationIds:
+          type: array
+          uniqueItems: true
+          description: Identifiants de tous les comptages présentés au dépôt, même sans mesure. Le serveur vérifie leurs droits et conserve cette liste privée. Si elle est absente, seules les mesures renseignées attestent des emplacements proposés.
+          items: {$ref: '#/components/schemas/Uuid'}
         entries:
           type: array
           minItems: 1
@@ -6160,9 +6169,9 @@ components:
         - anyOf: [{required: [usageId]}, {required: [usage]}]
       properties:
         id: {$ref: '#/components/schemas/Uuid', description: Identité de la ligne existante pour une correction.}
-        readingDate: {type: string, format: date}
-        periodStartDate: {type: string, format: date}
-        periodEndDate: {type: string, format: date}
+        readingDate: {type: string, format: date, deprecated: true, description: Date de compatibilité identique à la date commune.}
+        periodStartDate: {type: string, format: date, deprecated: true}
+        periodEndDate: {type: string, format: date, deprecated: true}
         pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
         exploitationId:
           anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
@@ -6172,6 +6181,12 @@ components:
         usageId: {$ref: '#/components/schemas/Uuid'}
         usage: {type: string}
     QuickCorrectionInput:
+      description: >-
+        La date du relevé ou les deux bornes incluses de la période sont communes à toutes les lignes.
+        Les anciennes requêtes avec des dates identiques sur toutes les lignes sont acceptées.
+        Si la déclaration historique a plusieurs dates ou périodes, fournir explicitement les champs
+        communs à la racine pour toute correction qui conserve une ligne. Le retrait intégral
+        ne requiert aucune date.
       type: object
       required: [measurementType, revision, entries]
       properties:
@@ -6186,8 +6201,8 @@ components:
           maxItems: 500
           description: >-
             Chaque ligne conservée porte son id et garde le point, le comptage et l’usage du dossier.
-            Une ligne omise est retirée. Pour ajouter un comptage, transmettre les pointPrelevementId,
-            exploitationId et usageId de l’option autorisée, sans id. Un comptage ne peut être ajouté
+            Une ligne omise est retirée. Pour renseigner une case vide attestée par emptyEntries, transmettre ses pointPrelevementId,
+            exploitationId et usageId sans id. Un comptage ne peut être renseigné
             qu’une fois. Pour rétablir un comptage du dossier, réutiliser son id.
           items:
             allOf:
@@ -6199,7 +6214,7 @@ components:
                     not: {required: [id]}
                     properties:
                       exploitationId: {$ref: '#/components/schemas/Uuid'}
-    AvailableQuickEntry:
+    EmptyQuickEntry:
       type: object
       required: [pointPrelevementId, exploitationId, pointName, countingCode, usageId, usageLabel]
       properties:
@@ -6209,8 +6224,9 @@ components:
         countingCode: {type: [string, 'null']}
         usageId: {$ref: '#/components/schemas/Uuid'}
         usageLabel: {type: string}
-        compteurId: {type: 'null'}
-        compteurName: {type: 'null'}
+        compteurId:
+          anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        compteurName: {type: [string, 'null']}
         flowType: {type: string, enum: [PRELEVEMENT, REJET]}
     EditableQuickResponse:
       type: object
@@ -6225,10 +6241,28 @@ components:
             createdAt: {type: string, format: date-time}
             revision: {type: integer}
             measurementType: {type: string, enum: [INDEX, VOLUME]}
-            availableEntries:
+            requiresDateSelection:
+              type: boolean
+              description: Vrai si les dates des lignes historiques diffèrent. Aucune date commune n’est alors proposée.
+            readingDate: {type: string, format: date, description: Date commune aux lignes actives d’index.}
+            periodStartDate: {type: string, format: date, description: Premier jour de la période commune des volumes.}
+            periodEndDate: {type: string, format: date, description: Dernier jour inclus de la période commune des volumes.}
+            emptyEntries:
               type: array
-              description: Comptages actifs autorisés pour le bénéficiaire et la session, y compris ceux déjà présents. La liste est vide si le dossier ne contient plus de mesure active.
-              items: {$ref: '#/components/schemas/AvailableQuickEntry'}
+              description: Cases sans mesure du formulaire initial, encore accessibles. La liste est vide si aucune mesure du dossier ne reste active.
+              items: {$ref: '#/components/schemas/EmptyQuickEntry'}
+            mapPoints:
+              type: array
+              description: Un repère par point physique des mesures et des cases vides visibles, avec ses coordonnées WGS84.
+              items:
+                type: object
+                required: [id, pointPrelevementId, name, coordinates]
+                properties:
+                  id: {$ref: '#/components/schemas/Uuid'}
+                  pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+                  name: {type: string}
+                  coordinates:
+                    oneOf: [{$ref: '#/components/schemas/GeoJsonPoint'}, {type: 'null'}]
             entries:
               type: array
               items:
@@ -6295,8 +6329,9 @@ components:
                   after: {type: [number, 'null']}
     QuickVolumeOrigin:
       description: Origine du volume pour la période affichée. La valeur est nulle si aucun volume n’est présent.
-      type: [string, 'null']
-      enum: [DECLARED, COMPUTED, MIXED, null]
+      oneOf:
+        - {type: string, enum: [DECLARED, COMPUTED, MIXED]}
+        - {type: 'null'}
     MixedQuickVolume:
       description: Détail du total quand des volumes déclarés et calculés couvrent la même période affichée.
       type: object
