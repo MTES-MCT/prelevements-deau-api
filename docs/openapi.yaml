@@ -1280,7 +1280,7 @@ paths:
       tags: [Declarations]
       operationId: previewNewQuickDeclaration
       summary: Vérifier une nouvelle saisie en ligne
-      description: Simule les mesures, leurs effets sur les volumes et les avertissements. Le jeton correspond au brouillon et aux données comparées.
+      description: Simule ensemble les ajouts, corrections, déplacements de date et retraits. Le jeton correspond au brouillon et aux données comparées.
       requestBody:
         required: true
         content:
@@ -1300,7 +1300,7 @@ paths:
       tags: [Declarations]
       operationId: previewEditedQuickDeclaration
       summary: Vérifier la correction d’une saisie en ligne
-      description: Simule les mesures, leurs effets sur les volumes et les avertissements. Le jeton correspond au brouillon et aux données comparées.
+      description: Simule ensemble les ajouts, corrections, déplacements de date et retraits. Le jeton correspond au brouillon et aux données comparées.
       requestBody:
         required: true
         content:
@@ -1323,7 +1323,7 @@ paths:
       description: Réservé au préleveur concerné, au collecteur habilité sur le dossier et à l’administrateur.
       responses:
         '200':
-          description: Dossier et lignes de saisie avec leur identité stable et leurs dates
+          description: Dossier, lignes actuelles et comptages accessibles pour un ajout
           content:
             application/json:
               schema: {$ref: '#/components/schemas/EditableQuickResponse'}
@@ -1332,7 +1332,7 @@ paths:
       tags: [Declarations]
       operationId: updateQuickDeclaration
       summary: Confirmer la correction d’une saisie en ligne
-      description: Remplace les mesures dans le même dossier et recalcule les volumes. Une liste vide retire toutes les mesures. Un aperçu périmé renvoie 409.
+      description: Applique ensemble les ajouts, les modifications et les retraits dans le même dossier. Une liste vide retire toutes les mesures et rend ensuite le dossier consultable en lecture seule. Un aperçu périmé ou un dossier déjà vide renvoie 409.
       requestBody:
         required: true
         content:
@@ -6164,7 +6164,8 @@ components:
         periodStartDate: {type: string, format: date}
         periodEndDate: {type: string, format: date}
         pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
-        exploitationId: {$ref: '#/components/schemas/Uuid'}
+        exploitationId:
+          anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
         countingCode: {$ref: '#/components/schemas/CountingCode'}
         index: {type: number, minimum: 0}
         value: {type: number, minimum: 0}
@@ -6183,10 +6184,34 @@ components:
         entries:
           type: array
           maxItems: 500
+          description: >-
+            Chaque ligne conservée porte son id et garde le point, le comptage et l’usage du dossier.
+            Une ligne omise est retirée. Pour ajouter un comptage, transmettre les pointPrelevementId,
+            exploitationId et usageId de l’option autorisée, sans id. Un comptage ne peut être ajouté
+            qu’une fois. Pour rétablir un comptage du dossier, réutiliser son id.
           items:
             allOf:
               - {$ref: '#/components/schemas/QuickEntryInput'}
-              - required: [id]
+              - required: [usageId]
+                oneOf:
+                  - required: [id]
+                  - required: [exploitationId]
+                    not: {required: [id]}
+                    properties:
+                      exploitationId: {$ref: '#/components/schemas/Uuid'}
+    AvailableQuickEntry:
+      type: object
+      required: [pointPrelevementId, exploitationId, pointName, countingCode, usageId, usageLabel]
+      properties:
+        pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
+        exploitationId: {$ref: '#/components/schemas/Uuid'}
+        pointName: {type: string}
+        countingCode: {type: [string, 'null']}
+        usageId: {$ref: '#/components/schemas/Uuid'}
+        usageLabel: {type: string}
+        compteurId: {type: 'null'}
+        compteurName: {type: 'null'}
+        flowType: {type: string, enum: [PRELEVEMENT, REJET]}
     EditableQuickResponse:
       type: object
       properties:
@@ -6200,6 +6225,10 @@ components:
             createdAt: {type: string, format: date-time}
             revision: {type: integer}
             measurementType: {type: string, enum: [INDEX, VOLUME]}
+            availableEntries:
+              type: array
+              description: Comptages actifs autorisés pour le bénéficiaire et la session, y compris ceux déjà présents. La liste est vide si le dossier ne contient plus de mesure active.
+              items: {$ref: '#/components/schemas/AvailableQuickEntry'}
             entries:
               type: array
               items:
@@ -6208,7 +6237,14 @@ components:
                 properties:
                   id: {$ref: '#/components/schemas/Uuid'}
                   pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
-                  exploitationId: {$ref: '#/components/schemas/Uuid'}
+                  exploitationId:
+                    anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+                  effectiveExploitationId:
+                    description: Rattachement historique résolu pour l’affichage et la sélection du comptage.
+                    anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+                  compteurId:
+                    anyOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+                  usageLabel: {type: [string, 'null']}
                   usageId: {$ref: '#/components/schemas/Uuid'}
                   pointName: {type: string}
                   compteurName: {type: [string, 'null']}
@@ -6238,7 +6274,7 @@ components:
                 properties:
                   message: {type: string}
                   code: {type: string}
-                  entryId: {$ref: '#/components/schemas/Uuid', description: Ligne de correction concernée si elle est identifiable.}
+                  entryId: {$ref: '#/components/schemas/Uuid', description: Identifiant d’une ligne déjà enregistrée. Les avertissements des lignes nouvelles portent leur point et leur exploitation.}
                   pointPrelevementId: {$ref: '#/components/schemas/Uuid'}
                   exploitationId: {$ref: '#/components/schemas/Uuid'}
             changes:
@@ -6251,8 +6287,23 @@ components:
                   pointName: {type: string}
                   periodStartDate: {type: string, format: date}
                   periodEndDate: {type: string, format: date}
+                  beforeKind: {$ref: '#/components/schemas/QuickVolumeOrigin'}
+                  afterKind: {$ref: '#/components/schemas/QuickVolumeOrigin'}
+                  beforeBreakdown: {$ref: '#/components/schemas/MixedQuickVolume'}
+                  afterBreakdown: {$ref: '#/components/schemas/MixedQuickVolume'}
                   before: {type: [number, 'null']}
                   after: {type: [number, 'null']}
+    QuickVolumeOrigin:
+      description: Origine du volume pour la période affichée. La valeur est nulle si aucun volume n’est présent.
+      type: [string, 'null']
+      enum: [DECLARED, COMPUTED, MIXED, null]
+    MixedQuickVolume:
+      description: Détail du total quand des volumes déclarés et calculés couvrent la même période affichée.
+      type: object
+      required: [declared, computed]
+      properties:
+        declared: {type: number}
+        computed: {type: number}
     NormalizedDeclarationSeries:
       type: object
       additionalProperties: true
