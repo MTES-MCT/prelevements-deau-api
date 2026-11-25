@@ -118,6 +118,15 @@ explicitement documentée ci-dessus.
 Prisma sur la même version stable, régénérer le client, rejouer les migrations
 sur une base jetable, les tests d'intégration, les deux audits npm et le scan image.
 
+## effect dans la configuration Prisma
+
+`@prisma/config@7.10.0` dépend de `effect@3.20.0`. L’override fixe `effect` à
+`3.22.1`, qui corrige un risque de déni de service dans `Schema.TemplateLiteral`.
+[Avis de sécurité d’Effect](https://github.com/Effect-TS/effect/security/advisories/GHSA-7589-6fvf-x4pw)
+
+Retirer l’override quand Prisma utilisera une version corrigée, puis vérifier
+la génération du client, les migrations PostgreSQL et les deux audits npm.
+
 ## mysql2 dans la CLI Prisma
 
 L'override `prisma > mysql2 = 3.24.4` conserve la majeure 3 avec une
