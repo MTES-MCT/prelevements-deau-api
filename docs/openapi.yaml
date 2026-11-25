@@ -6283,6 +6283,7 @@ components:
                   pointName: {type: string}
                   compteurName: {type: [string, 'null']}
                   countingCode: {type: [string, 'null']}
+                  flowType: {type: string, enum: [PRELEVEMENT, REJET]}
                   previousReading:
                     type: object
                     properties:
