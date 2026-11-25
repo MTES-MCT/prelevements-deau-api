@@ -2,6 +2,7 @@ enum ZoneType {
   REGION
   DEPARTEMENT
   SAGE
+  PTGE
 }
 
 enum ZoneManagedResourceType {
@@ -17,7 +18,9 @@ model Zone {
   code        String                                     @db.Text
   type        ZoneType
   name        String                                     @db.Text
-  coordinates Unsupported("geometry(MultiPolygon,4326)")
+  coordinates Unsupported("geometry(MultiPolygon,4326)")?
+  sourceCode  String?                                    @db.Text
+  progressStatus String?                                 @db.Text
   managedResourceType ZoneManagedResourceType?
 
   instructorZones       InstructorZone[]

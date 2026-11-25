@@ -8,6 +8,7 @@ model InstructorZone {
   zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
 
   isAdmin   Boolean   @default(false)
+  isDashboardDefault Boolean @default(false)
   startDate DateTime  @db.Date
   endDate   DateTime? @db.Date
 

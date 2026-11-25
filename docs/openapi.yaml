@@ -2774,8 +2774,9 @@ paths:
         historique reste inclus par défaut et peut être omis pour accélérer le rendu
         initial, puis chargé séparément avec /dashboard/map. Le paramètre sections
         limite les calculs et la réponse aux blocs demandés. Les métadonnées scope,
-        zones, selectedZoneCodes et unknownZoneCodes sont toujours présentes.
+        zones, selectedZoneId, selectedZoneCodes et unknownZoneCodes sont toujours présentes.
       parameters:
+        - $ref: '#/components/parameters/DashboardZoneId'
         - $ref: '#/components/parameters/DashboardZones'
         - in: query
           name: sections
@@ -2826,13 +2827,9 @@ paths:
         Retourne uniquement le corpus cartographique autorisé. Le périmètre activity
         est réservé aux déclarants et collecteurs.
       parameters:
+        - $ref: '#/components/parameters/DashboardZoneId'
         - $ref: '#/components/parameters/DashboardZones'
-        - in: query
-          name: scope
-          schema:
-            type: string
-            enum: [territory, activity]
-            default: territory
+        - $ref: '#/components/parameters/DashboardMapScope'
       responses:
         '200':
           description: Points de la carte demandée
@@ -2880,7 +2877,9 @@ paths:
       summary: Lire les niveaux piézométriques du tableau de bord
       description: Retourne les observations mises en cache pour les piézomètres actifs des zones accessibles et sélectionnées.
       parameters:
+        - $ref: '#/components/parameters/DashboardZoneId'
         - $ref: '#/components/parameters/DashboardZones'
+        - $ref: '#/components/parameters/DashboardMapScope'
         - in: query
           name: period
           schema:
@@ -2907,7 +2906,9 @@ paths:
       summary: Lire les débits du tableau de bord
       description: Retourne les observations mises en cache pour les stations hydrométriques actives des zones accessibles et sélectionnées.
       parameters:
+        - $ref: '#/components/parameters/DashboardZoneId'
         - $ref: '#/components/parameters/DashboardZones'
+        - $ref: '#/components/parameters/DashboardMapScope'
         - in: query
           name: period
           schema:
@@ -2920,6 +2921,39 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DashboardWaterResources'}
+        default: {$ref: '#/components/responses/Error'}
+  /zones/{zoneId}/instructeurs/{instructorUserId}/dashboard-default:
+    put:
+      tags: [Zones]
+      operationId: setInstructorDashboardDefault
+      summary: Choisir ou retirer la zone par défaut du tableau de bord d’un agent
+      description: >-
+        Un administrateur PE ou un gestionnaire ayant les trois droits de gestion des agents sur
+        cette zone peut choisir un mandat actif autorisant la lecture du tableau de bord.
+        Le nouveau choix remplace le précédent. Le retrait s’applique uniquement au mandat indiqué.
+      security: [{BearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/ZoneId'
+        - in: path
+          name: instructorUserId
+          required: true
+          schema: {$ref: '#/components/schemas/Uuid'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DashboardDefaultSetting'}
+      responses:
+        '200':
+          description: Choix enregistré
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardDefaultSetting'}
+        '409':
+          description: Le mandat est inactif ou ne donne pas accès au tableau de bord.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         default: {$ref: '#/components/responses/Error'}
   /zones/{zoneId}/resource-settings:
     get:
@@ -3842,11 +3876,24 @@ components:
       name: associationId
       required: true
       schema: {$ref: '#/components/schemas/Uuid'}
+    DashboardZoneId:
+      in: query
+      name: zoneId
+      schema: {$ref: '#/components/schemas/Uuid'}
+      description: >-
+        Identifiant unique du territoire demandé. Un territoire inaccessible est refusé (403).
+        Sans sélection, un agent retrouve son mandat par défaut, ou sa première zone accessible
+        par ordre alphabétique. Un déclarant retrouve son premier SAGE ou PTGE accessible.
+    DashboardMapScope:
+      in: query
+      name: scope
+      schema: {type: string, enum: [territory, activity], default: territory}
+      description: En mode activity, les points et les stations associés à l’activité du déclarant sont indépendants du territoire sélectionné.
     DashboardZones:
       in: query
       name: zones
       schema: {type: string}
-      description: Codes des zones accessibles séparés par des virgules. Toutes les zones accessibles sont utilisées si le paramètre est absent.
+      description: Codes séparés par des virgules pour le filtre multizone de l’administrateur PE. Sans filtre, il voit toutes ses zones. Les anciens clients agents ou déclarants peuvent désigner une zone par un code non ambigu. zoneId est prioritaire.
   responses:
     Error:
       description: Erreur
@@ -4344,7 +4391,7 @@ components:
       required: [id, type, code, name]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
-        type: {type: string, enum: [REGION, DEPARTEMENT, SAGE]}
+        type: {type: string, enum: [REGION, DEPARTEMENT, SAGE, PTGE]}
         code: {type: string}
         name: {type: string}
     AdminAgentZoneSummary:
@@ -4354,14 +4401,21 @@ components:
           required: [status]
           properties:
             status: {type: string, enum: [ACTIVE, FUTURE, ENDED]}
+    DashboardDefaultSetting:
+      type: object
+      additionalProperties: false
+      required: [isDashboardDefault]
+      properties:
+        isDashboardDefault: {type: boolean}
     AdminAgentHabilitation:
       type: object
-      required: [id, zoneId, zone, isAdmin, permissions, permissionsCount, startDate, endDate, status]
+      required: [id, zoneId, zone, isAdmin, isDashboardDefault, permissions, permissionsCount, startDate, endDate, status]
       properties:
         id: {$ref: '#/components/schemas/Uuid'}
         zoneId: {$ref: '#/components/schemas/Uuid'}
         zone: {$ref: '#/components/schemas/AdminAgentZone'}
         isAdmin: {type: boolean}
+        isDashboardDefault: {type: boolean}
         permissions:
           type: array
           uniqueItems: true
@@ -4491,7 +4545,7 @@ components:
                 required: [id, type, code, name, count]
                 properties:
                   id: {$ref: '#/components/schemas/Uuid'}
-                  type: {type: string, enum: [REGION, DEPARTEMENT, SAGE]}
+                  type: {type: string, enum: [REGION, DEPARTEMENT, SAGE, PTGE]}
                   code: {type: string}
                   name: {type: string}
                   count: {type: integer, minimum: 0}
@@ -6056,7 +6110,7 @@ components:
               name: {type: string}
               type:
                 type: string
-                enum: [REGION, DEPARTEMENT, SAGE]
+                enum: [REGION, DEPARTEMENT, SAGE, PTGE]
         exploitationStatuses:
           type: array
           items:
@@ -6675,9 +6729,13 @@ components:
     DashboardMap:
       type: object
       additionalProperties: false
-      required: [scope, selectedZoneCodes, unknownZoneCodes, capabilities, points]
+      required: [scope, selectedZoneId, selectedZoneCodes, unknownZoneCodes, capabilities, points]
       properties:
         scope: {type: string, enum: [territory, activity]}
+        selectedZoneId:
+          type: [string, 'null']
+          format: uuid
+          description: Identifiant de la zone sélectionnée, ou null en l’absence de sélection unique.
         selectedZoneCodes:
           type: array
           items: {type: string}
@@ -6753,13 +6811,25 @@ components:
       additionalProperties: true
       description: >-
         Sans sections, tous les champs sont présents. Avec sections, seuls les blocs
-        demandés sont ajoutés aux quatre métadonnées de périmètre obligatoires.
-      required: [scope, zones, selectedZoneCodes, unknownZoneCodes]
+        demandés sont ajoutés aux métadonnées de périmètre obligatoires.
+      required: [scope, zones, selectedZoneId, selectedZoneCodes, unknownZoneCodes]
       properties:
         scope: {type: string, enum: [TERRITORY, DECLARANT, COLLECTOR]}
         zones:
           type: array
-          items: {type: object, additionalProperties: true}
+          items:
+            type: object
+            required: [id, type, code, name, isDashboardDefault]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid'}
+              type: {type: string, enum: [REGION, DEPARTEMENT, SAGE, PTGE]}
+              code: {type: string}
+              name: {type: string}
+              isDashboardDefault: {type: boolean}
+        selectedZoneId:
+          type: [string, 'null']
+          format: uuid
+          description: Identifiant de la zone sélectionnée, ou null en l’absence de sélection unique.
         selectedZoneCodes:
           type: array
           items: {type: string}
@@ -6825,7 +6895,7 @@ components:
             additionalProperties: true
     DashboardWaterResources:
       type: object
-      required: [period, source, aggregation, warnings, stations, selectedZoneCodes, unknownZoneCodes]
+      required: [period, source, aggregation, warnings, stations, selectedZoneId, selectedZoneCodes, unknownZoneCodes]
       properties:
         period:
           type: object
@@ -6850,6 +6920,10 @@ components:
         stations:
           type: array
           items: {$ref: '#/components/schemas/DashboardWaterResourceStation'}
+        selectedZoneId:
+          type: [string, 'null']
+          format: uuid
+          description: Identifiant de la zone sélectionnée, ou null en l’absence de sélection unique.
         selectedZoneCodes:
           type: array
           items: {type: string}

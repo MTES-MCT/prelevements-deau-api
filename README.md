@@ -98,6 +98,17 @@ décommissionnement de l'ancienne instance.
 - `npm run coverage` : lance les tests avec c8.
 - `npm run coverage:report` : génère un rapport de couverture HTML et texte.
 
+## Importer les PTGE
+
+Après application des migrations, la commande télécharge le catalogue national et les périmètres publiés par Gest’eau. Elle vérifie leurs effectifs et joint les deux sources par code officiel. [Données PTGE de Gest’eau](https://www.gesteau.fr/telecharger/ptge)
+
+```sh
+npm run import:ptge -- --dry-run
+npm run import:ptge -- --apply
+```
+
+La simulation affiche les fiches sans contour, les contours réparés et le nombre de rattachements de points à ajouter ou retirer. L’application crée une zone dès qu’un premier contour est disponible. Quand un contour disparaît d’un export complet, l’import conserve l’identifiant local de la zone et retire ses liens géographiques. Un point en limite ou dans plusieurs périmètres est rattaché à chaque PTGE concerné. Les affectations des agents se gèrent dans l’application.
+
 ## Zones d'alerte SANDRE
 
 Le référentiel SUP/SOU utilise par défaut le service WFS
