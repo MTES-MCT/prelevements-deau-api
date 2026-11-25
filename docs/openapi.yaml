@@ -6190,6 +6190,16 @@ components:
       type: object
       required: [measurementType, revision, entries]
       properties:
+        receiptRowOrder:
+          type: array
+          description: Ordre des mesures dans le formulaire, y compris les lignes retirées. Facultatif, utilisé pour présenter le récapitulatif.
+          items:
+            type: object
+            additionalProperties: false
+            oneOf: [{required: [id]}, {required: [exploitationId]}]
+            properties:
+              id: {$ref: '#/components/schemas/Uuid', description: Ligne déjà enregistrée.}
+              exploitationId: {$ref: '#/components/schemas/Uuid', description: Comptage nouvellement renseigné.}
         measurementType: {type: string, enum: [INDEX, VOLUME]}
         revision: {type: integer, minimum: 0}
         previewToken: {type: string, pattern: '^[a-fA-F0-9]{64}$'}
@@ -6241,6 +6251,9 @@ components:
             createdAt: {type: string, format: date-time}
             revision: {type: integer}
             measurementType: {type: string, enum: [INDEX, VOLUME]}
+            supportsReceiptRowOrder:
+              type: boolean
+              description: Indique que la correction peut transmettre receiptRowOrder.
             requiresDateSelection:
               type: boolean
               description: Vrai si les dates des lignes historiques diffèrent. Aucune date commune n’est alors proposée.

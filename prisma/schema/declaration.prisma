@@ -1,5 +1,6 @@
 model Declaration {
   quickForm QuickDeclarationForm?
+  receipts DeclarationReceipt[]
   collectionResponse CollectionResponse?
   id   String @id @default(uuid()) @db.Uuid
   code String @unique @db.VarChar(6)
@@ -186,4 +187,26 @@ model QuickDeclarationForm {
   declarationId String @id @db.Uuid
   declaration Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
   slots Json
+}
+
+// One immutable confirmation per deposit or correction. Only the worker reads delivery state.
+model DeclarationReceipt {
+  id              String      @id @default(uuid()) @db.Uuid
+  declarationId   String      @db.Uuid
+  declaration     Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  revision        Int
+  kind            String
+  recipientUserId String?     @db.Uuid
+  recipientEmail  String?     @db.Citext
+  recipientName   String?
+  snapshot        Json
+  createdAt       DateTime    @default(now())
+  status          String      @default("PENDING")
+  attempts        Int         @default(0)
+  nextAttemptAt   DateTime    @default(now())
+  sentAt          DateTime?
+  failureCode     String?
+
+  @@unique([declarationId, revision])
+  @@index([status, nextAttemptAt])
 }

@@ -17,10 +17,21 @@ Quelques exemples :
 | --- | --- | --- |
 | `process-declaration` | orchestration, sur webhook signé de l’API | orchestration |
 | `process-api-import` | API/scripts | worker API |
+| `send-declaration-receipts` | Scheduler chaque minute | worker API |
 | `reconstruct-volumes-from-index-for-point` | API/services | worker API |
 | `sync-sandre-alert-zones` | Scheduler quotidien à 04:30 | worker API |
 
 `WORKER_JOBS` limite les jobs consommés par `worker.js` aux traitements internes à l'API.
+
+### Activer les mails récapitulatifs
+
+Le worker envoie les récapitulatifs enregistrés dans `DeclarationReceipt` après le déploiement de la migration. Il utilise `FRONT_URL` pour les liens et `SMTP_FROM` pour l’expéditeur.
+
+- En local, utiliser Mailpit avec `DECLARATION_RECEIPT_SMTP_HOST=localhost` et `DECLARATION_RECEIPT_SMTP_PORT=1025` (voir `.env.example`).
+- Sur testing, définir sur le **worker** `DECLARATION_RECEIPT_SMTP_HOST` et `DECLARATION_RECEIPT_SMTP_PORT` avec le relais prévu pour la recette. Définir `DECLARATION_RECEIPT_SUBJECT_PREFIX="[TESTING] "` pour reprendre le préfixe de l’API. Il remplace `MAIL_SUBJECT_PREFIX` pour ces mails. Cette configuration ne modifie pas les autres envois.
+- Pour utiliser le serveur SMTP habituel, définir explicitement le même hôte que `SMTP_HOST`. Le port par défaut est `SMTP_PORT`. Pour un autre hôte, renseigner `DECLARATION_RECEIPT_SMTP_USER` et `DECLARATION_RECEIPT_SMTP_PASSWORD` uniquement si le relais demande une authentification.
+
+Si l’hôte n’est pas configuré, les messages attendent en base et le worker le signale dans ses logs. Le prochain passage les reprend après activation. Les erreurs temporaires donnent lieu à trois tentatives au total. Les états `FAILED` et `UNKNOWN` ainsi que `failureCode` permettent d’identifier les incidents, sans stocker la réponse brute du SMTP. Pour `UNKNOWN`, vérifier chez le relais si le message a été accepté à l’aide de son identifiant `<declaration-ID_DU_MAIL@partageonsleau.beta.gouv.fr>`.
 
 ## Fichiers
 
